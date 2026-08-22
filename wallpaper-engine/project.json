@@ -1,0 +1,123 @@
+{
+  "description": "Pear Wall 动态壁纸",
+  "file": "index.html",
+  "general": {
+    "properties": {
+      "schemecolor": {
+        "order": 0,
+        "text": "主题颜色",
+        "type": "color",
+        "value": "0 0 0"
+      },
+      "audioVisualization": {
+        "order": 10,
+        "text": "音频可视化",
+        "type": "bool",
+        "value": true
+      },
+      "pauseFlow": {
+        "order": 20,
+        "text": "暂停时冻结画面",
+        "type": "bool",
+        "value": true
+      },
+      "blurEnabled": {
+        "order": 30,
+        "text": "启用背景模糊",
+        "type": "bool",
+        "value": true
+      },
+      "renderScale": {
+        "order": 40,
+        "text": "渲染分辨率",
+        "type": "slider",
+        "value": 0.75,
+        "min": 0.25,
+        "max": 1,
+        "fraction": true,
+        "precision": 2,
+        "step": 0.01
+      },
+      "scrimAlpha": {
+        "order": 50,
+        "text": "暗角强度",
+        "type": "slider",
+        "value": 0.4,
+        "min": 0,
+        "max": 0.8,
+        "fraction": true,
+        "precision": 2,
+        "step": 0.01
+      },
+      "blurMultiplier": {
+        "order": 60,
+        "text": "模糊强度",
+        "type": "slider",
+        "value": 1,
+        "min": 0,
+        "max": 2,
+        "fraction": true,
+        "precision": 2,
+        "step": 0.01
+      },
+      "flowSpeed": {
+        "order": 70,
+        "text": "流动速度",
+        "type": "combo",
+        "value": "NORMAL",
+        "options": [
+          { "label": "标准", "value": "NORMAL" },
+          { "label": "快速", "value": "FAST" }
+        ]
+      },
+      "moruStyle": {
+        "order": 80,
+        "text": "Moru 样式",
+        "type": "combo",
+        "value": "OFF",
+        "options": [
+          { "label": "关闭", "value": "OFF" },
+          { "label": "窄", "value": "NARROW" },
+          { "label": "宽", "value": "WIDE" },
+          { "label": "柔和", "value": "SMOOTH" }
+        ]
+      },
+      "portraitPreset": {
+        "order": 90,
+        "text": "竖屏网格",
+        "type": "combo",
+        "value": 0,
+        "options": [
+          { "label": "预设 1", "value": 0 },
+          { "label": "预设 2", "value": 1 },
+          { "label": "预设 3", "value": 2 },
+          { "label": "预设 4", "value": 3 }
+        ]
+      },
+      "landscapePreset": {
+        "order": 100,
+        "text": "横屏网格",
+        "type": "combo",
+        "value": 0,
+        "options": [
+          { "label": "预设 1", "value": 0 },
+          { "label": "预设 2", "value": 1 },
+          { "label": "预设 3", "value": 2 },
+          { "label": "预设 4", "value": 3 },
+          { "label": "预设 5", "value": 4 }
+        ]
+      },
+      "customArtwork": {
+        "order": 110,
+        "text": "自定义封面",
+        "type": "file",
+        "fileType": "image",
+        "value": ""
+      }
+    },
+    "supportsaudioprocessing": true
+  },
+  "title": "Pear Wall",
+  "type": "web",
+  "visibility": "public"
+}

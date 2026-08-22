@@ -1,0 +1,38 @@
+*.iml
+.gradle
+/local.properties
+/.idea/caches
+/.idea/libraries
+/.idea/modules.xml
+/.idea/workspace.xml
+/.idea/navEditor.xml
+/.idea/assetWizardSettings.xml
+.DS_Store
+/build
+/captures
+.externalNativeBuild
+.cxx
+local.properties
+
+# Android/Gradle build outputs
+**/build/
+app/release/
+app/build/generated/rust-jniLibs/
+.kotlin/
+
+# JavaScript dependencies and generated frontend bundles
+**/node_modules/
+**/dist/
+
+# Rust build outputs
+**/target/
+
+# Generated Tauri metadata
+desktop/src-tauri/gen/
+
+# Local/native packaging artifacts
+*.apk
+*.aab
+/nul
+
+.tmp

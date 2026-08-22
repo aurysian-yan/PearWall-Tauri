@@ -1,0 +1,16 @@
+{
+  "name": "pearwall-desktop",
+  "private": true,
+  "version": "0.1.0",
+  "scripts": {
+    "tauri": "node scripts/tauri-runner.mjs",
+    "build:frontend": "node scripts/build-frontend.mjs",
+    "build:macos-saver": "zsh scripts/build-macos-saver.sh",
+    "build:windows-scr": "node scripts/build-windows-scr.mjs",
+    "dev": "pnpm tauri dev",
+    "build": "pnpm tauri build"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2"
+  }
+}
