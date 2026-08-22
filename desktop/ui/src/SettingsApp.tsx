@@ -235,6 +235,7 @@ export function SettingsApp() {
   const [settings, setSettings] = useState<Settings>(loadSettings);
   const [saved, setSaved] = useState(false);
   const [previewReady, setPreviewReady] = useState(false);
+  const [contentVisible, setContentVisible] = useState(true);
   const previewRef = useRef<HTMLIFrameElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -293,7 +294,7 @@ export function SettingsApp() {
 
   return (
     <div className="relative h-full w-full overflow-hidden bg-black text-white">
-      <WindowTitleBar />
+      <WindowTitleBar contentVisible={contentVisible} />
       <img
         src={settings.customArtwork || "./assets/default_artwork.svg"}
         alt=""
@@ -318,8 +319,19 @@ export function SettingsApp() {
             autoHideDelay: 700,
           },
         }}
+        onClick={(event) => {
+          const viewport = event.currentTarget.querySelector(
+            "[data-overlayscrollbars-viewport]",
+          );
+          if (event.target === viewport) {
+            setContentVisible((visible) => !visible);
+          }
+        }}
       >
-        <main className="mx-auto w-full max-w-lg px-4 pb-12 pt-10 sm:px-6 sm:pt-12">
+        <main
+          aria-hidden={!contentVisible}
+          className={`mx-auto w-full max-w-lg px-4 pb-12 pt-10 sm:px-6 sm:pt-12 transition-opacity duration-200 ease-out ${contentVisible ? "opacity-100" : "pointer-events-none opacity-0"}`}
+        >
           <header className="mb-6 mt-[35dvh]">
             <PearWallLogo className="mb-4 block h-auto w-56 text-white/80 saturate-200 mx-4" />
             <SmoothCorners

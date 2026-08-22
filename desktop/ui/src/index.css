@@ -13,6 +13,11 @@
     overflow: hidden;
   }
 
+  * {
+      user-select: none;
+      -webkit-user-select: none;
+  }
+
   body {
     font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "PingFang SC", sans-serif;
   }

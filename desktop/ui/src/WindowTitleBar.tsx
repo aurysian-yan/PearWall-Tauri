@@ -14,7 +14,11 @@ function runWindowAction(action: () => Promise<void>) {
   void action().catch(() => undefined);
 }
 
-export function WindowTitleBar() {
+export function WindowTitleBar({
+  contentVisible,
+}: {
+  contentVisible: boolean;
+}) {
   const isWindows = document.documentElement.classList.contains("windows");
   const appWindow = useMemo(
     () => (isWindows ? getCurrentWindow() : null),
@@ -61,14 +65,18 @@ export function WindowTitleBar() {
       className={`absolute inset-x-0 top-0 z-50 flex select-none items-stretch ${isWindows ? "h-10" : "h-8"}`}
     >
       <h1
-        className={`pointer-events-none absolute left-4 top-0 z-50 select-none items-center gap-2 !text-[14px] ${isWindows ? "flex h-10" : "hidden"}`}
+        aria-hidden={!contentVisible}
+        className={`pointer-events-none absolute left-4 top-0 z-50 select-none items-center gap-2 !text-[14px] transition-opacity duration-200 ease-out ${isWindows ? "flex h-10" : "hidden"} ${contentVisible ? "opacity-100" : "opacity-0"}`}
       >
         <img src={tintLogo} alt="" className="h-4.5 w-4.5" />
         <span className="text-white/75">PearWall 设置</span>
       </h1>
       <div data-tauri-drag-region="" className="min-w-0 flex-1" />
       {appWindow && (
-        <div className={`flex shrink-0 ${isWindows ? "h-10" : "h-8"}`}>
+        <div
+          aria-hidden={!contentVisible}
+          className={`flex shrink-0 transition-opacity duration-200 ease-out ${isWindows ? "h-10" : "h-8"} ${contentVisible ? "opacity-100" : "pointer-events-none opacity-0"}`}
+        >
           <button
             type="button"
             aria-label="最小化窗口"
