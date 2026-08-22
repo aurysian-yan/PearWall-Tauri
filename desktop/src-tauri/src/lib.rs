@@ -180,6 +180,8 @@ pub fn run() {
                     let _ = window.show();
                 }
                 LaunchMode::Configure | LaunchMode::App => {
+                    #[cfg(windows)]
+                    let _ = window.set_decorations(false);
                     let _ = window.set_fullscreen(false);
                     let _ = window.eval("window.location.replace('settings.html')");
                     let _ = window.show();

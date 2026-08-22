@@ -21,6 +21,7 @@ import { useEffect, useRef, useState, type ChangeEvent, type ReactNode } from 'r
 import { defaultSettings, loadSettings, saveSettings, wallpaperSettings } from './settings';
 import type { FlowSpeed, MoruStyle, Settings } from './types';
 import { PearWallLogo } from './PearWallLogo';
+import { WindowTitleBar } from './WindowTitleBar';
 
 type IconType = typeof PauseIcon;
 type SelectOption<T extends string | number> = { value: T; label: string };
@@ -241,6 +242,7 @@ export function SettingsApp() {
 
   return (
     <div className="relative h-full w-full overflow-hidden bg-black text-white">
+      <WindowTitleBar />
       <img
         src={settings.customArtwork || './assets/default_artwork.svg'}
         alt=""
