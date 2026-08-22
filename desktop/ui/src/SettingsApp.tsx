@@ -65,7 +65,7 @@ function SettingsCard({ children }: { children: ReactNode }) {
     <SmoothCorners
       asChild
       autoEffects={false}
-      corners={{ radius: 28, smoothing: 0.6 }}
+      corners={{ radius: 24, smoothing: 0.6 }}
       innerBorder={{ width: 1, color: "#ffffff", opacity: 0.1 }}
     >
       <Card
@@ -83,14 +83,16 @@ function SettingRow({
   title,
   description,
   children,
+  className,
 }: {
   icon: IconType;
   title: string;
   description?: string;
-  children: ReactNode;
+    children: ReactNode;
+    className?: string;
 }) {
   return (
-    <div className="flex min-h-18 items-center gap-3 px-4 py-3">
+    <div className={`flex min-h-18 items-center gap-3 px-4 py-3 ${className ?? ""}`}>
       <Icon
         aria-hidden
         size={20}
@@ -379,13 +381,13 @@ export function SettingsApp() {
                   setSaved(false);
                 }}
               >
-                <SettingRow icon={ImageIcon} title="使用默认封面">
+                <SettingRow icon={ImageIcon} title="使用默认封面" className="max-h-16 !min-h-16">
                   {!settings.customArtwork && (
                     <CheckIcon aria-label="已选择" size={18} weight="bold" />
                   )}
                 </SettingRow>
               </button>
-              <Separator className="mx-2 w-[calc(100%-1rem)] bg-white/15" />
+              <Separator className="ml-12 mr-2 w-[calc(100%-3.5rem)] bg-white/15" />
               <button
                 type="button"
                 className="block w-full text-left"
@@ -405,21 +407,27 @@ export function SettingsApp() {
               </button>
               {settings.customArtwork && (
                 <div className="px-4 pb-3 text-right">
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onPress={() => {
-                      setSettings((current) => ({
-                        ...current,
-                        customArtwork: "",
-                        customArtworkName: "",
-                      }));
-                      setSaved(false);
-                    }}
-                    className="text-white/75"
+                  <SmoothCorners
+                    asChild
+                    autoEffects={false}
+                    corners={{ radius: 28, smoothing: 1 }}
                   >
-                    恢复默认封面
-                  </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onPress={() => {
+                        setSettings((current) => ({
+                          ...current,
+                          customArtwork: "",
+                          customArtworkName: "",
+                        }));
+                        setSaved(false);
+                      }}
+                      className="-mx-1 bg-white/0 text-white/75 transition-colors hover:bg-white/15 hover:text-white"
+                    >
+                      恢复默认封面
+                    </Button>
+                  </SmoothCorners>
                 </div>
               )}
             </SettingsCard>
@@ -527,16 +535,22 @@ export function SettingsApp() {
           </section>
 
           <div className="flex justify-center">
-            <Button
-              variant="ghost"
-              onPress={() => {
-                setSettings(defaultSettings);
-                setSaved(false);
-              }}
-              className="text-white/75"
+            <SmoothCorners
+              asChild
+              autoEffects={false}
+              corners={{ radius: 28, smoothing: 1 }}
             >
-              恢复默认设置
-            </Button>
+              <Button
+                variant="ghost"
+                onPress={() => {
+                  setSettings(defaultSettings);
+                  setSaved(false);
+                }}
+                className="bg-white/10 text-white/75 transition-colors hover:bg-white/15 hover:text-white"
+              >
+                恢复默认设置
+              </Button>
+            </SmoothCorners>
           </div>
         </main>
       </OverlayScrollbarsComponent>
