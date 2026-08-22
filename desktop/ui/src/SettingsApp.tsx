@@ -1,5 +1,6 @@
 import { Button, Card, Separator, Slider, Switch, Tabs } from "@heroui/react";
 import { SmoothCorners } from "@lisse/react";
+import { OverlayScrollbarsComponent } from "overlayscrollbars-react";
 import {
   CheckIcon,
   GaugeIcon,
@@ -306,7 +307,18 @@ export function SettingsApp() {
         className={`pointer-events-none absolute inset-0 h-full w-full border-0 ${previewReady ? "opacity-100" : "opacity-0"}`}
       />
 
-      <div className="absolute inset-0 overflow-y-auto overscroll-contain">
+      <OverlayScrollbarsComponent
+        defer
+        className="settings-scrollbar absolute inset-0 overscroll-contain"
+        options={{
+          overflow: { x: "hidden", y: "scroll" },
+          scrollbars: {
+            theme: "os-theme-light",
+            autoHide: "scroll",
+            autoHideDelay: 700,
+          },
+        }}
+      >
         <main className="mx-auto w-full max-w-lg px-4 pb-12 pt-10 sm:px-6 sm:pt-12">
           <header className="mb-6 mt-[35dvh]">
             <PearWallLogo className="mb-4 block h-auto w-56 text-white/80 saturate-200 mx-4" />
@@ -515,7 +527,7 @@ export function SettingsApp() {
             </Button>
           </div>
         </main>
-      </div>
+      </OverlayScrollbarsComponent>
     </div>
   );
 }

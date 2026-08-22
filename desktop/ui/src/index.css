@@ -1,5 +1,6 @@
 @import "tailwindcss";
 @import "@heroui/styles";
+@import "overlayscrollbars/overlayscrollbars.css";
 
 @layer base {
   html,
@@ -21,4 +22,39 @@
   input {
     font: inherit;
   }
+}
+
+.settings-scrollbar[data-overlayscrollbars] .os-scrollbar-vertical {
+  top: 0.5rem;
+  right: 0.5rem;
+  bottom: 0.5rem;
+}
+
+.settings-scrollbar[data-overlayscrollbars] {
+  position: absolute;
+  --titlebar-height: 2rem;
+}
+
+.settings-scrollbar[data-overlayscrollbars]
+  [data-overlayscrollbars-viewport] {
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    transparent 0,
+    black calc(var(--titlebar-height) + 16px),
+    black 100%
+  );
+  mask-image: linear-gradient(
+    to bottom,
+    transparent 0,
+    black calc(var(--titlebar-height) + 16px),
+    black 100%
+  );
+}
+
+.windows .settings-scrollbar[data-overlayscrollbars] {
+  --titlebar-height: 2.5rem;
+}
+
+.windows .settings-scrollbar[data-overlayscrollbars] .os-scrollbar-vertical {
+  top: 3rem;
 }
