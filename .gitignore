@@ -30,6 +30,10 @@ app/build/generated/rust-jniLibs/
 # Generated Tauri metadata
 desktop/src-tauri/gen/
 
+# Tauri mobile icon outputs
+desktop/src-tauri/icons/android/
+desktop/src-tauri/icons/ios/
+
 # Local/native packaging artifacts
 *.apk
 *.aab
