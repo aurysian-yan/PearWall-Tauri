@@ -9,6 +9,9 @@
     "build:frontend": "pnpm build:settings && node scripts/build-frontend.mjs",
     "build:macos-saver": "zsh scripts/build-macos-saver.sh",
     "build:windows-scr": "node scripts/build-windows-scr.mjs",
+    "build:dmg": "zsh scripts/build-dmg.sh",
+    "build:screen-savers:check": "node scripts/build-screen-savers.mjs --check",
+    "build:screen-savers": "node scripts/build-screen-savers.mjs",
     "dev": "pnpm tauri dev",
     "build": "pnpm tauri build"
   },
@@ -28,6 +31,8 @@
     "@lisse/react": "^0.7.2",
     "@phosphor-icons/react": "^2.1.10",
     "@tauri-apps/api": "^2.11.1",
+    "overlayscrollbars": "^2.16.0",
+    "overlayscrollbars-react": "^0.5.6",
     "react": "^19.2.8",
     "react-dom": "^19.2.8"
   }

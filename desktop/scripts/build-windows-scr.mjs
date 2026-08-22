@@ -22,7 +22,9 @@ if (!source) {
   throw new Error('未找到 Tauri Windows 可执行文件');
 }
 
-const outputRoot = resolve(desktopRoot, 'build', 'windows');
+const outputRoot = process.env.OUTPUT_ROOT
+  ? resolve(process.env.OUTPUT_ROOT)
+  : resolve(desktopRoot, 'build', 'release', 'windows');
 await mkdir(outputRoot, { recursive: true });
 const output = resolve(outputRoot, 'PearWall.scr');
 await cp(source, output, { force: true });

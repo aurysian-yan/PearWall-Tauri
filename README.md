@@ -50,17 +50,54 @@ pnpm --dir desktop run build
 
 ## 屏保构建
 
-构建 macOS 屏保需要 Xcode Command Line Tools：
+统一构建在 macOS 上运行，一次生成 macOS `.saver`、屏保 DMG 和 Windows `.scr`，不生成 Windows 安装包。
+
+首次构建需要安装 Xcode Command Line Tools、Windows 交叉编译工具和 DMG 工具：
+
+```bash
+xcode-select --install
+brew install llvm create-dmg
+cargo install --locked cargo-xwin
+rustup target add x86_64-pc-windows-msvc
+```
+
+检查构建环境：
+
+```bash
+pnpm --dir desktop run build:screen-savers:check
+```
+
+同时构建两个平台的屏保：
+
+```bash
+pnpm --dir desktop run build:screen-savers
+```
+
+产物统一输出到 `desktop/build/release/`：
+
+```text
+release/
+├── macos/
+│   ├── Pear Wall.saver
+│   └── Pear-Wall-Screen-Saver-<version>.dmg
+└── windows/
+    └── PearWall.scr
+```
+
+Windows 屏保可在管理员终端中复制到系统目录：
+
+```powershell
+Copy-Item .\PearWall.scr "$env:WINDIR\System32\PearWall.scr"
+```
+
+单独构建 macOS `.saver` 或 DMG：
 
 ```bash
 pnpm --dir desktop run build:macos-saver
+pnpm --dir desktop run build:dmg
 ```
 
-构建 Windows 屏保前，需要先完成对应平台的 Tauri 构建：
-
-```bash
-pnpm --dir desktop run build:windows-scr
-```
+`build:windows-scr` 仅用于把已经生成的 Windows Tauri 可执行文件整理为 `.scr`。
 
 ## Wallpaper Engine
 

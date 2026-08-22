@@ -4,15 +4,21 @@ set -euo pipefail
 SCRIPT_DIR="${0:A:h}"
 DESKTOP_ROOT="${SCRIPT_DIR:h}"
 PROJECT_ROOT="${DESKTOP_ROOT:h}"
-OUTPUT_ROOT="${DESKTOP_ROOT}/build/macos"
+OUTPUT_ROOT="${OUTPUT_ROOT:-${DESKTOP_ROOT}/build/release/macos}"
 BUNDLE_PATH="${OUTPUT_ROOT}/Pear Wall.saver"
 
-pnpm --dir "${DESKTOP_ROOT}" run build:frontend
-rm -rf "${OUTPUT_ROOT}"
+if [[ "${PEARWALL_SKIP_FRONTEND_BUILD:-0}" != "1" ]]; then
+  pnpm --dir "${DESKTOP_ROOT}" run build:frontend
+fi
+
+TEMP_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/pearwall-saver.XXXXXX")"
+trap 'rm -rf "${TEMP_ROOT}"' EXIT
+
+rm -rf "${BUNDLE_PATH}"
 mkdir -p "${BUNDLE_PATH}/Contents/MacOS" "${BUNDLE_PATH}/Contents/Resources/web"
 
-ARM64_BINARY="${OUTPUT_ROOT}/PearWallScreenSaver-arm64"
-X86_64_BINARY="${OUTPUT_ROOT}/PearWallScreenSaver-x86_64"
+ARM64_BINARY="${TEMP_ROOT}/PearWallScreenSaver-arm64"
+X86_64_BINARY="${TEMP_ROOT}/PearWallScreenSaver-x86_64"
 
 xcrun swiftc \
   -emit-library \
