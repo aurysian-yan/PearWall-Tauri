@@ -5,7 +5,8 @@
   "identifier": "com.nevoit.pearwall.desktop",
   "build": {
     "beforeBuildCommand": "pnpm build:frontend",
-    "beforeDevCommand": "pnpm build:frontend",
+    "beforeDevCommand": "pnpm dev:frontend",
+    "devUrl": "http://127.0.0.1:1420",
     "frontendDist": "../dist"
   },
   "app": {

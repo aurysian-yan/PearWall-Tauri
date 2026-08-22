@@ -1,13 +1,12 @@
 import {
   Button,
   Card,
-  Label,
-  ListBox,
-  Select,
   Separator,
   Slider,
   Switch,
+  Tabs,
 } from '@heroui/react';
+import { SmoothCorners } from '@lisse/react';
 import {
   CheckIcon,
   GaugeIcon,
@@ -46,7 +45,22 @@ const renderScales: SelectOption<number>[] = [
 ];
 
 function SectionTitle({ children }: { children: ReactNode }) {
-  return <h2 className="mb-2 px-4 text-base font-semibold text-white/90">{children}</h2>;
+  return <h2 className="mb-2 px-4 text-[14px] font-semibold text-white/90">{children}</h2>;
+}
+
+function SettingsCard({ children }: { children: ReactNode }) {
+  return (
+    <SmoothCorners
+      asChild
+      autoEffects={false}
+      corners={{ radius: 28, smoothing: 0.6 }}
+      innerBorder={{ width: 1, color: '#ffffff', opacity: 0.1 }}
+    >
+      <Card variant="transparent" className="overflow-hidden bg-black/25 text-white shadow-none backdrop-blur-xl backdrop-saturate-150 p-0 gap-0">
+        {children}
+      </Card>
+    </SmoothCorners>
+  );
 }
 
 function SettingRow({
@@ -62,9 +76,9 @@ function SettingRow({
 }) {
   return (
     <div className="flex min-h-20 items-center gap-3 px-4 py-3">
-      <Icon aria-hidden size={23} weight="regular" className="shrink-0 text-white/90" />
+      <Icon aria-hidden size={20} weight="regular" className="shrink-0 text-white/90" />
       <div className="min-w-0 flex-1">
-        <div className="text-base font-semibold leading-tight text-white">{title}</div>
+        <div className="text-[14px] font-semibold leading-tight text-white">{title}</div>
         {description && <div className="mt-1 text-xs leading-snug text-white/65">{description}</div>}
       </div>
       <div className="shrink-0">{children}</div>
@@ -81,51 +95,6 @@ function Toggle({ label, value, onChange }: { label: string; value: boolean; onC
         </Switch.Control>
       </Switch.Content>
     </Switch>
-  );
-}
-
-function ChoiceSelect<T extends string | number>({
-  label,
-  value,
-  options,
-  onChange,
-}: {
-  label: string;
-  value: T;
-  options: SelectOption<T>[];
-  onChange: (value: T) => void;
-}) {
-  return (
-    <Select
-      aria-label={label}
-      value={String(value)}
-      onChange={(next) => {
-        const selected = options.find((option) => String(option.value) === String(next));
-        if (selected) onChange(selected.value);
-      }}
-      variant="secondary"
-      className="w-32 !text-white"
-    >
-      <Select.Trigger className="border-white/15 !bg-white/15 !text-white shadow-none">
-        <Select.Value className="!text-white" />
-        <Select.Indicator className="!text-white/65" />
-      </Select.Trigger>
-      <Select.Popover className="rounded-3xl border-white/10 !bg-black/60 !text-white shadow-none backdrop-blur-xl">
-        <ListBox>
-          {options.map((option) => (
-            <ListBox.Item
-              id={String(option.value)}
-              key={String(option.value)}
-              textValue={option.label}
-              className="rounded-2xl !text-white data-[focused=true]:!bg-white/10 data-[selected=true]:!bg-white/15 data-[selected=true]:!text-white"
-            >
-              <Label className="!text-white">{option.label}</Label>
-              <ListBox.ItemIndicator />
-            </ListBox.Item>
-          ))}
-        </ListBox>
-      </Select.Popover>
-    </Select>
   );
 }
 
@@ -163,6 +132,52 @@ function RangeSetting({
           <Slider.Thumb className="border-0 bg-white shadow-md" />
         </Slider.Track>
       </Slider>
+    </div>
+  );
+}
+
+function ChoiceTabs<T extends string | number>({
+  icon: Icon,
+  label,
+  value,
+  options,
+  onChange,
+}: {
+  icon: IconType;
+  label: string;
+  value: T;
+  options: SelectOption<T>[];
+  onChange: (value: T) => void;
+}) {
+  return (
+    <div className="px-4 py-4">
+      <div className="mb-3 flex items-center gap-3">
+        <Icon aria-hidden size={23} weight="regular" className="shrink-0 text-white/90" />
+        <span className="text-base font-semibold text-white">{label}</span>
+      </div>
+      <Tabs
+        selectedKey={String(value)}
+        onSelectionChange={(key) => {
+          const selected = options.find((option) => String(option.value) === String(key));
+          if (selected) onChange(selected.value);
+        }}
+        className="w-full"
+      >
+        <Tabs.ListContainer className="w-full !bg-white/10">
+          <Tabs.List aria-label={label} className="w-full">
+            {options.map((option) => (
+              <Tabs.Tab
+                id={String(option.value)}
+                key={String(option.value)}
+                className="!text-white/65 data-[selected=true]:!text-neutral-900"
+              >
+                <Tabs.Indicator className="!bg-white shadow-none" />
+                {option.label}
+              </Tabs.Tab>
+            ))}
+          </Tabs.List>
+        </Tabs.ListContainer>
+      </Tabs>
     </div>
   );
 }
@@ -241,22 +256,30 @@ export function SettingsApp() {
 
       <div className="absolute inset-0 overflow-y-auto overscroll-contain">
         <main className="mx-auto w-full max-w-lg px-4 pb-12 pt-10 sm:px-6 sm:pt-12">
-          <header className="mb-6">
-            <PearWallLogo className="mb-6 block h-auto w-56 text-white" />
-            <Button
-              fullWidth
-              size="lg"
-              onPress={apply}
-              className="h-14 rounded-full bg-white text-base font-semibold !text-neutral-900 shadow-lg shadow-black/10"
+          <header className="mb-6 mt-[35dvh]">
+            <PearWallLogo className="mb-4 block h-auto w-56 text-white/80 saturate-200 mx-4" />
+            <SmoothCorners
+              asChild
+              autoEffects={false}
+              corners={{ radius: 28, smoothing: 1 }}
+              shadow={{ offsetX: 0, offsetY: 4, blur: 12, spread: 0, color: '#000000', opacity: 0.1 }}
+              shadowStrategy="box-shadow"
             >
-              {saved ? <CheckIcon aria-hidden size={22} weight="bold" /> : <PlayIcon aria-hidden size={22} weight="fill" />}
-              {saved ? '设置已保存' : '应用屏保设置'}
-            </Button>
+              <Button
+                fullWidth
+                size="lg"
+                onPress={apply}
+                className="h-14 bg-white text-base font-semibold !text-neutral-900"
+              >
+                {saved ? <CheckIcon aria-hidden size={18} weight="bold" /> : <PlayIcon aria-hidden size={22} weight="fill" />}
+                {saved ? '设置已保存' : '应用屏保设置'}
+              </Button>
+            </SmoothCorners>
           </header>
 
           <section className="mb-5">
             <SectionTitle>未获取到封面时</SectionTitle>
-            <Card variant="transparent" className="overflow-hidden rounded-4xl border border-white/10 bg-black/25 text-white shadow-none backdrop-blur-xl">
+            <SettingsCard>
               <button
                 type="button"
                 className="block w-full text-left"
@@ -266,10 +289,10 @@ export function SettingsApp() {
                 }}
               >
                 <SettingRow icon={ImageIcon} title="使用默认封面">
-                  {!settings.customArtwork && <CheckIcon aria-label="已选择" size={27} weight="bold" />}
+                  {!settings.customArtwork && <CheckIcon aria-label="已选择" size={18} weight="bold" />}
                 </SettingRow>
               </button>
-              <Separator className="ml-14 bg-white/15" />
+              <Separator className="mx-2 w-[calc(100%-1rem)] bg-white/15" />
               <button
                 type="button"
                 className="block w-full text-left"
@@ -280,7 +303,7 @@ export function SettingsApp() {
                   title="使用自选图片"
                   description={settings.customArtworkName || '选择本地图片作为备用封面'}
                 >
-                  {settings.customArtwork && <CheckIcon aria-label="已选择" size={27} weight="bold" />}
+                  {settings.customArtwork && <CheckIcon aria-label="已选择" size={18} weight="bold" />}
                 </SettingRow>
               </button>
               {settings.customArtwork && (
@@ -298,22 +321,22 @@ export function SettingsApp() {
                   </Button>
                 </div>
               )}
-            </Card>
+            </SettingsCard>
             <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleArtwork} />
           </section>
 
           <section className="mb-5">
             <SectionTitle>暂停时</SectionTitle>
-            <Card variant="transparent" className="overflow-hidden rounded-4xl border border-white/10 bg-black/25 text-white shadow-none backdrop-blur-xl">
+            <SettingsCard>
               <SettingRow icon={PauseIcon} title="暂停流动效果" description="暂停播放后冻结动画，恢复播放时继续">
                 <Toggle label="暂停流动效果" value={settings.pauseFlow} onChange={(value) => update('pauseFlow', value)} />
               </SettingRow>
-            </Card>
+            </SettingsCard>
           </section>
 
           <section className="mb-5">
             <SectionTitle>画面效果</SectionTitle>
-            <Card variant="transparent" className="overflow-hidden rounded-4xl border border-white/10 bg-black/25 text-white shadow-none backdrop-blur-xl">
+            <SettingsCard>
               <SettingRow icon={SpeakerHighIcon} title="开启音频可视化" description="画面会跟随正在播放的声音律动">
                 <Toggle
                   label="开启音频可视化"
@@ -321,13 +344,13 @@ export function SettingsApp() {
                   onChange={(value) => update('audioVisualization', value)}
                 />
               </SettingRow>
-              <Separator className="ml-14 bg-white/15" />
+              <Separator className="mx-2 w-[calc(100%-1rem)] bg-white/15" />
               <SettingRow icon={MagicWandIcon} title="背景模糊" description="柔化封面细节并突出流动层次">
                 <Toggle label="背景模糊" value={settings.blurEnabled} onChange={(value) => update('blurEnabled', value)} />
               </SettingRow>
               {settings.blurEnabled && (
                 <>
-                  <Separator className="ml-14 bg-white/15" />
+                  <Separator className="mx-2 w-[calc(100%-1rem)] bg-white/15" />
                   <RangeSetting
                     label="模糊强度"
                     value={settings.blurMultiplier}
@@ -338,7 +361,7 @@ export function SettingsApp() {
                   />
                 </>
               )}
-              <Separator className="ml-14 bg-white/15" />
+              <Separator className="mx-2 w-[calc(100%-1rem)] bg-white/15" />
               <RangeSetting
                 label="画面遮罩"
                 value={settings.scrimAlpha}
@@ -347,19 +370,31 @@ export function SettingsApp() {
                 step={0.05}
                 onChange={(value) => update('scrimAlpha', value)}
               />
-              <Separator className="ml-14 bg-white/15" />
-              <SettingRow icon={PlayIcon} title="流动速度">
-                <ChoiceSelect label="流动速度" value={settings.flowSpeed} options={flowSpeeds} onChange={(value) => update('flowSpeed', value)} />
-              </SettingRow>
-              <Separator className="ml-14 bg-white/15" />
-              <SettingRow icon={MagicWandIcon} title="流动风格">
-                <ChoiceSelect label="流动风格" value={settings.moruStyle} options={moruStyles} onChange={(value) => update('moruStyle', value)} />
-              </SettingRow>
-              <Separator className="ml-14 bg-white/15" />
-              <SettingRow icon={GaugeIcon} title="渲染质量">
-                <ChoiceSelect label="渲染质量" value={settings.renderScale} options={renderScales} onChange={(value) => update('renderScale', value)} />
-              </SettingRow>
-            </Card>
+              <Separator className="mx-2 w-[calc(100%-1rem)] bg-white/15" />
+              <ChoiceTabs
+                icon={PlayIcon}
+                label="流动速度"
+                value={settings.flowSpeed}
+                options={flowSpeeds}
+                onChange={(value) => update('flowSpeed', value)}
+              />
+              <Separator className="mx-2 w-[calc(100%-1rem)] bg-white/15" />
+              <ChoiceTabs
+                icon={MagicWandIcon}
+                label="光栅玻璃"
+                value={settings.moruStyle}
+                options={moruStyles}
+                onChange={(value) => update('moruStyle', value)}
+              />
+              <Separator className="mx-2 w-[calc(100%-1rem)] bg-white/15" />
+              <ChoiceTabs
+                icon={GaugeIcon}
+                label="渲染质量"
+                value={settings.renderScale}
+                options={renderScales}
+                onChange={(value) => update('renderScale', value)}
+              />
+            </SettingsCard>
           </section>
 
           <div className="flex justify-center">
