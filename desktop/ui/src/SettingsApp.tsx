@@ -1,12 +1,5 @@
-import {
-  Button,
-  Card,
-  Separator,
-  Slider,
-  Switch,
-  Tabs,
-} from '@heroui/react';
-import { SmoothCorners } from '@lisse/react';
+import { Button, Card, Separator, Slider, Switch, Tabs } from "@heroui/react";
+import { SmoothCorners } from "@lisse/react";
 import {
   CheckIcon,
   GaugeIcon,
@@ -16,37 +9,54 @@ import {
   PlayIcon,
   SpeakerHighIcon,
   UploadSimpleIcon,
-} from '@phosphor-icons/react';
-import { useEffect, useRef, useState, type ChangeEvent, type ReactNode } from 'react';
-import { defaultSettings, loadSettings, saveSettings, wallpaperSettings } from './settings';
-import type { FlowSpeed, MoruStyle, Settings } from './types';
-import { PearWallLogo } from './PearWallLogo';
-import { WindowTitleBar } from './WindowTitleBar';
+  CircleHalfIcon,
+  DropIcon,
+} from "@phosphor-icons/react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type ChangeEvent,
+  type ReactNode,
+} from "react";
+import {
+  defaultSettings,
+  loadSettings,
+  saveSettings,
+  wallpaperSettings,
+} from "./settings";
+import type { FlowSpeed, MoruStyle, Settings } from "./types";
+import { PearWallLogo } from "./PearWallLogo";
+import { WindowTitleBar } from "./WindowTitleBar";
 
 type IconType = typeof PauseIcon;
 type SelectOption<T extends string | number> = { value: T; label: string };
 
 const flowSpeeds: SelectOption<FlowSpeed>[] = [
-  { value: 'SLOW', label: '舒缓' },
-  { value: 'NORMAL', label: '标准' },
-  { value: 'FAST', label: '活跃' },
+  { value: "SLOW", label: "舒缓" },
+  { value: "NORMAL", label: "标准" },
+  { value: "FAST", label: "活跃" },
 ];
 
 const moruStyles: SelectOption<MoruStyle>[] = [
-  { value: 'OFF', label: '关闭' },
-  { value: 'NARROW', label: '细腻' },
-  { value: 'WIDE', label: '宽阔' },
-  { value: 'SMOOTH', label: '柔和' },
+  { value: "OFF", label: "关闭" },
+  { value: "NARROW", label: "细腻" },
+  { value: "WIDE", label: "宽阔" },
+  { value: "SMOOTH", label: "柔和" },
 ];
 
 const renderScales: SelectOption<number>[] = [
-  { value: 0.5, label: '省电' },
-  { value: 0.75, label: '均衡' },
-  { value: 1, label: '清晰' },
+  { value: 0.5, label: "省电" },
+  { value: 0.75, label: "均衡" },
+  { value: 1, label: "清晰" },
 ];
 
 function SectionTitle({ children }: { children: ReactNode }) {
-  return <h2 className="mb-2 px-4 text-[14px] font-semibold text-white/90">{children}</h2>;
+  return (
+    <h2 className="mb-2 px-4 text-[14px] font-semibold text-white/90">
+      {children}
+    </h2>
+  );
 }
 
 function SettingsCard({ children }: { children: ReactNode }) {
@@ -55,9 +65,12 @@ function SettingsCard({ children }: { children: ReactNode }) {
       asChild
       autoEffects={false}
       corners={{ radius: 28, smoothing: 0.6 }}
-      innerBorder={{ width: 1, color: '#ffffff', opacity: 0.1 }}
+      innerBorder={{ width: 1, color: "#ffffff", opacity: 0.1 }}
     >
-      <Card variant="transparent" className="overflow-hidden bg-black/25 text-white shadow-none backdrop-blur-xl backdrop-saturate-150 p-0 gap-0">
+      <Card
+        variant="transparent"
+        className="overflow-hidden bg-black/25 text-white shadow-none backdrop-blur-[10px] backdrop-saturate-150 p-0 gap-0"
+      >
         {children}
       </Card>
     </SmoothCorners>
@@ -76,18 +89,37 @@ function SettingRow({
   children: ReactNode;
 }) {
   return (
-    <div className="flex min-h-20 items-center gap-3 px-4 py-3">
-      <Icon aria-hidden size={20} weight="regular" className="shrink-0 text-white/90" />
+    <div className="flex min-h-18 items-center gap-3 px-4 py-3">
+      <Icon
+        aria-hidden
+        size={20}
+        weight="regular"
+        className="shrink-0 text-white/90"
+      />
       <div className="min-w-0 flex-1">
-        <div className="text-[14px] font-semibold leading-tight text-white">{title}</div>
-        {description && <div className="mt-1 text-xs leading-snug text-white/65">{description}</div>}
+        <div className="text-[14px] font-semibold leading-tight text-white">
+          {title}
+        </div>
+        {description && (
+          <div className="mt-1 text-xs leading-snug text-white/65">
+            {description}
+          </div>
+        )}
       </div>
       <div className="shrink-0">{children}</div>
     </div>
   );
 }
 
-function Toggle({ label, value, onChange }: { label: string; value: boolean; onChange: (value: boolean) => void }) {
+function Toggle({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: boolean;
+  onChange: (value: boolean) => void;
+}) {
   return (
     <Switch aria-label={label} isSelected={value} onChange={onChange} size="lg">
       <Switch.Content>
@@ -106,7 +138,9 @@ function RangeSetting({
   maxValue,
   step,
   onChange,
+  icon: Icon,
 }: {
+  icon: IconType;
   label: string;
   value: number;
   minValue: number;
@@ -116,8 +150,14 @@ function RangeSetting({
 }) {
   return (
     <div className="px-4 py-4">
-      <div className="mb-3 flex items-center justify-between text-sm font-medium text-white/80">
-        <span>{label}</span>
+      <div className="mb-3 gap-3 flex items-center justify-between text-sm font-medium text-white/80">
+        <Icon
+          aria-hidden
+          size={20}
+          weight="regular"
+          className="shrink-0 text-white/90"
+        />
+        <span className="w-full text-[14px] font-semibold text-white">{label}</span>
         <span>{Math.round(value * 100)}%</span>
       </div>
       <Slider
@@ -153,16 +193,23 @@ function ChoiceTabs<T extends string | number>({
   return (
     <div className="px-4 py-4">
       <div className="mb-3 flex items-center gap-3">
-        <Icon aria-hidden size={23} weight="regular" className="shrink-0 text-white/90" />
-        <span className="text-base font-semibold text-white">{label}</span>
+        <Icon
+          aria-hidden
+          size={20}
+          weight="regular"
+          className="shrink-0 text-white/90"
+        />
+        <span className="text-[14px] font-semibold text-white">{label}</span>
       </div>
       <Tabs
         selectedKey={String(value)}
         onSelectionChange={(key) => {
-          const selected = options.find((option) => String(option.value) === String(key));
+          const selected = options.find(
+            (option) => String(option.value) === String(key),
+          );
           if (selected) onChange(selected.value);
         }}
-        className="w-full"
+        className="w-[calc(100%+0.5rem)] -mx-1"
       >
         <Tabs.ListContainer className="w-full !bg-white/10">
           <Tabs.List aria-label={label} className="w-full">
@@ -190,14 +237,17 @@ export function SettingsApp() {
   const previewRef = useRef<HTMLIFrameElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const update = <Key extends keyof Settings>(key: Key, value: Settings[Key]) => {
+  const update = <Key extends keyof Settings>(
+    key: Key,
+    value: Settings[Key],
+  ) => {
     setSettings((current) => ({ ...current, [key]: value }));
     setSaved(false);
   };
 
   const syncPreview = () => {
     previewRef.current?.contentWindow?.postMessage(
-      { type: 'pearwall:settings', settings: wallpaperSettings(settings) },
+      { type: "pearwall:settings", settings: wallpaperSettings(settings) },
       window.location.origin,
     );
   };
@@ -210,10 +260,10 @@ export function SettingsApp() {
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
       if (event.origin !== window.location.origin) return;
-      if (event.data?.type === 'pearwall:ready') setPreviewReady(true);
+      if (event.data?.type === "pearwall:ready") setPreviewReady(true);
     };
-    window.addEventListener('message', handleMessage);
-    return () => window.removeEventListener('message', handleMessage);
+    window.addEventListener("message", handleMessage);
+    return () => window.removeEventListener("message", handleMessage);
   }, []);
 
   const handleArtwork = (event: ChangeEvent<HTMLInputElement>) => {
@@ -221,7 +271,7 @@ export function SettingsApp() {
     if (!file) return;
     const reader = new FileReader();
     reader.onload = () => {
-      if (typeof reader.result !== 'string') return;
+      if (typeof reader.result !== "string") return;
       setSettings((current) => ({
         ...current,
         customArtwork: reader.result as string,
@@ -230,7 +280,7 @@ export function SettingsApp() {
       setSaved(false);
     };
     reader.readAsDataURL(file);
-    event.target.value = '';
+    event.target.value = "";
   };
 
   const apply = () => {
@@ -244,7 +294,7 @@ export function SettingsApp() {
     <div className="relative h-full w-full overflow-hidden bg-black text-white">
       <WindowTitleBar />
       <img
-        src={settings.customArtwork || './assets/default_artwork.svg'}
+        src={settings.customArtwork || "./assets/default_artwork.svg"}
         alt=""
         className="pointer-events-none absolute inset-0 h-full w-full scale-110 object-cover blur-xl"
       />
@@ -253,7 +303,7 @@ export function SettingsApp() {
         title="屏幕保护程序实时预览"
         src="./index.html"
         onLoad={syncPreview}
-        className={`pointer-events-none absolute inset-0 h-full w-full border-0 ${previewReady ? 'opacity-100' : 'opacity-0'}`}
+        className={`pointer-events-none absolute inset-0 h-full w-full border-0 ${previewReady ? "opacity-100" : "opacity-0"}`}
       />
 
       <div className="absolute inset-0 overflow-y-auto overscroll-contain">
@@ -264,7 +314,14 @@ export function SettingsApp() {
               asChild
               autoEffects={false}
               corners={{ radius: 28, smoothing: 1 }}
-              shadow={{ offsetX: 0, offsetY: 4, blur: 12, spread: 0, color: '#000000', opacity: 0.1 }}
+              shadow={{
+                offsetX: 0,
+                offsetY: 4,
+                blur: 12,
+                spread: 0,
+                color: "#000000",
+                opacity: 0.1,
+              }}
               shadowStrategy="box-shadow"
             >
               <Button
@@ -273,8 +330,12 @@ export function SettingsApp() {
                 onPress={apply}
                 className="h-14 bg-white text-base font-semibold !text-neutral-900"
               >
-                {saved ? <CheckIcon aria-hidden size={18} weight="bold" /> : <PlayIcon aria-hidden size={22} weight="fill" />}
-                {saved ? '设置已保存' : '应用屏保设置'}
+                {saved ? (
+                  <CheckIcon aria-hidden size={18} weight="bold" />
+                ) : (
+                  <PlayIcon aria-hidden size={22} weight="fill" />
+                )}
+                {saved ? "设置已保存" : "应用屏保设置"}
               </Button>
             </SmoothCorners>
           </header>
@@ -286,12 +347,18 @@ export function SettingsApp() {
                 type="button"
                 className="block w-full text-left"
                 onClick={() => {
-                  setSettings((current) => ({ ...current, customArtwork: '', customArtworkName: '' }));
+                  setSettings((current) => ({
+                    ...current,
+                    customArtwork: "",
+                    customArtworkName: "",
+                  }));
                   setSaved(false);
                 }}
               >
                 <SettingRow icon={ImageIcon} title="使用默认封面">
-                  {!settings.customArtwork && <CheckIcon aria-label="已选择" size={18} weight="bold" />}
+                  {!settings.customArtwork && (
+                    <CheckIcon aria-label="已选择" size={18} weight="bold" />
+                  )}
                 </SettingRow>
               </button>
               <Separator className="mx-2 w-[calc(100%-1rem)] bg-white/15" />
@@ -303,9 +370,13 @@ export function SettingsApp() {
                 <SettingRow
                   icon={UploadSimpleIcon}
                   title="使用自选图片"
-                  description={settings.customArtworkName || '选择本地图片作为备用封面'}
+                  description={
+                    settings.customArtworkName || "选择本地图片作为备用封面"
+                  }
                 >
-                  {settings.customArtwork && <CheckIcon aria-label="已选择" size={18} weight="bold" />}
+                  {settings.customArtwork && (
+                    <CheckIcon aria-label="已选择" size={18} weight="bold" />
+                  )}
                 </SettingRow>
               </button>
               {settings.customArtwork && (
@@ -314,7 +385,11 @@ export function SettingsApp() {
                     size="sm"
                     variant="ghost"
                     onPress={() => {
-                      setSettings((current) => ({ ...current, customArtwork: '', customArtworkName: '' }));
+                      setSettings((current) => ({
+                        ...current,
+                        customArtwork: "",
+                        customArtworkName: "",
+                      }));
                       setSaved(false);
                     }}
                     className="text-white/75"
@@ -324,14 +399,28 @@ export function SettingsApp() {
                 </div>
               )}
             </SettingsCard>
-            <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleArtwork} />
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={handleArtwork}
+            />
           </section>
 
           <section className="mb-5">
             <SectionTitle>暂停时</SectionTitle>
             <SettingsCard>
-              <SettingRow icon={PauseIcon} title="暂停流动效果" description="暂停播放后冻结动画，恢复播放时继续">
-                <Toggle label="暂停流动效果" value={settings.pauseFlow} onChange={(value) => update('pauseFlow', value)} />
+              <SettingRow
+                icon={PauseIcon}
+                title="暂停流动效果"
+                description="暂停播放后冻结动画，恢复播放时继续"
+              >
+                <Toggle
+                  label="暂停流动效果"
+                  value={settings.pauseFlow}
+                  onChange={(value) => update("pauseFlow", value)}
+                />
               </SettingRow>
             </SettingsCard>
           </section>
@@ -339,38 +428,52 @@ export function SettingsApp() {
           <section className="mb-5">
             <SectionTitle>画面效果</SectionTitle>
             <SettingsCard>
-              <SettingRow icon={SpeakerHighIcon} title="开启音频可视化" description="画面会跟随正在播放的声音律动">
+              <SettingRow
+                icon={SpeakerHighIcon}
+                title="开启音频可视化"
+                description="画面会跟随正在播放的声音律动"
+              >
                 <Toggle
                   label="开启音频可视化"
                   value={settings.audioVisualization}
-                  onChange={(value) => update('audioVisualization', value)}
+                  onChange={(value) => update("audioVisualization", value)}
                 />
               </SettingRow>
               <Separator className="mx-2 w-[calc(100%-1rem)] bg-white/15" />
-              <SettingRow icon={MagicWandIcon} title="背景模糊" description="柔化封面细节并突出流动层次">
-                <Toggle label="背景模糊" value={settings.blurEnabled} onChange={(value) => update('blurEnabled', value)} />
+              <SettingRow
+                icon={MagicWandIcon}
+                title="背景模糊"
+                description="柔化封面细节并突出流动层次"
+              >
+                <Toggle
+                  label="背景模糊"
+                  value={settings.blurEnabled}
+                  onChange={(value) => update("blurEnabled", value)}
+                />
               </SettingRow>
               {settings.blurEnabled && (
                 <>
                   <Separator className="mx-2 w-[calc(100%-1rem)] bg-white/15" />
                   <RangeSetting
+                    icon={DropIcon}
                     label="模糊强度"
                     value={settings.blurMultiplier}
                     minValue={0}
                     maxValue={2}
                     step={0.05}
-                    onChange={(value) => update('blurMultiplier', value)}
+                    onChange={(value) => update("blurMultiplier", value)}
                   />
                 </>
               )}
               <Separator className="mx-2 w-[calc(100%-1rem)] bg-white/15" />
               <RangeSetting
+                icon={CircleHalfIcon}
                 label="画面遮罩"
                 value={settings.scrimAlpha}
                 minValue={0}
                 maxValue={0.8}
                 step={0.05}
-                onChange={(value) => update('scrimAlpha', value)}
+                onChange={(value) => update("scrimAlpha", value)}
               />
               <Separator className="mx-2 w-[calc(100%-1rem)] bg-white/15" />
               <ChoiceTabs
@@ -378,7 +481,7 @@ export function SettingsApp() {
                 label="流动速度"
                 value={settings.flowSpeed}
                 options={flowSpeeds}
-                onChange={(value) => update('flowSpeed', value)}
+                onChange={(value) => update("flowSpeed", value)}
               />
               <Separator className="mx-2 w-[calc(100%-1rem)] bg-white/15" />
               <ChoiceTabs
@@ -386,7 +489,7 @@ export function SettingsApp() {
                 label="光栅玻璃"
                 value={settings.moruStyle}
                 options={moruStyles}
-                onChange={(value) => update('moruStyle', value)}
+                onChange={(value) => update("moruStyle", value)}
               />
               <Separator className="mx-2 w-[calc(100%-1rem)] bg-white/15" />
               <ChoiceTabs
@@ -394,7 +497,7 @@ export function SettingsApp() {
                 label="渲染质量"
                 value={settings.renderScale}
                 options={renderScales}
-                onChange={(value) => update('renderScale', value)}
+                onChange={(value) => update("renderScale", value)}
               />
             </SettingsCard>
           </section>
