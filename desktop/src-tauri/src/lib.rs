@@ -181,6 +181,7 @@ pub fn run() {
                 }
                 LaunchMode::Configure | LaunchMode::App => {
                     let _ = window.set_fullscreen(false);
+                    let _ = window.eval("window.location.replace('settings.html')");
                     let _ = window.show();
                 }
                 LaunchMode::Preview(parent) => {

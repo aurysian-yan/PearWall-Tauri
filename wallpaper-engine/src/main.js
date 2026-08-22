@@ -4,6 +4,7 @@
   const analyzer = new window.PearWallAudio.AppleMusicSpectrumAnalysis();
   const tauriInvoke = window.__TAURI__ && window.__TAURI__.core && window.__TAURI__.core.invoke;
   const tauriWindowApi = window.__TAURI__ && window.__TAURI__.window;
+  const settingsStorageKey = 'pearwall.settings';
   const settings = {
     audioVisualization: true,
     pauseFlow: true,
@@ -29,8 +30,24 @@
   let lastMediaArtworkPollAt = 0;
   let mediaArtworkPollPending = false;
   let nativeArtworkKey = '';
+  let previewReady = false;
 
   renderer.setArtworkSource('assets/default_artwork.svg');
+
+  function savedSettings() {
+    try {
+      return JSON.parse(window.localStorage.getItem(settingsStorageKey) || '{}');
+    } catch (_) {
+      return {};
+    }
+  }
+
+  function applySettingsValues(values) {
+    if (!values || typeof values !== 'object') return;
+    const properties = {};
+    for (const [key, value] of Object.entries(values)) properties[key] = { value };
+    applyUserProperties(properties);
+  }
 
   function audioTimestampSeconds() {
     return tauriInvoke ? Date.now() / 1000 : performance.now() / 1000;
@@ -94,6 +111,7 @@
 
   function fileArtworkSource(value) {
     if (!value) return '';
+    if (/^(data:|blob:|https?:|file:)/i.test(String(value))) return String(value);
     const source = String(value).replace(/\\/g, '/');
     return source.startsWith('file:') ? source : `file:///${source}`;
   }
@@ -180,6 +198,12 @@
     },
   };
 
+  window.addEventListener('message', (event) => {
+    if (event.origin !== window.location.origin) return;
+    if (!event.data || event.data.type !== 'pearwall:settings') return;
+    applySettingsValues(event.data.settings);
+  });
+
   if (typeof window.wallpaperRegisterAudioListener === 'function') {
     window.wallpaperRegisterAudioListener((audioArray) => {
       if (!settings.audioVisualization || !playbackPlaying) return;
@@ -229,12 +253,17 @@
         ? (tauriInvoke ? rustAudioPulse : analyzer.getInterpolated(timestamp / 1000))
         : 0;
       renderer.render(animationTime, pulse);
+      if (!previewReady) {
+        previewReady = true;
+        window.parent.postMessage({ type: 'pearwall:ready' }, window.location.origin);
+      }
       lastRenderedAt = timestamp;
     }
     window.requestAnimationFrame(frame);
   }
 
   window.addEventListener('resize', () => renderer.resize());
+  applySettingsValues(savedSettings());
   enableScreenSaverExit();
   renderer.resize();
   window.requestAnimationFrame(frame);
