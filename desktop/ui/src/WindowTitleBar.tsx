@@ -21,9 +21,10 @@ export function WindowTitleBar({
   contentVisible: boolean;
 }) {
   const isWindows = document.documentElement.classList.contains("windows");
+  const isTauri = "__TAURI_INTERNALS__" in window;
   const appWindow = useMemo(
-    () => (isWindows ? getCurrentWindow() : null),
-    [isWindows],
+    () => (isTauri ? getCurrentWindow() : null),
+    [isTauri],
   );
   const [isMaximized, setIsMaximized] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -85,13 +86,13 @@ export function WindowTitleBar({
       >
         <h1
           aria-hidden={!contentVisible}
-          className={`pointer-events-none flex absolute ${isWindows ? "left-4 top-0" : "left-22 top-1.5"}  z-50 select-none items-center gap-2 !text-[14px] transition-opacity duration-200 ease-out ${contentVisible ? "opacity-100" : "opacity-0"}`}
+          className={`pointer-events-none absolute z-50 flex select-none items-center gap-2 !text-[14px] font-semibold transition-all duration-200 ease-out ${isWindows ? "left-4 top-0 font-normal" : isFullscreen ? "left-3 top-1.5" : "left-20 top-1.5"} ${contentVisible ? "opacity-100" : "opacity-0"}`}
         >
           <img src={tintLogo} alt="" className={`h-4.5 w-4.5 ${isWindows ? "flex h-10" : "hidden"}`} />
           <span className="text-white/75">PearWall 设置</span>
         </h1>
         <div data-tauri-drag-region="" className="min-w-0 flex-1" />
-        {appWindow && (
+        {isWindows && appWindow && (
           <div
             aria-hidden={!contentVisible}
             className={`flex shrink-0 transition-opacity duration-200 ease-out ${isWindows ? "h-10" : "h-8"} ${contentVisible ? "opacity-100" : "pointer-events-none opacity-0"}`}
