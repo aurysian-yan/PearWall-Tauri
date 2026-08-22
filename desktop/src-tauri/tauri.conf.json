@@ -17,6 +17,8 @@
         "title": "Pear Wall",
         "width": 1280,
         "height": 800,
+        "minWidth": 400,
+        "minHeight": 640,
         "fullscreen": false,
         "decorations": true,
         "hiddenTitle": true,

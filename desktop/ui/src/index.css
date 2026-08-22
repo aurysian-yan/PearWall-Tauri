@@ -40,7 +40,9 @@
   --titlebar-height: 2rem;
 }
 
-.settings-scrollbar[data-overlayscrollbars]
+@media (max-width: 850px) {
+
+/*.settings-scrollbar[data-overlayscrollbars]
   [data-overlayscrollbars-viewport] {
   -webkit-mask-image: linear-gradient(
     to bottom,
@@ -54,6 +56,8 @@
     black calc(var(--titlebar-height) + 16px),
     black 100%
   );
+}*/
+
 }
 
 .windows .settings-scrollbar[data-overlayscrollbars] {
