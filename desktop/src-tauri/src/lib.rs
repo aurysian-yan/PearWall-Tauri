@@ -2,7 +2,7 @@ use pearwall_core::SpectrumAnalyzer;
 use serde::Serialize;
 use std::sync::Arc;
 use std::sync::Mutex;
-use tauri::{Manager, State};
+use tauri::{webview::PageLoadEvent, Manager, State};
 
 mod desktop_wallpaper;
 #[cfg(target_os = "macos")]
@@ -40,7 +40,7 @@ fn set_preview_parent(window: &tauri::WebviewWindow, parent: isize) -> tauri::Re
     use windows::Win32::Foundation::{HWND, RECT};
     use windows::Win32::UI::WindowsAndMessaging::{
         GetClientRect, GetWindowLongPtrW, SetParent, SetWindowLongPtrW, SetWindowPos, GWL_STYLE,
-        SWP_FRAMECHANGED, SWP_NOACTIVATE, SWP_SHOWWINDOW, WS_CHILD, WS_POPUP,
+        SWP_FRAMECHANGED, SWP_NOACTIVATE, WS_CHILD, WS_POPUP,
     };
 
     unsafe {
@@ -62,7 +62,7 @@ fn set_preview_parent(window: &tauri::WebviewWindow, parent: isize) -> tauri::Re
             0,
             bounds.right - bounds.left,
             bounds.bottom - bounds.top,
-            SWP_FRAMECHANGED | SWP_NOACTIVATE | SWP_SHOWWINDOW,
+            SWP_FRAMECHANGED | SWP_NOACTIVATE,
         )
         .map_err(|_| tauri::Error::InvalidWindowHandle)?;
     }
@@ -81,7 +81,6 @@ struct MediaArtwork {
 #[cfg(windows)]
 struct MediaArtworkState {
     current: Arc<Mutex<MediaArtwork>>,
-    delivered: Mutex<(String, bool)>,
 }
 
 #[cfg(windows)]
@@ -89,10 +88,7 @@ impl Default for MediaArtworkState {
     fn default() -> Self {
         let current = Arc::new(Mutex::new(MediaArtwork::default()));
         windows_media::start(current.clone());
-        Self {
-            current,
-            delivered: Mutex::new((String::new(), false)),
-        }
+        Self { current }
     }
 }
 
@@ -134,14 +130,18 @@ fn reset_audio(state: State<'_, AudioState>) -> Result<(), String> {
 }
 
 #[tauri::command(async)]
-fn get_media_artwork(state: State<'_, MediaArtworkState>) -> Result<MediaArtwork, String> {
+fn get_media_artwork(
+    current_key: Option<String>,
+    state: State<'_, MediaArtworkState>,
+) -> Result<MediaArtwork, String> {
     #[cfg(windows)]
     {
-        return windows_media::get_media_artwork(&state);
+        return windows_media::get_media_artwork(&state, current_key.as_deref());
     }
 
     #[cfg(not(windows))]
     {
+        let _ = current_key;
         let _ = state;
         Ok(MediaArtwork::default())
     }
@@ -150,6 +150,14 @@ fn get_media_artwork(state: State<'_, MediaArtworkState>) -> Result<MediaArtwork
 #[tauri::command]
 fn is_screen_saver_mode() -> bool {
     matches!(launch_mode(), LaunchMode::ScreenSaver)
+}
+
+fn page_matches_launch_mode(mode: LaunchMode, path: &str) -> bool {
+    let page = path.rsplit('/').next().unwrap_or_default();
+    match mode {
+        LaunchMode::App | LaunchMode::Configure => page == "settings.html",
+        LaunchMode::ScreenSaver | LaunchMode::Preview(_) => page.is_empty() || page == "index.html",
+    }
 }
 
 #[tauri::command]
@@ -173,6 +181,14 @@ pub fn run() {
             get_desktop_wallpaper,
             is_screen_saver_mode,
         ])
+        .on_page_load(move |webview, payload| {
+            if webview.label() != "main" || payload.event() != PageLoadEvent::Finished {
+                return;
+            }
+            if page_matches_launch_mode(mode, payload.url().path()) {
+                let _ = webview.window().show();
+            }
+        })
         .setup(move |app| {
             #[cfg(target_os = "macos")]
             macos_audio::start(audio_analyzer.clone());
@@ -185,14 +201,12 @@ pub fn run() {
                     let _ = window.set_decorations(false);
                     let _ = window.set_always_on_top(true);
                     let _ = window.set_fullscreen(true);
-                    let _ = window.show();
+                    let _ = window.eval("window.location.replace('index.html')");
                 }
                 LaunchMode::Configure | LaunchMode::App => {
                     #[cfg(windows)]
                     let _ = window.set_decorations(false);
                     let _ = window.set_fullscreen(false);
-                    let _ = window.eval("window.location.replace('settings.html')");
-                    let _ = window.show();
                 }
                 LaunchMode::Preview(parent) => {
                     let _ = window.set_decorations(false);
@@ -202,7 +216,7 @@ pub fn run() {
                     set_preview_parent(&window, parent)?;
                     #[cfg(not(windows))]
                     let _ = parent;
-                    let _ = window.show();
+                    let _ = window.eval("window.location.replace('index.html')");
                 }
             }
             Ok(())

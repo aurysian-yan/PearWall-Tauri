@@ -164,7 +164,7 @@
     if (!tauriInvoke || mediaArtworkPollPending || timestamp - lastMediaArtworkPollAt < 1000) return;
     lastMediaArtworkPollAt = timestamp;
     mediaArtworkPollPending = true;
-    tauriInvoke('get_media_artwork')
+    tauriInvoke('get_media_artwork', { current_key: nativeArtworkKey })
       .then((result) => {
         if (!result) return;
         setNativeArtwork(result.key, result.data_url);

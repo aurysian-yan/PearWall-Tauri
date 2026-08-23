@@ -16,6 +16,7 @@ use crate::{MediaArtwork, MediaArtworkState};
 
 const MAX_ARTWORK_BYTES: u64 = 16 * 1024 * 1024;
 const MEDIA_POLL_INTERVAL: Duration = Duration::from_secs(1);
+const EMPTY_MEDIA_CONFIRMATIONS: u8 = 2;
 const ASYNC_POLL_INTERVAL: Duration = Duration::from_millis(10);
 const ASYNC_TIMEOUT: Duration = Duration::from_secs(2);
 
@@ -40,26 +41,19 @@ pub fn start(current: Arc<Mutex<MediaArtwork>>) {
         .spawn(move || media_worker(current));
 }
 
-pub fn get_media_artwork(state: &MediaArtworkState) -> Result<MediaArtwork, String> {
-    let current = state
+pub fn get_media_artwork(
+    state: &MediaArtworkState,
+    current_key: Option<&str>,
+) -> Result<MediaArtwork, String> {
+    let mut current = state
         .current
         .lock()
         .map_err(|_| "媒体封面状态不可用".to_string())?
         .clone();
-    let mut delivered = state
-        .delivered
-        .lock()
-        .map_err(|_| "媒体封面状态不可用".to_string())?;
 
-    if current.key == delivered.0 && current.playing == delivered.1 {
-        return Ok(MediaArtwork {
-            key: current.key,
-            data_url: None,
-            playing: current.playing,
-        });
+    if current_key == Some(current.key.as_str()) {
+        current.data_url = None;
     }
-
-    *delivered = (current.key.clone(), current.playing);
     Ok(current)
 }
 
@@ -68,6 +62,7 @@ fn media_worker(current: Arc<Mutex<MediaArtwork>>) {
         return;
     };
     let mut manager = None;
+    let mut empty_media_count = 0u8;
 
     loop {
         if manager.is_none() {
@@ -76,9 +71,18 @@ fn media_worker(current: Arc<Mutex<MediaArtwork>>) {
 
         if let Some(active_manager) = manager.as_ref() {
             match read_current_media(active_manager) {
-                Ok(media) => {
+                Ok(mut media) => {
                     if let Ok(mut cached) = current.lock() {
-                        *cached = media;
+                        if media.key.is_empty() {
+                            empty_media_count = empty_media_count.saturating_add(1);
+                            if empty_media_count >= EMPTY_MEDIA_CONFIRMATIONS {
+                                *cached = media;
+                            }
+                        } else {
+                            empty_media_count = 0;
+                            retain_cached_artwork(&mut media, &cached);
+                            *cached = media;
+                        }
                     }
                 }
                 Err(_) => manager = None,
@@ -87,6 +91,23 @@ fn media_worker(current: Arc<Mutex<MediaArtwork>>) {
 
         thread::sleep(MEDIA_POLL_INTERVAL);
     }
+}
+
+fn retain_cached_artwork(media: &mut MediaArtwork, cached: &MediaArtwork) {
+    if media.data_url.is_some()
+        || cached.data_url.is_none()
+        || media_identity(&media.key) != media_identity(&cached.key)
+    {
+        return;
+    }
+
+    media.key = cached.key.clone();
+    media.data_url = cached.data_url.clone();
+}
+
+fn media_identity(key: &str) -> &str {
+    key.rsplit_once('\u{1e}')
+        .map_or(key, |(identity, _)| identity)
 }
 
 fn request_manager() -> windows::core::Result<GlobalSystemMediaTransportControlsSessionManager> {
