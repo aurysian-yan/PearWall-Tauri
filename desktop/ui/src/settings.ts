@@ -5,6 +5,7 @@ export const settingsStorageKey = 'pearwall.settings';
 export const defaultSettings: Settings = {
   audioVisualization: true,
   pauseFlow: true,
+  hideCursor: true,
   renderScale: 0.75,
   blurEnabled: true,
   blurMultiplier: 1,

@@ -29,6 +29,11 @@
   }
 }
 
+.hide-cursor,
+.hide-cursor * {
+  cursor: none !important;
+}
+
 .settings-scrollbar[data-overlayscrollbars] .os-scrollbar-vertical {
   top: 0.5rem;
   right: 0.5rem;

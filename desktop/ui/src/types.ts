@@ -5,6 +5,7 @@ export type ArtworkFallback = 'DEFAULT' | 'CUSTOM' | 'DESKTOP';
 export type Settings = {
   audioVisualization: boolean;
   pauseFlow: boolean;
+  hideCursor: boolean;
   renderScale: number;
   blurEnabled: boolean;
   blurMultiplier: number;

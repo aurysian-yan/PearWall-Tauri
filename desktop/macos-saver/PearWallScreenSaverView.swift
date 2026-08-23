@@ -10,10 +10,12 @@ final class PearWallScreenSaverView: ScreenSaverView, WKNavigationDelegate {
     private var artworkTimer: Timer?
     private var lastSentArtworkKey = ""
     private var lastSentDesktopWallpaperPath = ""
+    private var previewMode = false
     private let mediaRemote = MediaRemoteBridge()
 
     override init?(frame: NSRect, isPreview: Bool) {
         super.init(frame: frame, isPreview: isPreview)
+        previewMode = isPreview
         animationTimeInterval = 1.0 / 60.0
 
         let configuration = WKWebViewConfiguration()
@@ -80,6 +82,11 @@ final class PearWallScreenSaverView: ScreenSaverView, WKNavigationDelegate {
     }
 
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        if !previewMode {
+            webView.evaluateJavaScript(
+                "window.PearWallSetScreenSaverMode && window.PearWallSetScreenSaverMode(true);",
+            )
+        }
         refreshArtwork()
         refreshDesktopWallpaper()
     }

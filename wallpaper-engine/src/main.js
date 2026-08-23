@@ -8,6 +8,7 @@
   const settings = {
     audioVisualization: true,
     pauseFlow: true,
+    hideCursor: true,
     renderScale: 0.75,
     blurEnabled: true,
     blurMultiplier: 1,
@@ -36,6 +37,7 @@
   let desktopArtworkSource = '';
   let desktopArtworkPending = false;
   let desktopArtworkFailed = false;
+  let screenSaverMode = false;
   let previewReady = false;
 
   renderer.setArtworkSource('assets/default_artwork.svg');
@@ -77,6 +79,8 @@
   function enableScreenSaverExit() {
     if (!tauriInvoke || !tauriWindowApi || typeof tauriWindowApi.getCurrentWindow !== 'function') return;
     tauriInvoke('is_screen_saver_mode').then((enabled) => {
+      screenSaverMode = Boolean(enabled);
+      applyCursorVisibility();
       if (!enabled) return;
       const exit = () => tauriWindowApi.getCurrentWindow().close().catch(() => {});
       window.addEventListener('mousemove', exit, { once: true });
@@ -85,6 +89,18 @@
       window.addEventListener('touchstart', exit, { once: true });
     }).catch(() => {});
   }
+
+  function applyCursorVisibility() {
+    const cursor = settings.hideCursor && screenSaverMode ? 'none' : '';
+    document.documentElement.style.cursor = cursor;
+    document.body.style.cursor = cursor;
+    canvas.style.cursor = cursor;
+  }
+
+  window.PearWallSetScreenSaverMode = (enabled) => {
+    screenSaverMode = Boolean(enabled);
+    applyCursorVisibility();
+  };
 
   function booleanValue(property, fallback) {
     if (!property || property.value === undefined) return fallback;
@@ -199,6 +215,7 @@
     const artworkFallbackProvided = Boolean(properties.artworkFallback && properties.artworkFallback.value != null);
     settings.audioVisualization = booleanValue(properties.audioVisualization, settings.audioVisualization);
     settings.pauseFlow = booleanValue(properties.pauseFlow, settings.pauseFlow);
+    settings.hideCursor = booleanValue(properties.hideCursor, settings.hideCursor);
     settings.blurEnabled = booleanValue(properties.blurEnabled, settings.blurEnabled);
     settings.renderScale = Math.max(0.25, Math.min(1, numberValue(properties.renderScale, settings.renderScale)));
     settings.scrimAlpha = Math.max(0, Math.min(0.8, numberValue(properties.scrimAlpha, settings.scrimAlpha)));
@@ -217,6 +234,7 @@
     }
     if (settings.artworkFallback === 'DESKTOP' && previousArtworkFallback !== 'DESKTOP') desktopArtworkFailed = false;
     renderer.setSettings(settings);
+    applyCursorVisibility();
     applyArtworkFallback();
   }
 

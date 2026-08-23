@@ -10,6 +10,7 @@ import {
   CaretRightIcon,
   CheckIcon,
   CornersOutIcon,
+  CursorIcon,
   DesktopIcon,
   DeviceMobileIcon,
   FileTextIcon,
@@ -446,6 +447,7 @@ export function SettingsApp() {
   const [settings, setSettings] = useState<Settings>(loadSettings);
   const [previewReady, setPreviewReady] = useState(false);
   const [contentVisible, setContentVisible] = useState(true);
+  const [pureMode, setPureMode] = useState(false);
   const [drawerPage, setDrawerPage] = useState<DrawerPage | null>(null);
   const [drawerHandleProgress, setDrawerHandleProgress] = useState(0);
   const previewRef = useRef<HTMLIFrameElement>(null);
@@ -476,6 +478,21 @@ export function SettingsApp() {
     return () => window.removeEventListener("message", handleMessage);
   }, []);
 
+  useEffect(() => {
+    const appWindow = getCurrentWindow();
+    const syncFullscreenState = () => {
+      void appWindow
+        .isFullscreen()
+        .then(setPureMode)
+        .catch(() => setPureMode(false));
+    };
+    syncFullscreenState();
+    const unlistenPromise = appWindow.onResized(syncFullscreenState);
+    return () => {
+      void unlistenPromise.then((unlisten) => unlisten());
+    };
+  }, []);
+
   const handleArtwork = (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -497,11 +514,14 @@ export function SettingsApp() {
     setContentVisible(false);
     void getCurrentWindow()
       .setFullscreen(true)
+      .then(() => setPureMode(true))
       .catch(() => undefined);
   };
 
   return (
-    <div className="relative h-full w-full overflow-hidden bg-black text-white">
+    <div
+      className={`relative h-full w-full overflow-hidden bg-black text-white ${settings.hideCursor && pureMode && !contentVisible ? "hide-cursor" : ""}`}
+    >
       <WindowTitleBar contentVisible={contentVisible} />
       <img
         src={settings.customArtwork || "./assets/default_artwork.svg"}
@@ -714,6 +734,23 @@ export function SettingsApp() {
                   label="暂停流动效果"
                   value={settings.pauseFlow}
                   onChange={(value) => update("pauseFlow", value)}
+                />
+              </SettingRow>
+            </SettingsCard>
+          </section>
+
+          <section className="mb-5">
+            <SectionTitle>纯享与屏保</SectionTitle>
+            <SettingsCard>
+              <SettingRow
+                icon={CursorIcon}
+                title="隐藏鼠标指针"
+                description="纯享模式及屏幕保护程序运行时隐藏"
+              >
+                <Toggle
+                  label="隐藏鼠标指针"
+                  value={settings.hideCursor}
+                  onChange={(value) => update("hideCursor", value)}
                 />
               </SettingRow>
             </SettingsCard>
