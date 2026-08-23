@@ -14,6 +14,7 @@ export const defaultSettings: Settings = {
   portraitPreset: 0,
   landscapePreset: 0,
   randomPreset: false,
+  artworkFallback: 'DEFAULT',
   customArtwork: '',
   customArtworkName: '',
 };
@@ -21,7 +22,15 @@ export const defaultSettings: Settings = {
 export function loadSettings(): Settings {
   try {
     const saved = JSON.parse(window.localStorage.getItem(settingsStorageKey) || '{}');
-    return { ...defaultSettings, ...saved };
+    const savedArtworkFallback = ['DEFAULT', 'CUSTOM', 'DESKTOP'].includes(saved.artworkFallback)
+      ? saved.artworkFallback
+      : saved.customArtwork
+        ? 'CUSTOM'
+        : 'DEFAULT';
+    const artworkFallback = savedArtworkFallback === 'CUSTOM' && !saved.customArtwork
+      ? 'DEFAULT'
+      : savedArtworkFallback;
+    return { ...defaultSettings, ...saved, artworkFallback };
   } catch {
     return defaultSettings;
   }

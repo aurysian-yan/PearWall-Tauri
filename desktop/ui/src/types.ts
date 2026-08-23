@@ -1,5 +1,6 @@
 export type FlowSpeed = 'SLOW' | 'NORMAL' | 'FAST';
 export type MoruStyle = 'OFF' | 'NARROW' | 'WIDE' | 'SMOOTH';
+export type ArtworkFallback = 'DEFAULT' | 'CUSTOM' | 'DESKTOP';
 
 export type Settings = {
   audioVisualization: boolean;
@@ -13,6 +14,7 @@ export type Settings = {
   portraitPreset: number;
   landscapePreset: number;
   randomPreset: boolean;
+  artworkFallback: ArtworkFallback;
   customArtwork: string;
   customArtworkName: string;
 };

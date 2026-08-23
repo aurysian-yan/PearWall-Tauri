@@ -4,6 +4,7 @@ use std::sync::Arc;
 use std::sync::Mutex;
 use tauri::{Manager, State};
 
+mod desktop_wallpaper;
 #[cfg(target_os = "macos")]
 mod macos_audio;
 #[cfg(windows)]
@@ -151,6 +152,11 @@ fn is_screen_saver_mode() -> bool {
     matches!(launch_mode(), LaunchMode::ScreenSaver)
 }
 
+#[tauri::command]
+fn get_desktop_wallpaper() -> Result<String, String> {
+    desktop_wallpaper::data_url()
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let mode = launch_mode();
@@ -164,6 +170,7 @@ pub fn run() {
             get_audio_pulse,
             reset_audio,
             get_media_artwork,
+            get_desktop_wallpaper,
             is_screen_saver_mode,
         ])
         .setup(move |app| {

@@ -17,6 +17,7 @@
     portraitPreset: 0,
     landscapePreset: 0,
     randomPreset: false,
+    artworkFallback: 'DEFAULT',
     customArtwork: '',
   };
   let paused = false;
@@ -31,6 +32,10 @@
   let lastMediaArtworkPollAt = 0;
   let mediaArtworkPollPending = false;
   let nativeArtworkKey = '';
+  let mediaArtworkAvailable = false;
+  let desktopArtworkSource = '';
+  let desktopArtworkPending = false;
+  let desktopArtworkFailed = false;
   let previewReady = false;
 
   renderer.setArtworkSource('assets/default_artwork.svg');
@@ -119,13 +124,24 @@
 
   function setNativeArtwork(key, dataUrl) {
     const nextKey = String(key || '');
-    if (nextKey === nativeArtworkKey) return;
+    if (nextKey === nativeArtworkKey) {
+      if (!mediaArtworkAvailable) applyArtworkFallback();
+      return;
+    }
     nativeArtworkKey = nextKey;
-    renderer.setArtworkSource(dataUrl ? artworkSource(dataUrl) : 'assets/default_artwork.svg');
+    mediaArtworkAvailable = Boolean(dataUrl);
+    if (mediaArtworkAvailable) renderer.setArtworkSource(artworkSource(dataUrl));
+    else applyArtworkFallback();
   }
 
   window.PearWallSetArtwork = (key, dataUrl) => {
     setNativeArtwork(key, dataUrl);
+  };
+
+  window.PearWallSetDesktopArtwork = (dataUrl) => {
+    desktopArtworkSource = artworkSource(dataUrl);
+    desktopArtworkFailed = !desktopArtworkSource;
+    if (!mediaArtworkAvailable) applyArtworkFallback();
   };
 
   function pollMediaArtwork(timestamp) {
@@ -137,7 +153,6 @@
         if (!result) return;
         setNativeArtwork(result.key, result.data_url);
         if (Boolean(result.playing) !== playbackPlaying) setPlaybackState(Boolean(result.playing));
-        if (!result.key && !result.playing) applyArtworkFallback();
       })
       .catch(() => {})
       .finally(() => {
@@ -146,11 +161,42 @@
   }
 
   function applyArtworkFallback() {
-    if (!playbackPlaying && settings.customArtwork) renderer.setArtworkSource(fileArtworkSource(settings.customArtwork));
+    if (mediaArtworkAvailable) return;
+    if (settings.artworkFallback === 'CUSTOM' && settings.customArtwork) {
+      renderer.setArtworkSource(fileArtworkSource(settings.customArtwork));
+      return;
+    }
+    if (settings.artworkFallback !== 'DESKTOP') {
+      renderer.setArtworkSource('assets/default_artwork.svg');
+      return;
+    }
+    if (desktopArtworkSource) {
+      renderer.setArtworkSource(desktopArtworkSource);
+      return;
+    }
+    renderer.setArtworkSource('assets/default_artwork.svg');
+    if (!tauriInvoke || desktopArtworkPending || desktopArtworkFailed) return;
+    desktopArtworkPending = true;
+    tauriInvoke('get_desktop_wallpaper')
+      .then((dataUrl) => {
+        desktopArtworkSource = artworkSource(dataUrl);
+        desktopArtworkFailed = !desktopArtworkSource;
+        if (!mediaArtworkAvailable && settings.artworkFallback === 'DESKTOP' && desktopArtworkSource) {
+          renderer.setArtworkSource(desktopArtworkSource);
+        }
+      })
+      .catch(() => {
+        desktopArtworkFailed = true;
+      })
+      .finally(() => {
+        desktopArtworkPending = false;
+      });
   }
 
   function applyUserProperties(properties) {
     if (!properties) return;
+    const previousArtworkFallback = settings.artworkFallback;
+    const artworkFallbackProvided = Boolean(properties.artworkFallback && properties.artworkFallback.value != null);
     settings.audioVisualization = booleanValue(properties.audioVisualization, settings.audioVisualization);
     settings.pauseFlow = booleanValue(properties.pauseFlow, settings.pauseFlow);
     settings.blurEnabled = booleanValue(properties.blurEnabled, settings.blurEnabled);
@@ -162,9 +208,15 @@
     settings.portraitPreset = Math.round(Math.max(0, Math.min(3, numberValue(properties.portraitPreset, settings.portraitPreset))));
     settings.landscapePreset = Math.round(Math.max(0, Math.min(4, numberValue(properties.landscapePreset, settings.landscapePreset))));
     settings.randomPreset = booleanValue(properties.randomPreset, settings.randomPreset);
+    settings.artworkFallback = stringValue(properties.artworkFallback, settings.artworkFallback).toUpperCase();
     settings.customArtwork = stringValue(properties.customArtwork, settings.customArtwork);
+    if (!artworkFallbackProvided && properties.customArtwork) {
+      settings.artworkFallback = settings.customArtwork ? 'CUSTOM' : 'DEFAULT';
+    } else if (settings.artworkFallback !== 'DEFAULT' && settings.artworkFallback !== 'CUSTOM' && settings.artworkFallback !== 'DESKTOP') {
+      settings.artworkFallback = settings.customArtwork ? 'CUSTOM' : 'DEFAULT';
+    }
+    if (settings.artworkFallback === 'DESKTOP' && previousArtworkFallback !== 'DESKTOP') desktopArtworkFailed = false;
     renderer.setSettings(settings);
-    if (settings.customArtwork) renderer.setArtworkSource(fileArtworkSource(settings.customArtwork));
     applyArtworkFallback();
   }
 
@@ -226,7 +278,8 @@
   if (typeof window.wallpaperRegisterMediaThumbnailListener === 'function') {
     window.wallpaperRegisterMediaThumbnailListener((event) => {
       const thumbnail = typeof event === 'string' ? event : event && (event.thumbnail || event.data);
-      if (thumbnail) renderer.setArtworkSource(artworkSource(thumbnail));
+      mediaArtworkAvailable = Boolean(thumbnail);
+      if (mediaArtworkAvailable) renderer.setArtworkSource(artworkSource(thumbnail));
       else applyArtworkFallback();
     });
   }

@@ -10,6 +10,7 @@ import {
   CaretRightIcon,
   CheckIcon,
   CornersOutIcon,
+  DesktopIcon,
   DeviceMobileIcon,
   FileTextIcon,
   GithubLogoIcon,
@@ -483,6 +484,7 @@ export function SettingsApp() {
       if (typeof reader.result !== "string") return;
       setSettings((current) => ({
         ...current,
+        artworkFallback: "CUSTOM",
         customArtwork: reader.result as string,
         customArtworkName: file.name,
       }));
@@ -575,6 +577,7 @@ export function SettingsApp() {
                 onClick={() => {
                   setSettings((current) => ({
                     ...current,
+                    artworkFallback: "DEFAULT",
                     customArtwork: "",
                     customArtworkName: "",
                   }));
@@ -585,7 +588,30 @@ export function SettingsApp() {
                   title="使用默认封面"
                   className="max-h-16 !min-h-16"
                 >
-                  {!settings.customArtwork && (
+                  {settings.artworkFallback === "DEFAULT" && (
+                    <CheckIcon aria-label="已选择" size={18} weight="bold" />
+                  )}
+                </SettingRow>
+              </button>
+              <Separator className="ml-12 mr-2 w-[calc(100%-3.5rem)] bg-white/15" />
+              <button
+                type="button"
+                className="block w-full text-left"
+                onClick={() => {
+                  setSettings((current) => ({
+                    ...current,
+                    artworkFallback: "DESKTOP",
+                    customArtwork: "",
+                    customArtworkName: "",
+                  }));
+                }}
+              >
+                <SettingRow
+                  icon={DesktopIcon}
+                  title="使用桌面壁纸"
+                  description="直接提取当前系统桌面壁纸"
+                >
+                  {settings.artworkFallback === "DESKTOP" && (
                     <CheckIcon aria-label="已选择" size={18} weight="bold" />
                   )}
                 </SettingRow>
@@ -601,12 +627,12 @@ export function SettingsApp() {
                   title="使用自选图片"
                   description="选择本地图片作为备用封面"
                 >
-                  {settings.customArtwork && (
+                  {settings.artworkFallback === "CUSTOM" && (
                     <CheckIcon aria-label="已选择" size={18} weight="bold" />
                   )}
                 </SettingRow>
               </button>
-              {settings.customArtwork && (
+              {settings.artworkFallback === "CUSTOM" && settings.customArtwork && (
                 <div className="flex items-center gap-1.5 pr-4 pl-11.5 pb-3 pt-0">
                   <SmoothCorners
                     asChild
@@ -641,7 +667,7 @@ export function SettingsApp() {
                   </div>
                 </div>
               )}
-              {settings.customArtwork && (
+              {settings.artworkFallback === "CUSTOM" && settings.customArtwork && (
                 <div className="px-4 pb-3 text-right">
                   <SmoothCorners
                     asChild
@@ -654,6 +680,7 @@ export function SettingsApp() {
                       onPress={() => {
                         setSettings((current) => ({
                           ...current,
+                          artworkFallback: "DEFAULT",
                           customArtwork: "",
                           customArtworkName: "",
                         }));

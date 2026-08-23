@@ -9,6 +9,7 @@ final class PearWallScreenSaverView: ScreenSaverView, WKNavigationDelegate {
     private var webView: WKWebView?
     private var artworkTimer: Timer?
     private var lastSentArtworkKey = ""
+    private var lastSentDesktopWallpaperPath = ""
     private let mediaRemote = MediaRemoteBridge()
 
     override init?(frame: NSRect, isPreview: Bool) {
@@ -32,6 +33,7 @@ final class PearWallScreenSaverView: ScreenSaverView, WKNavigationDelegate {
         view.loadFileURL(indexURL, allowingReadAccessTo: indexURL.deletingLastPathComponent())
         artworkTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
             self?.refreshArtwork()
+            self?.refreshDesktopWallpaper()
         }
     }
 
@@ -79,6 +81,47 @@ final class PearWallScreenSaverView: ScreenSaverView, WKNavigationDelegate {
 
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         refreshArtwork()
+        refreshDesktopWallpaper()
+    }
+
+    private func refreshDesktopWallpaper() {
+        guard let screen = NSScreen.main,
+              let url = NSWorkspace.shared.desktopImageURL(for: screen) else {
+            return
+        }
+        let path = url.path
+        guard path != lastSentDesktopWallpaperPath,
+              let data = try? Data(contentsOf: url),
+              !data.isEmpty,
+              data.count <= 64 * 1024 * 1024,
+              let webView else {
+            return
+        }
+        let mimeType = Self.wallpaperMimeType(url: url, data: data)
+        let dataURL = "data:\(mimeType);base64,\(data.base64EncodedString())"
+        let dataJSON = Self.javascriptString(dataURL)
+        webView.evaluateJavaScript(
+            "window.PearWallSetDesktopArtwork && window.PearWallSetDesktopArtwork(\(dataJSON));",
+        ) { [weak self] _, error in
+            if error == nil {
+                self?.lastSentDesktopWallpaperPath = path
+            }
+        }
+    }
+
+    private static func wallpaperMimeType(url: URL, data: Data) -> String {
+        switch url.pathExtension.lowercased() {
+        case "jpg", "jpeg": return "image/jpeg"
+        case "png": return "image/png"
+        case "gif": return "image/gif"
+        case "webp": return "image/webp"
+        case "bmp": return "image/bmp"
+        case "tif", "tiff": return "image/tiff"
+        case "avif": return "image/avif"
+        case "heic", "heif": return "image/heic"
+        case "svg": return "image/svg+xml"
+        default: return MediaRemoteBridge.sniffMimeType(data)
+        }
     }
 
     private static func javascriptString(_ value: String) -> String {
@@ -181,7 +224,7 @@ private final class MediaRemoteBridge {
         return normalized
     }
 
-    private static func sniffMimeType(_ data: Data) -> String {
+    fileprivate static func sniffMimeType(_ data: Data) -> String {
         let bytes = [UInt8](data.prefix(12))
         if bytes.starts(with: [0x89, 0x50, 0x4e, 0x47]) { return "image/png" }
         if bytes.starts(with: [0xff, 0xd8, 0xff]) { return "image/jpeg" }
