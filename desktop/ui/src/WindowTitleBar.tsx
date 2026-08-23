@@ -99,12 +99,12 @@ export function WindowTitleBar({
       >
         <div
           aria-hidden={!contentVisible}
-          className={`pointer-events-none absolute z-50 flex select-none items-center gap-2 !text-[14px] font-semibold transition-all duration-200 ease-out ${isWindows ? "left-4 top-0 font-normal h-10" : isFullscreen ? "left-3 top-1.5" : "left-20 top-1.5"} ${contentVisible ? "opacity-100" : "opacity-0"}`}
+          className={`pointer-events-none absolute z-50 flex select-none items-center gap-2 text-[14px] font-semibold transition-all duration-200 ease-out ${isWindows ? "left-4 top-0 font-normal h-10 !text-[12px]" : isFullscreen ? "left-3 top-1.5" : "left-20 top-1.5"} ${contentVisible ? "opacity-100" : "opacity-0"}`}
         >
           <img
             src={tintLogo}
             alt=""
-            className={`h-4.5 w-4.5 object-contain ${isWindows ? "block" : "hidden"}`}
+            className={`h-4 w-4 object-contain ${isWindows ? "block" : "hidden"}`}
           />
           <span className="text-white/75">{title}</span>
         </div>
