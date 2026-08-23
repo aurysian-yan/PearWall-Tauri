@@ -7,6 +7,7 @@ Pear Wall 是一个跨平台动态壁纸项目。本仓库维护桌面端、Wall
 ```text
 .
 ├── desktop/                # Tauri 桌面端及屏保打包脚本
+│   ├── installer/          # Tauri Windows 自定义安装器
 │   ├── scripts/            # 前端、macOS 屏保和 Windows 屏保构建脚本
 │   └── src-tauri/          # Tauri Rust 宿主
 ├── wallpaper-engine/       # Wallpaper Engine 项目与共享 WebGL 渲染器
@@ -50,7 +51,7 @@ pnpm --dir desktop run build
 
 ## 屏保构建
 
-统一构建在 macOS 上运行，一次生成 macOS `.saver`、屏保 DMG 和 Windows `.scr`，不生成 Windows 安装包。
+统一构建在 macOS 上运行，一次生成 macOS `.saver`、屏保 DMG、Windows `.scr` 和自定义 UI 安装包。Windows 产物使用 `x86_64-pc-windows-msvc` 目标交叉编译。
 
 首次构建需要安装 Xcode Command Line Tools、Windows 交叉编译工具和 DMG 工具：
 
@@ -81,10 +82,23 @@ release/
 │   ├── Pear Wall.saver
 │   └── Pear-Wall-Screen-Saver-<version>.dmg
 └── windows/
-    └── PearWall.scr
+    ├── PearWall.scr
+    └── Pear-Wall-Screen-Saver-<version>-setup.exe
 ```
 
-Windows 屏保可在管理员终端中复制到系统目录：
+Windows 安装包支持安装、更新、修复和卸载，并可选择在桌面和开始菜单中创建“启动屏幕保护程序”与“打开设置”两个快捷方式。
+
+安装器动态背景可通过 Unsplash API 获取随机图片。在不会提交到 Git 的 `desktop/.env.local` 中配置凭据：
+
+```dotenv
+UNSPLASH_APPLICATION_ID=your_application_id
+VITE_UNSPLASH_ACCESS_KEY=your_access_key
+UNSPLASH_SECRET_KEY=your_secret_key
+```
+
+安装器前端只会读取带 `VITE_` 前缀的访问密钥。应用 ID 和秘密密钥仅保存在本地，不会进入前端安装包。未配置访问密钥或请求失败时，安装器会使用内置动态背景。
+
+如需手动安装 `.scr`，可在管理员终端中复制到系统目录：
 
 ```powershell
 Copy-Item .\PearWall.scr "$env:WINDIR\System32\PearWall.scr"
@@ -98,6 +112,12 @@ pnpm --dir desktop run build:dmg
 ```
 
 `build:windows-scr` 仅用于把已经生成的 Windows Tauri 可执行文件整理为 `.scr`。
+
+单独构建 Windows 安装包：
+
+```bash
+pnpm --dir desktop run build:windows-installer
+```
 
 ## Wallpaper Engine
 

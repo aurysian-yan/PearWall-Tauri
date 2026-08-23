@@ -1,0 +1,40 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Pear Wall Installer",
+  "version": "0.1.0",
+  "identifier": "com.nevoit.pearwall.installer",
+  "build": {
+    "beforeBuildCommand": "pnpm --dir .. build:installer-frontend",
+    "beforeDevCommand": "pnpm --dir .. dev:installer-frontend",
+    "devUrl": "http://127.0.0.1:1420",
+    "frontendDist": "../../.tmp/installer-dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "installer",
+        "url": "installer.html",
+        "title": "Pear Wall 安装程序",
+        "width": 920,
+        "height": 640,
+        "center": true,
+        "resizable": false,
+        "maximizable": false,
+        "fullscreen": false,
+        "decorations": false,
+        "acceptFirstMouse": true,
+        "visible": true
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": false,
+    "icon": [
+      "../../src-tauri/icons/icon.ico",
+      "../../src-tauri/icons/icon.png"
+    ]
+  }
+}

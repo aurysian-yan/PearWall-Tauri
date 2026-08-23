@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process';
-import { resolve } from 'node:path';
+import { isAbsolute, resolve } from 'node:path';
 
 const [, , command, ...args] = process.argv;
 if (!command) {
@@ -9,6 +9,12 @@ if (!command) {
 
 const tauriCli = resolve(import.meta.dirname, '../node_modules/@tauri-apps/cli/tauri.js');
 const environment = { ...process.env };
+const defaultRoot = resolve(import.meta.dirname, '..');
+const tauriRoot = environment.TAURI_CWD
+  ? isAbsolute(environment.TAURI_CWD)
+    ? environment.TAURI_CWD
+    : resolve(defaultRoot, environment.TAURI_CWD)
+  : defaultRoot;
 const runnerArgs = [...args];
 if (process.platform === 'darwin' && !environment.CARGO_BUILD_JOBS) {
   environment.CARGO_BUILD_JOBS = '1';
@@ -24,7 +30,7 @@ if (
 }
 
 const child = spawn(process.execPath, [tauriCli, command, ...runnerArgs], {
-  cwd: resolve(import.meta.dirname, '..'),
+  cwd: tauriRoot,
   env: environment,
   stdio: 'inherit',
 });

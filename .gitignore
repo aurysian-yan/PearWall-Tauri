@@ -33,12 +33,16 @@ app/build/generated/rust-jniLibs/
 # JavaScript dependencies and generated frontend bundles
 **/node_modules/
 **/dist/
+.env
+.env.local
+.env.*.local
 
 # Rust build outputs
 **/target/
 
 # Generated Tauri metadata
 desktop/src-tauri/gen/
+desktop/installer/src-tauri/gen/
 
 # Tauri mobile icon outputs
 desktop/src-tauri/icons/android/

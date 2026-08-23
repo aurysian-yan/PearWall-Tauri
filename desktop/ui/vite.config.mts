@@ -17,7 +17,7 @@ const contentTypes: Record<string, string> = {
   '.webp': 'image/webp',
 };
 
-function wallpaperDevServer(): Plugin {
+function wallpaperDevServer(routePrefix = ''): Plugin {
   return {
     name: 'pearwall-wallpaper-dev-server',
     apply: 'serve',
@@ -35,10 +35,15 @@ function wallpaperDevServer(): Plugin {
       });
       server.middlewares.use(async (request, response, next) => {
         const pathname = new URL(request.url || '/', 'http://127.0.0.1').pathname;
-        const relativePath = pathname === '/' || pathname === '/index.html'
+        const wallpaperPath = routePrefix && pathname.startsWith(`${routePrefix}/`)
+          ? pathname.slice(routePrefix.length)
+          : routePrefix
+            ? ''
+            : pathname;
+        const relativePath = wallpaperPath === '/' || wallpaperPath === '/index.html'
           ? 'index.html'
-          : pathname.startsWith('/src/') || pathname.startsWith('/assets/')
-            ? pathname.slice(1)
+          : wallpaperPath.startsWith('/src/') || wallpaperPath.startsWith('/assets/')
+            ? wallpaperPath.slice(1)
             : '';
         if (!relativePath) {
           next();
@@ -70,25 +75,30 @@ function wallpaperDevServer(): Plugin {
   };
 }
 
-export default defineConfig({
-  root: uiRoot,
-  base: './',
-  plugins: [wallpaperDevServer(), react(), tailwindcss()],
-  resolve: {
-    alias: {
-      '/ui-src': resolve(uiRoot, 'src'),
+export default defineConfig(({ mode }) => {
+  const installer = mode === 'installer';
+
+  return {
+    root: uiRoot,
+    base: './',
+    envDir: '..',
+    plugins: [wallpaperDevServer(installer ? '/wallpaper' : ''), react(), tailwindcss()],
+    resolve: {
+      alias: {
+        '/ui-src': resolve(uiRoot, 'src'),
+      },
     },
-  },
-  server: {
-    host: '127.0.0.1',
-    port: 1420,
-    strictPort: true,
-  },
-  build: {
-    outDir: '../.tmp/settings-ui',
-    emptyOutDir: true,
-    rollupOptions: {
-      input: 'settings.html',
+    server: {
+      host: '127.0.0.1',
+      port: 1420,
+      strictPort: true,
     },
-  },
+    build: {
+      outDir: installer ? '../.tmp/installer-ui' : '../.tmp/settings-ui',
+      emptyOutDir: true,
+      rollupOptions: {
+        input: installer ? 'installer.html' : 'settings.html',
+      },
+    },
+  };
 });

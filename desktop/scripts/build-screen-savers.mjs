@@ -130,6 +130,16 @@ run(process.execPath, [resolve(import.meta.dirname, 'build-windows-scr.mjs')], {
   },
 });
 
+run(process.execPath, [resolve(import.meta.dirname, 'build-windows-installer.mjs')], {
+  env: {
+    ...env,
+    OUTPUT_ROOT: windowsOutput,
+    PEARWALL_PAYLOAD_PATH: windowsBinary,
+    PEARWALL_SKIP_RUNTIME_BUILD: '1',
+    TAURI_TARGET: windowsTarget,
+  },
+});
+
 run('zsh', [resolve(import.meta.dirname, 'build-macos-saver.sh')], {
   env: {
     ...env,

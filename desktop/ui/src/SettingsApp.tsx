@@ -1,4 +1,4 @@
-import { Button, Card, Separator, Slider, Switch, Tabs } from "@heroui/react";
+import { Button, Separator, Slider, Tabs } from "@heroui/react";
 import { SmoothCorners } from "@lisse/react";
 import { OverlayScrollbarsComponent } from "overlayscrollbars-react";
 import BlurEffect from "react-progressive-blur";
@@ -33,7 +33,6 @@ import {
   useRef,
   useState,
   type ChangeEvent,
-  type ReactNode,
 } from "react";
 import {
   defaultSettings,
@@ -45,9 +44,16 @@ import type { FlowSpeed, MoruStyle, Settings } from "./types";
 import { DynamicDrawerHandle } from "./DynamicDrawerHandle";
 import { PearWallLogo } from "./PearWallLogo";
 import { WindowTitleBar } from "./WindowTitleBar";
+import {
+  DrawerCard,
+  SectionTitle,
+  SettingRow,
+  SettingsCard,
+  Toggle,
+  type IconType,
+} from "./SettingsPrimitives";
 import licenseDataJson from "./generated/openSourceLicenses.json";
 
-type IconType = typeof PauseIcon;
 type SelectOption<T extends string | number> = { value: T; label: string };
 type DrawerPage = "advanced" | "licenses";
 type UpdateSetting = <Key extends keyof Settings>(
@@ -92,94 +98,6 @@ const landscapePresets: SelectOption<number>[] = [
 const tintLogo = new URL("./tint-logo.png", import.meta.url).href;
 const projectDependencies = licenseDataJson.frontend;
 
-function SectionTitle({ children }: { children: ReactNode }) {
-  return (
-    <h2 className="mb-2 px-4 text-[14px] font-semibold text-white/90">
-      {children}
-    </h2>
-  );
-}
-
-function SettingsCard({ children }: { children: ReactNode }) {
-  return (
-    <SmoothCorners
-      asChild
-      autoEffects={false}
-      corners={{ radius: 24, smoothing: 0.6 }}
-      innerBorder={{ width: 1, color: "#ffffff", opacity: 0.1 }}
-    >
-      <Card
-        variant="transparent"
-        className="overflow-hidden bg-black/25 text-white shadow-none backdrop-blur-[10px] backdrop-saturate-150 p-0 gap-0"
-      >
-        {children}
-      </Card>
-    </SmoothCorners>
-  );
-}
-
-function DrawerCard({ children }: { children: ReactNode }) {
-  return (
-    <SmoothCorners
-      asChild
-      autoEffects={false}
-      corners={{ radius: 18, smoothing: 0.6 }}
-    >
-      <div className="overflow-hidden bg-white/8">{children}</div>
-    </SmoothCorners>
-  );
-}
-
-function SettingRow({
-  icon: Icon,
-  avatar,
-  title,
-  description,
-  children,
-  className,
-}: {
-  icon?: IconType;
-  avatar?: string;
-  title: string;
-  description?: string;
-  children?: ReactNode;
-  className?: string;
-}) {
-  return (
-    <div
-      className={`flex min-h-18 items-center gap-3 px-4 py-3 ${className ?? ""}`}
-    >
-      {avatar ? (
-        <img
-          src={avatar}
-          alt=""
-          className="h-5 w-5 shrink-0 rounded-full object-cover"
-        />
-      ) : (
-        Icon && (
-          <Icon
-            aria-hidden
-            size={20}
-            weight="regular"
-            className="shrink-0 text-white/90"
-          />
-        )
-      )}
-      <div className="min-w-0 flex-1">
-        <div className="text-[14px] font-semibold leading-tight text-white">
-          {title}
-        </div>
-        {description && (
-          <div className="mt-1 text-xs leading-snug text-white/65">
-            {description}
-          </div>
-        )}
-      </div>
-      {children && <div className="shrink-0">{children}</div>}
-    </div>
-  );
-}
-
 function ExternalSettingRow({
   href,
   icon,
@@ -207,26 +125,6 @@ function ExternalSettingRow({
         <GithubLogoIcon aria-hidden size={18} className="text-white/55" />
       </SettingRow>
     </a>
-  );
-}
-
-function Toggle({
-  label,
-  value,
-  onChange,
-}: {
-  label: string;
-  value: boolean;
-  onChange: (value: boolean) => void;
-}) {
-  return (
-    <Switch aria-label={label} isSelected={value} onChange={onChange} size="lg">
-      <Switch.Content>
-        <Switch.Control className="data-[selected=true]:bg-green-500">
-          <Switch.Thumb />
-        </Switch.Control>
-      </Switch.Content>
-    </Switch>
   );
 }
 

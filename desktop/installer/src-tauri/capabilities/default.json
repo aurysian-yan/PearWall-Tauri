@@ -1,14 +1,12 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
-  "identifier": "default",
-  "description": "Pear Wall desktop permissions",
-  "windows": ["main"],
+  "identifier": "installer",
+  "description": "Pear Wall 安装器权限",
+  "windows": ["installer"],
   "permissions": [
     "core:default",
     "core:window:allow-start-dragging",
     "core:window:allow-minimize",
-    "core:window:allow-toggle-maximize",
-    "core:window:allow-set-fullscreen",
     "core:window:allow-close",
     "opener:default"
   ]
