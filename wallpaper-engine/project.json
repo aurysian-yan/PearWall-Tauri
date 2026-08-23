@@ -107,6 +107,12 @@
           { "label": "预设 5", "value": 4 }
         ]
       },
+      "randomPreset": {
+        "order": 105,
+        "text": "随机切换方案",
+        "type": "bool",
+        "value": false
+      },
       "customArtwork": {
         "order": 110,
         "text": "自定义封面",

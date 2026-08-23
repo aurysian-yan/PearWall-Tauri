@@ -16,6 +16,7 @@
     moruStyle: 'OFF',
     portraitPreset: 0,
     landscapePreset: 0,
+    randomPreset: false,
     customArtwork: '',
   };
   let paused = false;
@@ -160,6 +161,7 @@
     settings.moruStyle = moruStyleValue(properties.moruStyle, settings.moruStyle);
     settings.portraitPreset = Math.round(Math.max(0, Math.min(3, numberValue(properties.portraitPreset, settings.portraitPreset))));
     settings.landscapePreset = Math.round(Math.max(0, Math.min(4, numberValue(properties.landscapePreset, settings.landscapePreset))));
+    settings.randomPreset = booleanValue(properties.randomPreset, settings.randomPreset);
     settings.customArtwork = stringValue(properties.customArtwork, settings.customArtwork);
     renderer.setSettings(settings);
     if (settings.customArtwork) renderer.setArtworkSource(fileArtworkSource(settings.customArtwork));

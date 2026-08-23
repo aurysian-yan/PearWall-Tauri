@@ -12,6 +12,7 @@ export type Settings = {
   moruStyle: MoruStyle;
   portraitPreset: number;
   landscapePreset: number;
+  randomPreset: boolean;
   customArtwork: string;
   customArtworkName: string;
 };

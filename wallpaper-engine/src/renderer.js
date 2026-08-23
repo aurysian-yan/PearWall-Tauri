@@ -5,6 +5,7 @@
   const KAWASE_SIGMA_PER_OFFSET = 16;
   const PORTRAIT = 'portrait';
   const MORU_STYLES = new Set(['OFF', 'NARROW', 'WIDE', 'SMOOTH']);
+  const PRESET_COUNTS = { portrait: 4, landscape: 5 };
 
   function clamp(value, min, max) {
     return Math.max(min, Math.min(max, value));
@@ -172,6 +173,7 @@
         moruStyle: 'OFF',
         portraitPreset: 0,
         landscapePreset: 0,
+        randomPreset: false,
       };
       this.surfaceWidth = 0;
       this.surfaceHeight = 0;
@@ -179,6 +181,7 @@
       this.outputHeight = 0;
       this.orientation = PORTRAIT;
       this.meshPresetIndex = -1;
+      this.randomPresetIndex = -1;
       this.mesh = null;
       this.targets = {};
       this.animationTime = 0;
@@ -208,6 +211,7 @@
 
     setSettings(settings) {
       const nextSettings = { ...this.settings, ...settings };
+      if (this.settings.randomPreset !== nextSettings.randomPreset) this.randomPresetIndex = -1;
       if (!MORU_STYLES.has(nextSettings.moruStyle)) nextSettings.moruStyle = 'OFF';
       this.settings = nextSettings;
       this.ensureSize(this.surfaceWidth, this.surfaceHeight);
@@ -267,7 +271,12 @@
     ensureSize(width, height) {
       if (!width || !height) return;
       const nextOrientation = height >= width ? PORTRAIT : 'landscape';
-      const nextPreset = nextOrientation === PORTRAIT ? this.settings.portraitPreset : this.settings.landscapePreset;
+      const orientationChanged = this.orientation !== nextOrientation;
+      let nextPreset = nextOrientation === PORTRAIT ? this.settings.portraitPreset : this.settings.landscapePreset;
+      if (this.settings.randomPreset && (this.randomPresetIndex < 0 || orientationChanged)) {
+        this.randomPresetIndex = Math.floor(Math.random() * PRESET_COUNTS[nextOrientation]);
+      }
+      if (this.settings.randomPreset) nextPreset = this.randomPresetIndex;
       if (!this.mesh || this.orientation !== nextOrientation || this.meshPresetIndex !== nextPreset) {
         if (this.mesh) this.mesh.destroy();
         this.orientation = nextOrientation;

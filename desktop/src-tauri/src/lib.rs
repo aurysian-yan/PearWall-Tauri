@@ -156,6 +156,7 @@ pub fn run() {
     let mode = launch_mode();
     let audio_analyzer = Arc::new(Mutex::new(SpectrumAnalyzer::default()));
     tauri::Builder::default()
+        .plugin(tauri_plugin_opener::init())
         .manage(AudioState(audio_analyzer.clone()))
         .manage(MediaArtworkState::default())
         .invoke_handler(tauri::generate_handler![

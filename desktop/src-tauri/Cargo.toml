@@ -17,6 +17,7 @@ base64 = "0.22"
 pearwall-core = { package = "pearwall-core", path = "../../native/pearwall-core" }
 serde = { version = "1", features = ["derive"] }
 tauri = { version = "2", features = [] }
+tauri-plugin-opener = "2"
 
 [target.'cfg(windows)'.dependencies]
 windows = { version = "0.61", features = ["Media_Control", "Storage_Streams", "Win32_Foundation", "Win32_System_WinRT", "Win32_UI_WindowsAndMessaging"] }

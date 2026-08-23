@@ -1,13 +1,28 @@
 import { Button, Card, Separator, Slider, Switch, Tabs } from "@heroui/react";
 import { SmoothCorners } from "@lisse/react";
 import { OverlayScrollbarsComponent } from "overlayscrollbars-react";
+import BlurEffect from "react-progressive-blur";
+import { getCurrentWindow } from "@tauri-apps/api/window";
+import { openUrl } from "@tauri-apps/plugin-opener";
+import { Drawer } from "vaul";
 import {
+  CaretLeft,
+  CaretRightIcon,
   CheckIcon,
+  CornersOutIcon,
+  DeviceMobileIcon,
+  FileTextIcon,
+  GithubLogoIcon,
   GaugeIcon,
   ImageIcon,
+  InfoIcon,
   MagicWandIcon,
+  MonitorIcon,
   PauseIcon,
+  PawPrintIcon,
   PlayIcon,
+  ShuffleIcon,
+  SlidersHorizontalIcon,
   SpeakerHighIcon,
   UploadSimpleIcon,
   CircleHalfIcon,
@@ -27,11 +42,18 @@ import {
   wallpaperSettings,
 } from "./settings";
 import type { FlowSpeed, MoruStyle, Settings } from "./types";
+import { DynamicDrawerHandle } from "./DynamicDrawerHandle";
 import { PearWallLogo } from "./PearWallLogo";
 import { WindowTitleBar } from "./WindowTitleBar";
+import licenseDataJson from "./generated/openSourceLicenses.json";
 
 type IconType = typeof PauseIcon;
 type SelectOption<T extends string | number> = { value: T; label: string };
+type DrawerPage = "advanced" | "licenses";
+type UpdateSetting = <Key extends keyof Settings>(
+  key: Key,
+  value: Settings[Key],
+) => void;
 
 const flowSpeeds: SelectOption<FlowSpeed>[] = [
   { value: "SLOW", label: "舒缓" },
@@ -51,6 +73,24 @@ const renderScales: SelectOption<number>[] = [
   { value: 0.75, label: "均衡" },
   { value: 1, label: "清晰" },
 ];
+
+const portraitPresets: SelectOption<number>[] = [
+  { value: 0, label: "方案 1" },
+  { value: 1, label: "方案 2" },
+  { value: 2, label: "方案 3" },
+  { value: 3, label: "方案 4" },
+];
+
+const landscapePresets: SelectOption<number>[] = [
+  { value: 0, label: "方案 1" },
+  { value: 1, label: "方案 2" },
+  { value: 2, label: "方案 3" },
+  { value: 3, label: "方案 4" },
+  { value: 4, label: "方案 5" },
+];
+
+const tintLogo = new URL("./tint-logo.png", import.meta.url).href;
+const projectDependencies = licenseDataJson.frontend;
 
 function SectionTitle({ children }: { children: ReactNode }) {
   return (
@@ -78,27 +118,53 @@ function SettingsCard({ children }: { children: ReactNode }) {
   );
 }
 
+function DrawerCard({ children }: { children: ReactNode }) {
+  return (
+    <SmoothCorners
+      asChild
+      autoEffects={false}
+      corners={{ radius: 18, smoothing: 0.6 }}
+    >
+      <div className="overflow-hidden bg-white/8">{children}</div>
+    </SmoothCorners>
+  );
+}
+
 function SettingRow({
   icon: Icon,
+  avatar,
   title,
   description,
   children,
   className,
 }: {
-  icon: IconType;
+  icon?: IconType;
+  avatar?: string;
   title: string;
   description?: string;
-    children: ReactNode;
-    className?: string;
+  children?: ReactNode;
+  className?: string;
 }) {
   return (
-    <div className={`flex min-h-18 items-center gap-3 px-4 py-3 ${className ?? ""}`}>
-      <Icon
-        aria-hidden
-        size={20}
-        weight="regular"
-        className="shrink-0 text-white/90"
-      />
+    <div
+      className={`flex min-h-18 items-center gap-3 px-4 py-3 ${className ?? ""}`}
+    >
+      {avatar ? (
+        <img
+          src={avatar}
+          alt=""
+          className="h-5 w-5 shrink-0 rounded-full object-cover"
+        />
+      ) : (
+        Icon && (
+          <Icon
+            aria-hidden
+            size={20}
+            weight="regular"
+            className="shrink-0 text-white/90"
+          />
+        )
+      )}
       <div className="min-w-0 flex-1">
         <div className="text-[14px] font-semibold leading-tight text-white">
           {title}
@@ -109,8 +175,38 @@ function SettingRow({
           </div>
         )}
       </div>
-      <div className="shrink-0">{children}</div>
+      {children && <div className="shrink-0">{children}</div>}
     </div>
+  );
+}
+
+function ExternalSettingRow({
+  href,
+  icon,
+  title,
+  description,
+}: {
+  href: string;
+  icon: IconType;
+  title: string;
+  description?: string;
+}) {
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noreferrer"
+      className="block"
+      onClick={(event) => {
+        if (!("__TAURI_INTERNALS__" in window)) return;
+        event.preventDefault();
+        void openUrl(href).catch(() => undefined);
+      }}
+    >
+      <SettingRow icon={icon} title={title} description={description}>
+        <GithubLogoIcon aria-hidden size={18} className="text-white/55" />
+      </SettingRow>
+    </a>
   );
 }
 
@@ -160,7 +256,9 @@ function RangeSetting({
           weight="regular"
           className="shrink-0 text-white/90"
         />
-        <span className="w-full text-[14px] font-semibold text-white">{label}</span>
+        <span className="w-full text-[14px] font-semibold text-white">
+          {label}
+        </span>
         <span>{Math.round(value * 100)}%</span>
       </div>
       <Slider
@@ -186,13 +284,17 @@ function ChoiceTabs<T extends string | number>({
   value,
   options,
   onChange,
+  variant = "default",
 }: {
   icon: IconType;
   label: string;
   value: T;
   options: SelectOption<T>[];
   onChange: (value: T) => void;
+  variant?: "default" | "drawer";
 }) {
+  const isDrawerVariant = variant === "drawer";
+
   return (
     <div className="px-4 py-4">
       <div className="mb-3 flex items-center gap-3">
@@ -212,9 +314,11 @@ function ChoiceTabs<T extends string | number>({
           );
           if (selected) onChange(selected.value);
         }}
-        className="w-[calc(100%+0.5rem)] -mx-1"
+        className={`w-[calc(100%+0.5rem)] -mx-1 ${isDrawerVariant ? "rounded-[18px]" : ""}`}
       >
-        <Tabs.ListContainer className="w-full !bg-white/10">
+        <Tabs.ListContainer
+          className={`w-full ${isDrawerVariant ? "!bg-white/8" : "!bg-white/10"}`}
+        >
           <Tabs.List aria-label={label} className="w-full">
             {options.map((option) => (
               <Tabs.Tab
@@ -233,20 +337,223 @@ function ChoiceTabs<T extends string | number>({
   );
 }
 
+function DrawerHeader({
+  title,
+  progress,
+}: {
+  title: string;
+  progress: number;
+}) {
+  return (
+    <div className="pointer-events-none absolute inset-x-0 top-0 z-20 h-16">
+      <div
+        aria-hidden
+        className="absolute inset-x-0 top-0 h-20 overflow-hidden transition-opacity duration-200"
+        style={{ opacity: progress }}
+      >
+        <BlurEffect
+          position="top"
+          intensity={64}
+          className="!pointer-events-none !absolute !inset-x-0 !top-0 !h-20 !w-full"
+        />
+      </div>
+      <div className="relative flex h-16 items-center justify-between px-5 pt-2">
+        <div className="pointer-events-auto">
+          <Drawer.Close asChild>
+            <Button
+              isIconOnly
+              size="sm"
+              variant="ghost"
+              aria-label="返回"
+              className="z-30 !bg-white/8 text-white/75 hover:!bg-white/20 hover:text-white !p-0 backdrop-blur-[10px] backdrop-saturate-150 min-w-9 min-h-9 -m-1"
+            >
+              <CaretLeft
+                aria-hidden
+                size={24}
+                className="absolute min-w-6 min-h-6"
+              />
+            </Button>
+          </Drawer.Close>
+        </div>
+        <span
+          aria-hidden
+          className="z-30 pointer-events-none absolute inset-x-20 truncate text-center text-base font-semibold text-white transition-opacity duration-200 -mt-1"
+          style={{ opacity: progress }}
+        >
+          {title}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+function DrawerHero({
+  title,
+  description,
+  icon: Icon,
+}: {
+  title: string;
+  description: string;
+  icon: IconType;
+}) {
+  return (
+    <div className="px-4 pb-5 pt-18">
+      <SmoothCorners
+        asChild
+        autoEffects={false}
+        corners={{ radius: 18, smoothing: 0.6 }}
+      >
+        <div className=" bg-white/8 px-5 pb-6 pt-7 text-center">
+          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-white/15 text-white/85">
+            <Icon aria-hidden size={24} weight="regular" />
+          </div>
+          <Drawer.Title className="mt-2 text-[18px] font-semibold text-white">
+            {title}
+          </Drawer.Title>
+          <Drawer.Description className="mt-1 text-[12px] leading-relaxed text-white/65">
+            {description}
+          </Drawer.Description>
+        </div>
+      </SmoothCorners>
+    </div>
+  );
+}
+
+function DrawerPageContent({
+  page,
+  settings,
+  update,
+}: {
+  page: DrawerPage;
+  settings: Settings;
+  update: UpdateSetting;
+}) {
+  const titles: Record<DrawerPage, string> = {
+    advanced: "高级设置",
+    licenses: "开源许可",
+  };
+  const descriptions: Record<DrawerPage, string> = {
+    advanced:
+      "为不同屏幕方向选择独立的流动方案，也可以让 Pear Wall 自动随机切换。",
+    licenses: "Pear Wall 能够顺利运行，离不开这些优秀的开源库。",
+  };
+  const icons: Record<DrawerPage, IconType> = {
+    advanced: SlidersHorizontalIcon,
+    licenses: FileTextIcon,
+  };
+  const [scrollTop, setScrollTop] = useState(0);
+  const titleProgress = Math.min(scrollTop / 56, 1);
+
+  useEffect(() => {
+    setScrollTop(0);
+  }, [page]);
+
+  return (
+    <div className="relative flex min-h-0 flex-1 flex-col">
+      <DrawerHeader title={titles[page]} progress={titleProgress} />
+      <OverlayScrollbarsComponent
+        defer
+        className="drawer-scrollbar min-h-0 flex-1 overscroll-contain"
+        options={{
+          overflow: { x: "hidden", y: "scroll" },
+          scrollbars: {
+            theme: "os-theme-light",
+            autoHide: "scroll",
+            autoHideDelay: 700,
+          },
+        }}
+        events={{
+          scroll: (instance) => {
+            setScrollTop(instance.elements().scrollOffsetElement.scrollTop);
+          },
+        }}
+      >
+        <div className="pb-8">
+          <DrawerHero
+            title={titles[page]}
+            description={descriptions[page]}
+            icon={icons[page]}
+          />
+          {page === "advanced" && (
+            <div className="px-4 space-y-5">
+              <DrawerCard>
+                <ChoiceTabs
+                  icon={DeviceMobileIcon}
+                  label="竖屏方案"
+                  value={settings.portraitPreset}
+                  options={portraitPresets}
+                  onChange={(value) => update("portraitPreset", value)}
+                  variant="drawer"
+                />
+                <Separator className="mx-2 w-[calc(100%-1rem)] bg-white/15" />
+                <ChoiceTabs
+                  icon={MonitorIcon}
+                  label="横屏方案"
+                  value={settings.landscapePreset}
+                  options={landscapePresets}
+                  onChange={(value) => update("landscapePreset", value)}
+                  variant="drawer"
+                />
+                <Separator className="mx-2 w-[calc(100%-1rem)] bg-white/15" />
+                <SettingRow
+                  icon={ShuffleIcon}
+                  title="随机切换"
+                  description="根据屏幕方向随机选择流动方案"
+                >
+                  <Toggle
+                    label="随机切换"
+                    value={settings.randomPreset}
+                    onChange={(value) => update("randomPreset", value)}
+                  />
+                </SettingRow>
+              </DrawerCard>
+            </div>
+          )}
+
+          {page === "licenses" && (
+            <div className="space-y-3 px-4">
+              <p className="!px-3 text-sm leading-relaxed text-white/65">
+                Pear Wall 使用了以下开源依赖：
+              </p>
+              <DrawerCard>
+                {projectDependencies.map((dependency, index) => (
+                  <div
+                    key={dependency.id}
+                    className={`flex items-center gap-4 px-4 py-3.5 ${index > 0 ? "border-t border-white/10" : ""}`}
+                  >
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-semibold text-white">
+                        {dependency.name}
+                      </p>
+                      <p className="mt-1 truncate text-xs text-white/45">
+                        {dependency.version}
+                      </p>
+                    </div>
+                    <span className="shrink-0 text-xs text-white/65">
+                      {dependency.license}
+                    </span>
+                  </div>
+                ))}
+              </DrawerCard>
+            </div>
+          )}
+        </div>
+      </OverlayScrollbarsComponent>
+    </div>
+  );
+}
+
 export function SettingsApp() {
   const [settings, setSettings] = useState<Settings>(loadSettings);
-  const [saved, setSaved] = useState(false);
   const [previewReady, setPreviewReady] = useState(false);
   const [contentVisible, setContentVisible] = useState(true);
+  const [drawerPage, setDrawerPage] = useState<DrawerPage | null>(null);
+  const [drawerHandleProgress, setDrawerHandleProgress] = useState(0);
   const previewRef = useRef<HTMLIFrameElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const update = <Key extends keyof Settings>(
-    key: Key,
-    value: Settings[Key],
-  ) => {
+  const update: UpdateSetting = (key, value) => {
     setSettings((current) => ({ ...current, [key]: value }));
-    setSaved(false);
   };
 
   const syncPreview = () => {
@@ -281,17 +588,16 @@ export function SettingsApp() {
         customArtwork: reader.result as string,
         customArtworkName: file.name,
       }));
-      setSaved(false);
     };
     reader.readAsDataURL(file);
     event.target.value = "";
   };
 
-  const apply = () => {
-    saveSettings(settings);
-    syncPreview();
-    setSaved(true);
-    window.setTimeout(() => setSaved(false), 1800);
+  const enterPureMode = () => {
+    setContentVisible(false);
+    void getCurrentWindow()
+      .setFullscreen(true)
+      .catch(() => undefined);
   };
 
   return (
@@ -353,15 +659,11 @@ export function SettingsApp() {
               <Button
                 fullWidth
                 size="lg"
-                onPress={apply}
-                className="h-14 bg-white text-base font-semibold !text-neutral-900"
+                onPress={enterPureMode}
+                className="h-14 bg-white/80 backdrop-blur-[10px] backdrop-saturate-150 text-base font-semibold !text-neutral-900"
               >
-                {saved ? (
-                  <CheckIcon aria-hidden size={18} weight="bold" />
-                ) : (
-                  <PlayIcon aria-hidden size={22} weight="fill" />
-                )}
-                {saved ? "设置已保存" : "应用屏保设置"}
+                <CornersOutIcon aria-hidden size={20} weight="bold" />
+                进入纯享模式
               </Button>
             </SmoothCorners>
           </header>
@@ -378,10 +680,13 @@ export function SettingsApp() {
                     customArtwork: "",
                     customArtworkName: "",
                   }));
-                  setSaved(false);
                 }}
               >
-                <SettingRow icon={ImageIcon} title="使用默认封面" className="max-h-16 !min-h-16">
+                <SettingRow
+                  icon={ImageIcon}
+                  title="使用默认封面"
+                  className="max-h-16 !min-h-16"
+                >
                   {!settings.customArtwork && (
                     <CheckIcon aria-label="已选择" size={18} weight="bold" />
                   )}
@@ -396,15 +701,48 @@ export function SettingsApp() {
                 <SettingRow
                   icon={UploadSimpleIcon}
                   title="使用自选图片"
-                  description={
-                    settings.customArtworkName || "选择本地图片作为备用封面"
-                  }
+                  description="选择本地图片作为备用封面"
                 >
                   {settings.customArtwork && (
                     <CheckIcon aria-label="已选择" size={18} weight="bold" />
                   )}
                 </SettingRow>
               </button>
+              {settings.customArtwork && (
+                <div className="flex items-center gap-1.5 pr-4 pl-11.5 pb-3 pt-0">
+                  <SmoothCorners
+                    asChild
+                    autoEffects={false}
+                    corners={{ radius: 8, smoothing: 0.6 }}
+                    outerBorder={{ width: 1, color: "#ffffff", opacity: 0.3 }}
+                  >
+                    <img
+                      src={settings.customArtwork}
+                      alt={`${settings.customArtworkName || "自选图片"}预览`}
+                      className="h-14 w-14 shrink-0 object-cover"
+                    />
+                  </SmoothCorners>
+                  <div className="min-w-0 flex-1">
+                    <div className="px-2 pt-1 truncate text-sm text-white/85">
+                      {settings.customArtworkName || "自选图片"}
+                    </div>
+                    <SmoothCorners
+                      asChild
+                      autoEffects={false}
+                      corners={{ radius: 28, smoothing: 1 }}
+                    >
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onPress={() => fileInputRef.current?.click()}
+                        className="-mx-1 bg-white/0 text-white/75 transition-colors hover:bg-white/15 hover:text-white"
+                      >
+                        重新选择
+                      </Button>
+                    </SmoothCorners>
+                  </div>
+                </div>
+              )}
               {settings.customArtwork && (
                 <div className="px-4 pb-3 text-right">
                   <SmoothCorners
@@ -421,7 +759,6 @@ export function SettingsApp() {
                           customArtwork: "",
                           customArtworkName: "",
                         }));
-                        setSaved(false);
                       }}
                       className="-mx-1 bg-white/0 text-white/75 transition-colors hover:bg-white/15 hover:text-white"
                     >
@@ -534,6 +871,84 @@ export function SettingsApp() {
             </SettingsCard>
           </section>
 
+          <section className="mb-5">
+            <SettingsCard>
+              <button
+                type="button"
+                className="block w-full text-left"
+                onClick={() => setDrawerPage("advanced")}
+              >
+                <SettingRow
+                  icon={SlidersHorizontalIcon}
+                  title="高级设置"
+                  description="调整屏幕方向方案和随机切换"
+                >
+                  <CaretRightIcon
+                    aria-hidden
+                    size={18}
+                    className="text-white/55"
+                  />
+                </SettingRow>
+              </button>
+            </SettingsCard>
+          </section>
+          <section className="mb-5">
+            <SectionTitle>更多</SectionTitle>
+            <SettingsCard>
+              <SettingRow
+                avatar={tintLogo}
+                title="Pear Wall"
+                description="版本 0.1.0"
+              />
+              <Separator className="ml-12 mr-2 w-[calc(100%-3.5rem)] bg-white/15" />
+              <ExternalSettingRow
+                href="https://github.com/Nevodev"
+                icon={PawPrintIcon}
+                title="Nevoit"
+                description="原 Compose 项目开发者"
+              />
+              <Separator className="ml-12 mr-2 w-[calc(100%-3.5rem)] bg-white/15" />
+              <ExternalSettingRow
+                href="https://github.com/aurysian-yan"
+                icon={PawPrintIcon}
+                title="Aurysian"
+                description="主要开发者"
+              />
+              <Separator className="ml-12 mr-2 w-[calc(100%-3.5rem)] bg-white/15" />
+              <ExternalSettingRow
+                href="https://github.com/WXRIW"
+                icon={PawPrintIcon}
+                title="WXRIW"
+                description="特别感谢"
+              />
+              <Separator className="ml-12 mr-2 w-[calc(100%-3.5rem)] bg-white/15" />
+              <ExternalSettingRow
+                href="https://github.com/raspberry-monster"
+                icon={PawPrintIcon}
+                title="Raspberry Monster"
+                description="特别感谢"
+              />
+              <Separator className="ml-12 mr-2 w-[calc(100%-3.5rem)] bg-white/15" />
+              <button
+                type="button"
+                className="block w-full text-left"
+                onClick={() => setDrawerPage("licenses")}
+              >
+                <SettingRow
+                  icon={FileTextIcon}
+                  title="开源许可"
+                  description="查看 Pear Wall 使用的开源许可"
+                >
+                  <CaretRightIcon
+                    aria-hidden
+                    size={18}
+                    className="text-white/55"
+                  />
+                </SettingRow>
+              </button>
+            </SettingsCard>
+          </section>
+
           <div className="flex justify-center">
             <SmoothCorners
               asChild
@@ -544,7 +959,6 @@ export function SettingsApp() {
                 variant="ghost"
                 onPress={() => {
                   setSettings(defaultSettings);
-                  setSaved(false);
                 }}
                 className="bg-white/10 text-white/75 transition-colors hover:bg-white/15 hover:text-white"
               >
@@ -554,6 +968,38 @@ export function SettingsApp() {
           </div>
         </main>
       </OverlayScrollbarsComponent>
+      <Drawer.Root
+        open={drawerPage !== null}
+        onOpenChange={(open) => {
+          if (!open) setDrawerPage(null);
+          setDrawerHandleProgress(0);
+        }}
+        onDrag={(_, progress) => {
+          setDrawerHandleProgress(Math.min(Math.max(progress * 2, 0), 1));
+        }}
+        onRelease={() => setDrawerHandleProgress(0)}
+        onAnimationEnd={() => setDrawerHandleProgress(0)}
+        shouldScaleBackground={false}
+      >
+        <Drawer.Portal>
+          <Drawer.Overlay className="fixed inset-0 z-[60] bg-black/50" />
+          <Drawer.Content className="drawer-content fixed inset-x-0 bottom-0 z-[61] mx-auto flex max-h-[88vh] min-h-[320px] w-full max-w-2xl flex-col overflow-hidden bg-neutral-950/70 text-white shadow-2xl outline-none ring-1 ring-inset ring-white/10 backdrop-blur-xl backdrop-saturate-150">
+            {/*<Drawer.Handle className="!absolute !left-1/2 !top-2 !z-30 !mx-0 !flex !h-[15px] !w-16 !-translate-x-1/2 !items-center !justify-center !bg-transparent !text-white/55 !opacity-100 [&>[data-vaul-handle-hitarea]]:grid [&>[data-vaul-handle-hitarea]]:place-items-center">
+                <DynamicDrawerHandle
+                  progress={drawerHandleProgress}
+                  direction="down"
+                />
+              </Drawer.Handle>*/}
+            {drawerPage && (
+              <DrawerPageContent
+                page={drawerPage}
+                settings={settings}
+                update={update}
+              />
+            )}
+          </Drawer.Content>
+        </Drawer.Portal>
+      </Drawer.Root>
     </div>
   );
 }

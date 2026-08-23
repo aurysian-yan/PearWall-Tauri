@@ -13,6 +13,7 @@ export const defaultSettings: Settings = {
   moruStyle: 'OFF',
   portraitPreset: 0,
   landscapePreset: 0,
+  randomPreset: false,
   customArtwork: '',
   customArtworkName: '',
 };

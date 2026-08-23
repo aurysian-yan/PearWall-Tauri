@@ -40,30 +40,47 @@
   --titlebar-height: 2rem;
 }
 
-@media (max-width: 850px) {
-
-/*.settings-scrollbar[data-overlayscrollbars]
-  [data-overlayscrollbars-viewport] {
-  -webkit-mask-image: linear-gradient(
-    to bottom,
-    transparent 0,
-    black calc(var(--titlebar-height) + 16px),
-    black 100%
-  );
-  mask-image: linear-gradient(
-    to bottom,
-    transparent 0,
-    black calc(var(--titlebar-height) + 16px),
-    black 100%
-  );
-}*/
-
-}
-
 .windows .settings-scrollbar[data-overlayscrollbars] {
   --titlebar-height: 2.5rem;
 }
 
 .windows .settings-scrollbar[data-overlayscrollbars] .os-scrollbar-vertical {
   top: 3rem;
+}
+
+.drawer-scrollbar[data-overlayscrollbars] .os-scrollbar-vertical {
+  top: 4rem;
+  right: 0.5rem;
+  bottom: 0.5rem;
+}
+
+.drawer-scrollbar[data-overlayscrollbars] {
+  --titlebar-height: 4rem;
+}
+
+.drawer-scrollbar[data-overlayscrollbars]
+  [data-overlayscrollbars-viewport] {
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    transparent 10px,
+    black calc(var(--titlebar-height) + 16px),
+    black 100%
+  );
+  mask-image: linear-gradient(
+    to bottom,
+    transparent 10px,
+    black calc(var(--titlebar-height) + 16px),
+    black 100%
+  );
+}
+
+.drawer-content {
+  border-radius: 32px 32px 0 0;
+  corner-shape: superellipse(1.5);
+}
+
+@supports (corner-shape: superellipse(1.5)) {
+  .drawer-content {
+    border-radius: 48px 48px 0 0;
+  }
 }

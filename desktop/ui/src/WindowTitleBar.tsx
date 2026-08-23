@@ -67,7 +67,7 @@ export function WindowTitleBar({
       <div   className={`
         pointer-events-none
         fixed inset-x-0 top-0
-        z-40 w-screen
+        z-[70] w-screen
         ${isWindows ? "h-14" : "h-12"}
         opacity-0
         max-[850px]:opacity-100
@@ -75,23 +75,23 @@ export function WindowTitleBar({
         <BlurEffect position="top" intensity={50}    className={`
           pointer-events-none
           fixed inset-x-0 top-0
-          z-40 w-screen
+          z-[70] w-screen
           ${isWindows ? "h-14" : "h-12"}
           opacity-0
           max-[850px]:opacity-100
         `}/>
       </div>
       <div
-        className={`absolute inset-x-0 top-0 z-50 flex select-none items-stretch ${isWindows ? "h-10" : "h-8"}`}
+        className={`pointer-events-auto fixed inset-x-0 top-0 !z-[100] flex select-none items-stretch ${isWindows ? "h-10" : "h-8"}`}
       >
         <h1
           aria-hidden={!contentVisible}
           className={`pointer-events-none absolute z-50 flex select-none items-center gap-2 !text-[14px] font-semibold transition-all duration-200 ease-out ${isWindows ? "left-4 top-0 font-normal" : isFullscreen ? "left-3 top-1.5" : "left-20 top-1.5"} ${contentVisible ? "opacity-100" : "opacity-0"}`}
         >
           <img src={tintLogo} alt="" className={`h-4.5 w-4.5 ${isWindows ? "flex h-10" : "hidden"}`} />
-          <span className="text-white/75">PearWall 设置</span>
+          <span className="text-white/75">Pear Wall 设置</span>
         </h1>
-        <div data-tauri-drag-region="" className="min-w-0 flex-1" />
+        <div data-tauri-drag-region="" className="h-full min-w-0 flex-1" />
         {isWindows && appWindow && (
           <div
             aria-hidden={!contentVisible}
