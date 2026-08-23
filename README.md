@@ -51,7 +51,7 @@ pnpm --dir desktop run build
 
 ## 屏保构建
 
-统一构建在 macOS 上运行，一次生成 macOS `.saver`、屏保 DMG、Windows `.scr` 和自定义 UI 安装包。Windows 产物使用 `x86_64-pc-windows-msvc` 目标交叉编译。
+统一构建在 macOS 上运行，一次生成 macOS Universal App、`.saver`、DMG、Windows `.scr` 和自定义 UI 安装包。Windows 产物使用 `x86_64-pc-windows-msvc` 目标交叉编译。
 
 首次构建需要安装 Xcode Command Line Tools、Windows 交叉编译工具和 DMG 工具：
 
@@ -59,6 +59,7 @@ pnpm --dir desktop run build
 xcode-select --install
 brew install llvm create-dmg
 cargo install --locked cargo-xwin
+rustup target add aarch64-apple-darwin x86_64-apple-darwin
 rustup target add x86_64-pc-windows-msvc
 ```
 
@@ -79,6 +80,7 @@ pnpm --dir desktop run build:screen-savers
 ```text
 release/
 ├── macos/
+│   ├── Pear Wall.app
 │   ├── Pear Wall.saver
 │   └── Pear-Wall-Screen-Saver-<version>.dmg
 └── windows/
@@ -87,6 +89,8 @@ release/
 ```
 
 Windows 安装包支持安装、更新、修复和卸载，并可选择在桌面和开始菜单中创建“启动屏幕保护程序”与“打开设置”两个快捷方式。
+
+macOS DMG 同时包含 `Pear Wall.app` 和 `Pear Wall.saver`。App 负责完整设置与图片选择，Saver 负责系统屏保渲染；两者共享 `~/Library/Application Support/PearWall/settings.json`。
 
 安装器动态背景可通过 Unsplash API 获取随机图片。在不会提交到 Git 的 `desktop/.env.local` 中配置凭据：
 
@@ -104,11 +108,19 @@ UNSPLASH_SECRET_KEY=your_secret_key
 Copy-Item .\PearWall.scr "$env:WINDIR\System32\PearWall.scr"
 ```
 
-单独构建 macOS `.saver` 或 DMG：
+单独构建 macOS App、`.saver` 或 DMG：
 
 ```bash
+pnpm --dir desktop run build:macos-app
 pnpm --dir desktop run build:macos-saver
 pnpm --dir desktop run build:dmg
+```
+
+macOS 构建默认使用 ad hoc 签名，用于本机开发和验证。对外分发时应指定 Developer ID Application 签名身份：
+
+```bash
+PEARWALL_CODESIGN_IDENTITY="Developer ID Application: Your Name (TEAMID)" \
+  pnpm --dir desktop run build:dmg
 ```
 
 `build:windows-scr` 仅用于把已经生成的 Windows Tauri 可执行文件整理为 `.scr`。

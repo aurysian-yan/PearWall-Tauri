@@ -2,6 +2,7 @@ import { Button, Separator, Slider, Tabs } from "@heroui/react";
 import { SmoothCorners } from "@lisse/react";
 import { OverlayScrollbarsComponent } from "overlayscrollbars-react";
 import BlurEffect from "react-progressive-blur";
+import { invoke, isTauri } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { Drawer } from "vaul";
@@ -40,6 +41,7 @@ import {
   defaultSettings,
   loadSettings,
   saveSettings,
+  settingsFromJSON,
   wallpaperSettings,
 } from "./settings";
 import type { FlowSpeed, MoruStyle, Settings } from "./types";
@@ -58,6 +60,11 @@ import licenseDataJson from "./generated/openSourceLicenses.json";
 
 type SelectOption<T extends string | number> = { value: T; label: string };
 type DrawerPage = "advanced" | "licenses";
+type MediaArtwork = {
+  key: string;
+  data_url: string | null;
+  playing: boolean;
+};
 type UpdateSetting = <Key extends keyof Settings>(
   key: Key,
   value: Settings[Key],
@@ -444,7 +451,13 @@ function DrawerPageContent({
 }
 
 export function SettingsApp() {
+  const isTauriRuntime = isTauri();
+  const usesSharedMacSettings = isTauriRuntime
+    && !document.documentElement.classList.contains("windows");
   const [settings, setSettings] = useState<Settings>(loadSettings);
+  const [sharedSettingsReady, setSharedSettingsReady] = useState(
+    !usesSharedMacSettings,
+  );
   const [previewReady, setPreviewReady] = useState(false);
   const [contentVisible, setContentVisible] = useState(true);
   const [pureMode, setPureMode] = useState(false);
@@ -452,6 +465,8 @@ export function SettingsApp() {
   const [drawerHandleProgress, setDrawerHandleProgress] = useState(0);
   const previewRef = useRef<HTMLIFrameElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const sharedSaveQueue = useRef<Promise<unknown>>(Promise.resolve());
+  const mediaArtworkCache = useRef<MediaArtwork | null>(null);
 
   const update: UpdateSetting = (key, value) => {
     setSettings((current) => ({ ...current, [key]: value }));
@@ -460,25 +475,99 @@ export function SettingsApp() {
   const syncPreview = () => {
     previewRef.current?.contentWindow?.postMessage(
       { type: "pearwall:settings", settings: wallpaperSettings(settings) },
-      window.location.origin,
+      window.location.protocol === "file:" ? "*" : window.location.origin,
     );
   };
 
   useEffect(() => {
     saveSettings(settings);
     syncPreview();
-  }, [settings]);
+    if (!usesSharedMacSettings || !sharedSettingsReady) return;
+    const json = JSON.stringify(settings);
+    sharedSaveQueue.current = sharedSaveQueue.current
+      .catch(() => undefined)
+      .then(() => invoke("save_shared_settings", { settings: json }));
+  }, [settings, sharedSettingsReady, usesSharedMacSettings]);
+
+  useEffect(() => {
+    if (!usesSharedMacSettings) return;
+    let disposed = false;
+    void invoke<string | null>("load_shared_settings")
+      .then((json) => {
+        if (!disposed && json) setSettings(settingsFromJSON(json));
+      })
+      .catch(() => undefined)
+      .finally(() => {
+        if (!disposed) setSharedSettingsReady(true);
+      });
+    return () => {
+      disposed = true;
+    };
+  }, [usesSharedMacSettings]);
 
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
-      if (event.origin !== window.location.origin) return;
-      if (event.data?.type === "pearwall:ready") setPreviewReady(true);
+      if (event.source !== previewRef.current?.contentWindow) return;
+      if (
+        window.location.protocol !== "file:"
+        && event.origin !== window.location.origin
+      ) return;
+      if (event.data?.type !== "pearwall:ready") return;
+      setPreviewReady(true);
+      const artwork = mediaArtworkCache.current;
+      if (!artwork) return;
+      previewRef.current?.contentWindow?.postMessage(
+        { type: "pearwall:media-artwork", artwork },
+        window.location.protocol === "file:" ? "*" : window.location.origin,
+      );
     };
     window.addEventListener("message", handleMessage);
     return () => window.removeEventListener("message", handleMessage);
   }, []);
 
   useEffect(() => {
+    if (!usesSharedMacSettings || !previewReady) return;
+    let disposed = false;
+    let pending = false;
+    let currentKey = "";
+
+    const pollArtwork = async () => {
+      if (disposed || pending) return;
+      pending = true;
+      try {
+        const artwork = await invoke<MediaArtwork>("get_media_artwork", {
+          currentKey,
+        });
+        if (disposed) return;
+        currentKey = artwork.key;
+        const cached = mediaArtworkCache.current;
+        const nextArtwork = artwork.data_url || cached?.key !== artwork.key
+          ? artwork
+          : { ...artwork, data_url: cached.data_url };
+        mediaArtworkCache.current = nextArtwork;
+        previewRef.current?.contentWindow?.postMessage(
+          { type: "pearwall:media-artwork", artwork },
+          window.location.protocol === "file:" ? "*" : window.location.origin,
+        );
+      } catch {
+        return;
+      } finally {
+        pending = false;
+      }
+    };
+
+    void pollArtwork();
+    const timer = window.setInterval(() => {
+      void pollArtwork();
+    }, 1000);
+    return () => {
+      disposed = true;
+      window.clearInterval(timer);
+    };
+  }, [previewReady, usesSharedMacSettings]);
+
+  useEffect(() => {
+    if (!isTauriRuntime) return;
     const appWindow = getCurrentWindow();
     const syncFullscreenState = () => {
       void appWindow
@@ -491,7 +580,7 @@ export function SettingsApp() {
     return () => {
       void unlistenPromise.then((unlisten) => unlisten());
     };
-  }, []);
+  }, [isTauriRuntime]);
 
   const handleArtwork = (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -511,6 +600,7 @@ export function SettingsApp() {
   };
 
   const enterPureMode = () => {
+    if (!isTauriRuntime) return;
     setContentVisible(false);
     void getCurrentWindow()
       .setFullscreen(true)
@@ -522,7 +612,9 @@ export function SettingsApp() {
     <div
       className={`relative h-full w-full overflow-hidden bg-black text-white ${settings.hideCursor && pureMode && !contentVisible ? "hide-cursor" : ""}`}
     >
-      <WindowTitleBar contentVisible={contentVisible} />
+      {isTauriRuntime && (
+        <WindowTitleBar contentVisible={contentVisible} />
+      )}
       <img
         src={settings.customArtwork || "./assets/default_artwork.svg"}
         alt=""
@@ -533,7 +625,7 @@ export function SettingsApp() {
         title="屏幕保护程序实时预览"
         src="./index.html"
         onLoad={syncPreview}
-        className={`pointer-events-none absolute inset-0 h-full w-full border-0 ${previewReady ? "opacity-100" : "opacity-0"}`}
+        className={`pointer-events-none absolute inset-0 h-full w-full border-0 ${!isTauriRuntime || previewReady ? "opacity-100" : "opacity-0"}`}
       />
 
       <OverlayScrollbarsComponent
@@ -548,6 +640,7 @@ export function SettingsApp() {
           },
         }}
         onClick={(event) => {
+          if (!isTauriRuntime) return;
           const viewport = event.currentTarget.querySelector(
             "[data-overlayscrollbars-viewport]",
           );
@@ -562,30 +655,32 @@ export function SettingsApp() {
         >
           <header className="mb-6 mt-[35dvh]">
             <PearWallLogo className="mb-4 block h-auto w-56 text-white/80 saturate-200 mx-4" />
-            <SmoothCorners
-              asChild
-              autoEffects={false}
-              corners={{ radius: 28, smoothing: 1 }}
-              shadow={{
-                offsetX: 0,
-                offsetY: 4,
-                blur: 12,
-                spread: 0,
-                color: "#000000",
-                opacity: 0.1,
-              }}
-              shadowStrategy="box-shadow"
-            >
-              <Button
-                fullWidth
-                size="lg"
-                onPress={enterPureMode}
-                className="h-14 bg-white/80 backdrop-blur-[10px] backdrop-saturate-150 text-base font-semibold !text-neutral-900"
+            {isTauriRuntime && (
+              <SmoothCorners
+                asChild
+                autoEffects={false}
+                corners={{ radius: 28, smoothing: 1 }}
+                shadow={{
+                  offsetX: 0,
+                  offsetY: 4,
+                  blur: 12,
+                  spread: 0,
+                  color: "#000000",
+                  opacity: 0.1,
+                }}
+                shadowStrategy="box-shadow"
               >
-                <CornersOutIcon aria-hidden size={20} weight="bold" />
-                进入纯享模式
-              </Button>
-            </SmoothCorners>
+                <Button
+                  fullWidth
+                  size="lg"
+                  onPress={enterPureMode}
+                  className="h-14 bg-white/80 backdrop-blur-[10px] backdrop-saturate-150 text-base font-semibold !text-neutral-900"
+                >
+                  <CornersOutIcon aria-hidden size={20} weight="bold" />
+                  进入纯享模式
+                </Button>
+              </SmoothCorners>
+            )}
           </header>
 
           <section className="mb-5">

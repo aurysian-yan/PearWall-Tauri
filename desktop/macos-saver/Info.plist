@@ -4,6 +4,8 @@
 <dict>
     <key>CFBundleDevelopmentRegion</key>
     <string>zh_CN</string>
+    <key>CFBundleDisplayName</key>
+    <string>Pear Wall</string>
     <key>CFBundleExecutable</key>
     <string>PearWallScreenSaver</string>
     <key>CFBundleIdentifier</key>
@@ -16,8 +18,14 @@
     <string>BNDL</string>
     <key>CFBundleShortVersionString</key>
     <string>0.1.0</string>
+    <key>CFBundleSupportedPlatforms</key>
+    <array>
+        <string>MacOSX</string>
+    </array>
     <key>CFBundleVersion</key>
     <string>0.1.0</string>
+    <key>LSMinimumSystemVersion</key>
+    <string>11.0</string>
     <key>NSPrincipalClass</key>
     <string>PearWallScreenSaverView</string>
 </dict>

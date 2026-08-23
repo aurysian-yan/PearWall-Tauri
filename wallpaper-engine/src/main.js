@@ -44,9 +44,12 @@
 
   function savedSettings() {
     try {
-      return JSON.parse(window.localStorage.getItem(settingsStorageKey) || '{}');
+      return {
+        ...JSON.parse(window.localStorage.getItem(settingsStorageKey) || '{}'),
+        ...(window.PearWallScreenSaverSettings || {}),
+      };
     } catch (_) {
-      return {};
+      return window.PearWallScreenSaverSettings || {};
     }
   }
 
@@ -66,7 +69,7 @@
     if (rustAudioPollPending || timestamp - lastRustAudioPollAt < 33) return;
     lastRustAudioPollAt = timestamp;
     rustAudioPollPending = true;
-    tauriInvoke('get_audio_pulse', { timestamp_seconds: audioTimestampSeconds() })
+    tauriInvoke('get_audio_pulse', { timestampSeconds: audioTimestampSeconds() })
       .then((pulse) => {
         rustAudioPulse = Number(pulse) || 0;
       })
@@ -141,7 +144,13 @@
   function setNativeArtwork(key, dataUrl) {
     const nextKey = String(key || '');
     if (nextKey === nativeArtworkKey) {
-      if (!mediaArtworkAvailable) applyArtworkFallback();
+      const hasArtwork = Boolean(dataUrl);
+      if (hasArtwork && !mediaArtworkAvailable) {
+        mediaArtworkAvailable = true;
+        renderer.setArtworkSource(artworkSource(dataUrl));
+      } else if (!mediaArtworkAvailable) {
+        applyArtworkFallback();
+      }
       return;
     }
     nativeArtworkKey = nextKey;
@@ -164,7 +173,7 @@
     if (!tauriInvoke || mediaArtworkPollPending || timestamp - lastMediaArtworkPollAt < 1000) return;
     lastMediaArtworkPollAt = timestamp;
     mediaArtworkPollPending = true;
-    tauriInvoke('get_media_artwork', { current_key: nativeArtworkKey })
+    tauriInvoke('get_media_artwork', { currentKey: nativeArtworkKey })
       .then((result) => {
         if (!result) return;
         setNativeArtwork(result.key, result.data_url);
@@ -271,9 +280,29 @@
   };
 
   window.addEventListener('message', (event) => {
-    if (event.origin !== window.location.origin) return;
-    if (!event.data || event.data.type !== 'pearwall:settings') return;
-    applySettingsValues(event.data.settings);
+    if (event.source !== window.parent) return;
+    if (window.location.protocol !== 'file:' && event.origin !== window.location.origin) return;
+    if (!event.data) return;
+    if (event.data.type === 'pearwall:settings') {
+      applySettingsValues(event.data.settings);
+      return;
+    }
+    if (event.data.type !== 'pearwall:media-artwork') return;
+    const result = event.data.artwork;
+    if (!result || typeof result !== 'object') return;
+    setNativeArtwork(result.key, result.data_url);
+    if (typeof result.playing === 'boolean' && result.playing !== playbackPlaying) {
+      setPlaybackState(result.playing);
+    }
+  });
+
+  window.PearWallReloadSettings = () => {
+    applySettingsValues(savedSettings());
+  };
+
+  window.addEventListener('storage', (event) => {
+    if (event.key !== settingsStorageKey) return;
+    window.PearWallReloadSettings();
   });
 
   if (typeof window.wallpaperRegisterAudioListener === 'function') {
@@ -283,7 +312,7 @@
       if (tauriInvoke) {
         tauriInvoke('push_audio_spectrum', {
           audio: Array.from(audioArray, Number),
-          timestamp_seconds: timestampSeconds,
+          timestampSeconds,
         }).then((pulse) => {
           rustAudioPulse = Number(pulse) || 0;
         }).catch(() => {});
@@ -328,7 +357,10 @@
       renderer.render(animationTime, pulse);
       if (!previewReady) {
         previewReady = true;
-        window.parent.postMessage({ type: 'pearwall:ready' }, window.location.origin);
+        window.parent.postMessage(
+          { type: 'pearwall:ready' },
+          window.location.protocol === 'file:' ? '*' : window.location.origin,
+        );
       }
       lastRenderedAt = timestamp;
     }

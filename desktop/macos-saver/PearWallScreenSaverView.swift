@@ -6,19 +6,29 @@ import WebKit
 
 @objc(PearWallScreenSaverView)
 final class PearWallScreenSaverView: ScreenSaverView, WKNavigationDelegate {
+    private static let settingsKey = "pearwall.settings"
+    private static let sharedSettingsDirectoryName = "PearWall"
+    private static let sharedSettingsFileName = "settings.json"
+    private static let companionAppBundleIdentifier = "com.nevoit.pearwall.desktop"
     private var webView: WKWebView?
+    private var configurationWindow: NSWindow?
     private var artworkTimer: Timer?
     private var lastSentArtworkKey = ""
     private var lastSentDesktopWallpaperPath = ""
+    private var lastAppliedSettingsJSON = "{}"
+    private var lastSettingsModificationDate: Date?
     private var previewMode = false
     private let mediaRemote = MediaRemoteBridge()
+    private lazy var screenSaverDefaults = ScreenSaverDefaults(
+        forModuleWithName: "com.nevoit.pearwall.screensaver",
+    )
 
     override init?(frame: NSRect, isPreview: Bool) {
         super.init(frame: frame, isPreview: isPreview)
         previewMode = isPreview
         animationTimeInterval = 1.0 / 60.0
 
-        let configuration = WKWebViewConfiguration()
+        let configuration = makeWebViewConfiguration()
         let view = WKWebView(frame: bounds, configuration: configuration)
         view.autoresizingMask = [.width, .height]
         view.navigationDelegate = self
@@ -33,9 +43,15 @@ final class PearWallScreenSaverView: ScreenSaverView, WKNavigationDelegate {
             return
         }
         view.loadFileURL(indexURL, allowingReadAccessTo: indexURL.deletingLastPathComponent())
+        startRefreshTimer()
+    }
+
+    private func startRefreshTimer() {
+        guard artworkTimer == nil else { return }
         artworkTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
             self?.refreshArtwork()
             self?.refreshDesktopWallpaper()
+            self?.refreshSharedSettings()
         }
     }
 
@@ -45,6 +61,8 @@ final class PearWallScreenSaverView: ScreenSaverView, WKNavigationDelegate {
 
     override func startAnimation() {
         super.startAnimation()
+        startRefreshTimer()
+        refreshSharedSettings()
     }
 
     override func animateOneFrame() {
@@ -59,7 +77,194 @@ final class PearWallScreenSaverView: ScreenSaverView, WKNavigationDelegate {
     }
 
     override var hasConfigureSheet: Bool {
-        false
+        true
+    }
+
+    override var configureSheet: NSWindow? {
+        if let configurationWindow {
+            return configurationWindow
+        }
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 460, height: 180),
+            styleMask: [.titled, .fullSizeContentView],
+            backing: .buffered,
+            defer: false,
+        )
+        window.title = ""
+        window.titleVisibility = .hidden
+        window.titlebarAppearsTransparent = true
+        window.standardWindowButton(.closeButton)?.isHidden = true
+        window.standardWindowButton(.miniaturizeButton)?.isHidden = true
+        window.standardWindowButton(.zoomButton)?.isHidden = true
+        window.isReleasedWhenClosed = false
+
+        let contentView = NSView()
+        let titleLabel = NSTextField(labelWithString: "在 Pear Wall App 中配置")
+        titleLabel.font = .systemFont(ofSize: 18, weight: .semibold)
+        let descriptionLabel = NSTextField(
+            wrappingLabelWithString: "封面、画面效果和屏保选项会自动同步到系统屏幕保护程序。",
+        )
+        descriptionLabel.textColor = .secondaryLabelColor
+        let openButton = NSButton(
+            title: "打开 Pear Wall",
+            target: self,
+            action: #selector(openCompanionApp(_:)),
+        )
+        openButton.bezelStyle = .rounded
+        openButton.keyEquivalent = "\r"
+        let doneButton = NSButton(
+            title: "完成",
+            target: self,
+            action: #selector(closeConfigurationSheet(_:)),
+        )
+        doneButton.bezelStyle = .rounded
+        doneButton.keyEquivalent = "\u{1b}"
+
+        for view in [titleLabel, descriptionLabel, openButton, doneButton] {
+            view.translatesAutoresizingMaskIntoConstraints = false
+            contentView.addSubview(view)
+        }
+        NSLayoutConstraint.activate([
+            titleLabel.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 30),
+            titleLabel.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 28),
+            titleLabel.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -28),
+            descriptionLabel.topAnchor.constraint(equalTo: titleLabel.bottomAnchor, constant: 10),
+            descriptionLabel.leadingAnchor.constraint(equalTo: titleLabel.leadingAnchor),
+            descriptionLabel.trailingAnchor.constraint(equalTo: titleLabel.trailingAnchor),
+            openButton.leadingAnchor.constraint(equalTo: titleLabel.leadingAnchor),
+            openButton.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -24),
+            doneButton.trailingAnchor.constraint(equalTo: titleLabel.trailingAnchor),
+            doneButton.centerYAnchor.constraint(equalTo: openButton.centerYAnchor),
+        ])
+
+        window.contentView = contentView
+        configurationWindow = window
+        return window
+    }
+
+    @objc private func openCompanionApp(_ sender: Any?) {
+        let workspace = NSWorkspace.shared
+        let installedURL = URL(fileURLWithPath: "/Applications/Pear Wall.app")
+        let appURL = workspace.urlForApplication(
+            withBundleIdentifier: Self.companionAppBundleIdentifier,
+        ) ?? (FileManager.default.fileExists(atPath: installedURL.path) ? installedURL : nil)
+        guard let appURL else {
+            NSSound.beep()
+            return
+        }
+        workspace.openApplication(
+            at: appURL,
+            configuration: NSWorkspace.OpenConfiguration(),
+        ) { [weak self] _, error in
+            guard error == nil else { return }
+            DispatchQueue.main.async {
+                self?.closeConfigurationSheet(nil)
+            }
+        }
+    }
+
+    @objc private func closeConfigurationSheet(_ sender: Any?) {
+        guard let configurationWindow else { return }
+        if let sheetParent = configurationWindow.sheetParent {
+            sheetParent.endSheet(configurationWindow)
+        } else {
+            configurationWindow.orderOut(nil)
+        }
+        webView?.evaluateJavaScript(
+            "window.PearWallReloadSettings && window.PearWallReloadSettings();",
+        )
+    }
+
+    private func makeWebViewConfiguration() -> WKWebViewConfiguration {
+        let configuration = WKWebViewConfiguration()
+        let json = loadSettingsJSON()
+        lastAppliedSettingsJSON = json
+        let jsonString = Self.javascriptString(json)
+        configuration.userContentController.addUserScript(
+            WKUserScript(
+                source: "window.PearWallScreenSaverSettings = JSON.parse(\(jsonString));",
+                injectionTime: .atDocumentStart,
+                forMainFrameOnly: false,
+            ),
+        )
+        return configuration
+    }
+
+    private static var sharedSettingsURL: URL? {
+        FileManager.default.urls(
+            for: .applicationSupportDirectory,
+            in: .userDomainMask,
+        ).first?
+            .appendingPathComponent(sharedSettingsDirectoryName, isDirectory: true)
+            .appendingPathComponent(sharedSettingsFileName)
+    }
+
+    private func loadSettingsJSON() -> String {
+        if let url = Self.sharedSettingsURL,
+           let data = try? Data(contentsOf: url),
+           let json = String(data: data, encoding: .utf8),
+           Self.isSettingsJSON(json) {
+            lastSettingsModificationDate = Self.modificationDate(for: url)
+            return json
+        }
+        if let legacy = screenSaverDefaults?.string(forKey: Self.settingsKey),
+           Self.isSettingsJSON(legacy) {
+            saveSettingsJSON(legacy)
+            return legacy
+        }
+        return "{}"
+    }
+
+    private func saveSettingsJSON(_ json: String) {
+        guard Self.isSettingsJSON(json) else { return }
+        screenSaverDefaults?.set(json, forKey: Self.settingsKey)
+        screenSaverDefaults?.synchronize()
+        guard let url = Self.sharedSettingsURL else { return }
+        try? FileManager.default.createDirectory(
+            at: url.deletingLastPathComponent(),
+            withIntermediateDirectories: true,
+        )
+        try? Data(json.utf8).write(to: url, options: .atomic)
+        lastSettingsModificationDate = Self.modificationDate(for: url)
+        lastAppliedSettingsJSON = json
+    }
+
+    private func refreshSharedSettings() {
+        guard let url = Self.sharedSettingsURL,
+              let modificationDate = Self.modificationDate(for: url),
+              modificationDate != lastSettingsModificationDate else {
+            return
+        }
+        lastSettingsModificationDate = modificationDate
+        guard let data = try? Data(contentsOf: url),
+              let json = String(data: data, encoding: .utf8),
+              Self.isSettingsJSON(json),
+              json != lastAppliedSettingsJSON else {
+            return
+        }
+        lastAppliedSettingsJSON = json
+        applySettingsJSON(json)
+    }
+
+    private func applySettingsJSON(_ json: String) {
+        let jsonString = Self.javascriptString(json)
+        webView?.evaluateJavaScript(
+            "window.PearWallScreenSaverSettings = JSON.parse(\(jsonString));" +
+            "window.PearWallReloadSettings && window.PearWallReloadSettings();",
+        )
+    }
+
+    private static func modificationDate(for url: URL) -> Date? {
+        let attributes = try? FileManager.default.attributesOfItem(atPath: url.path)
+        return attributes?[.modificationDate] as? Date
+    }
+
+    private static func isSettingsJSON(_ value: String) -> Bool {
+        guard let data = value.data(using: .utf8),
+              let object = try? JSONSerialization.jsonObject(with: data) else {
+            return false
+        }
+        return object is [String: Any]
     }
 
     private func refreshArtwork() {
@@ -149,9 +354,24 @@ private struct MediaArtwork {
 private final class MediaRemoteBridge {
     private typealias NowPlayingCallback = @convention(block) (NSDictionary?) -> Void
     private typealias GetNowPlayingInfo = @convention(c) (DispatchQueue, @escaping NowPlayingCallback) -> Void
+    private typealias RegisterForNowPlayingNotifications = @convention(c) (DispatchQueue) -> Void
+
+    private static let perlLoader = """
+    use strict;
+    use warnings;
+    use DynaLoader;
+    my $library = shift @ARGV or die "missing library";
+    my $symbol_name = shift @ARGV or die "missing symbol";
+    my $handle = DynaLoader::dl_load_file($library, 0) or die DynaLoader::dl_error();
+    my $symbol = DynaLoader::dl_find_symbol($handle, $symbol_name) or die "missing symbol";
+    my $function = DynaLoader::dl_install_xsub("main::$symbol_name", $symbol);
+    &$function();
+    """
 
     private let handle: UnsafeMutableRawPointer?
     private let getNowPlayingInfo: GetNowPlayingInfo?
+    private let helperQueue = DispatchQueue(label: "com.nevoit.pearwall.mediaremote")
+    private var fetchPending = false
 
     init() {
         handle = dlopen(
@@ -163,6 +383,12 @@ private final class MediaRemoteBridge {
         } else {
             getNowPlayingInfo = nil
         }
+        if let symbol = handle.flatMap({
+            dlsym($0, "MRMediaRemoteRegisterForNowPlayingNotifications")
+        }) {
+            let register = unsafeBitCast(symbol, to: RegisterForNowPlayingNotifications.self)
+            register(.global(qos: .userInitiated))
+        }
     }
 
     deinit {
@@ -172,15 +398,91 @@ private final class MediaRemoteBridge {
     }
 
     func fetchNowPlaying(completion: @escaping (MediaArtwork?) -> Void) {
-        guard let getNowPlayingInfo else {
-            completion(nil)
-            return
-        }
-        getNowPlayingInfo(.main) { info in
+        guard !fetchPending else { return }
+        fetchPending = true
+        helperQueue.async { [weak self] in
+            guard let self else { return }
+            if let artwork = Self.readViaSystemHost() {
+                self.finishFetch(artwork, completion: completion)
+                return
+            }
             DispatchQueue.main.async {
-                completion(Self.artwork(from: info))
+                self.fetchLegacy(completion: completion)
             }
         }
+    }
+
+    private func fetchLegacy(completion: @escaping (MediaArtwork?) -> Void) {
+        guard let getNowPlayingInfo else {
+            finishFetch(nil, completion: completion)
+            return
+        }
+        getNowPlayingInfo(.main) { [weak self] info in
+            DispatchQueue.main.async { [weak self] in
+                self?.finishFetch(Self.artwork(from: info), completion: completion)
+            }
+        }
+    }
+
+    private func finishFetch(
+        _ artwork: MediaArtwork?,
+        completion: @escaping (MediaArtwork?) -> Void
+    ) {
+        DispatchQueue.main.async { [weak self] in
+            self?.fetchPending = false
+            completion(artwork)
+        }
+    }
+
+    private static func readViaSystemHost() -> MediaArtwork? {
+        guard let library = mediaRemoteLibraryURL() else { return nil }
+        let process = Process()
+        let output = Pipe()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/perl")
+        process.arguments = [
+            "-e",
+            perlLoader,
+            library.path,
+            "pearwall_print_now_playing_json",
+        ]
+        process.standardOutput = output
+        process.standardError = FileHandle.nullDevice
+        do {
+            try process.run()
+        } catch {
+            return nil
+        }
+        let data = output.fileHandleForReading.readDataToEndOfFile()
+        process.waitUntilExit()
+        guard process.terminationStatus == 0,
+              let object = try? JSONSerialization.jsonObject(with: data),
+              let json = object as? [String: Any],
+              let key = json["key"] as? String,
+              !key.isEmpty else {
+            return nil
+        }
+        return MediaArtwork(key: key, dataURL: json["data_url"] as? String ?? "")
+    }
+
+    private static func mediaRemoteLibraryURL() -> URL? {
+        var candidates: [URL] = []
+        if let resourceURL = Bundle(for: MediaRemoteBridge.self).resourceURL {
+            candidates.append(
+                resourceURL
+                    .appendingPathComponent("mediaremote", isDirectory: true)
+                    .appendingPathComponent("PearWallMediaRemote.dylib")
+            )
+        }
+        if let appURL = NSWorkspace.shared.urlForApplication(
+            withBundleIdentifier: "com.nevoit.pearwall.desktop"
+        ) {
+            candidates.append(
+                appURL
+                    .appendingPathComponent("Contents/Resources/mediaremote", isDirectory: true)
+                    .appendingPathComponent("PearWallMediaRemote.dylib")
+            )
+        }
+        return candidates.first { FileManager.default.isReadableFile(atPath: $0.path) }
     }
 
     private static func artwork(from info: NSDictionary?) -> MediaArtwork? {

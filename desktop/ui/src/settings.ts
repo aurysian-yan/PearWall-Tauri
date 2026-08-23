@@ -1,5 +1,16 @@
 import type { Settings } from './types';
 
+type ScreenSaverSettingsWindow = Window & {
+  PearWallScreenSaverSettings?: Partial<Settings>;
+  webkit?: {
+    messageHandlers?: {
+      pearwallSettings?: {
+        postMessage: (value: string) => void;
+      };
+    };
+  };
+};
+
 export const settingsStorageKey = 'pearwall.settings';
 
 export const defaultSettings: Settings = {
@@ -20,29 +31,47 @@ export const defaultSettings: Settings = {
   customArtworkName: '',
 };
 
+function normalizedSettings(saved: Partial<Settings>): Settings {
+  const savedArtworkFallback = ['DEFAULT', 'CUSTOM', 'DESKTOP'].includes(
+    saved.artworkFallback || '',
+  )
+    ? saved.artworkFallback
+    : saved.customArtwork
+      ? 'CUSTOM'
+      : 'DEFAULT';
+  const artworkFallback = savedArtworkFallback === 'CUSTOM' && !saved.customArtwork
+    ? 'DEFAULT'
+    : savedArtworkFallback;
+  return { ...defaultSettings, ...saved, artworkFallback } as Settings;
+}
+
+export function settingsFromJSON(json: string): Settings {
+  const saved = JSON.parse(json) as Partial<Settings>;
+  return normalizedSettings(saved);
+}
+
 export function loadSettings(): Settings {
   try {
-    const saved = JSON.parse(window.localStorage.getItem(settingsStorageKey) || '{}');
-    const savedArtworkFallback = ['DEFAULT', 'CUSTOM', 'DESKTOP'].includes(saved.artworkFallback)
-      ? saved.artworkFallback
-      : saved.customArtwork
-        ? 'CUSTOM'
-        : 'DEFAULT';
-    const artworkFallback = savedArtworkFallback === 'CUSTOM' && !saved.customArtwork
-      ? 'DEFAULT'
-      : savedArtworkFallback;
-    return { ...defaultSettings, ...saved, artworkFallback };
+    const screenSaverWindow = window as ScreenSaverSettingsWindow;
+    const saved = {
+      ...JSON.parse(window.localStorage.getItem(settingsStorageKey) || '{}'),
+      ...(screenSaverWindow.PearWallScreenSaverSettings || {}),
+    };
+    return normalizedSettings(saved);
   } catch {
     return defaultSettings;
   }
 }
 
 export function saveSettings(settings: Settings) {
+  const json = JSON.stringify(settings);
   try {
-    window.localStorage.setItem(settingsStorageKey, JSON.stringify(settings));
+    window.localStorage.setItem(settingsStorageKey, json);
   } catch {
     return false;
   }
+  const screenSaverWindow = window as ScreenSaverSettingsWindow;
+  screenSaverWindow.webkit?.messageHandlers?.pearwallSettings?.postMessage(json);
   return true;
 }
 

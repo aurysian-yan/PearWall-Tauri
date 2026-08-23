@@ -69,6 +69,9 @@ async function createBuildEnvironment() {
     'llvm-rc',
     'xcrun',
     'lipo',
+    'otool',
+    'plutil',
+    'codesign',
     'ditto',
     'create-dmg',
   ];
@@ -148,12 +151,22 @@ run('zsh', [resolve(import.meta.dirname, 'build-macos-saver.sh')], {
   },
 });
 
+run('zsh', [resolve(import.meta.dirname, 'build-macos-app.sh')], {
+  env: {
+    ...env,
+    OUTPUT_ROOT: macosOutput,
+    PEARWALL_SKIP_FRONTEND_BUILD: '1',
+  },
+});
+
 run('zsh', [resolve(import.meta.dirname, 'build-dmg.sh')], {
   env: {
     ...env,
     OUTPUT_DIR: macosOutput,
     SAVER_BUNDLE_PATH: resolve(macosOutput, 'Pear Wall.saver'),
+    APP_BUNDLE_PATH: resolve(macosOutput, 'Pear Wall.app'),
     PEARWALL_SKIP_SAVER_BUILD: '1',
+    PEARWALL_SKIP_APP_BUILD: '1',
   },
 });
 

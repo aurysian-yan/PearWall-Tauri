@@ -1,4 +1,4 @@
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { isAbsolute, resolve } from 'node:path';
 
 const [, , command, ...args] = process.argv;
@@ -16,6 +16,21 @@ const tauriRoot = environment.TAURI_CWD
     : resolve(defaultRoot, environment.TAURI_CWD)
   : defaultRoot;
 const runnerArgs = [...args];
+const targetIndex = runnerArgs.findIndex((argument) => argument === '--target');
+const target = targetIndex >= 0 ? runnerArgs[targetIndex + 1] : '';
+if (
+  process.platform === 'darwin'
+  && (command === 'build' || command === 'dev')
+  && (!target || target.includes('apple-darwin'))
+) {
+  const helperBuild = spawnSync(
+    'zsh',
+    [resolve(import.meta.dirname, 'build-macos-mediaremote.sh')],
+    { cwd: tauriRoot, env: environment, stdio: 'inherit' },
+  );
+  if (helperBuild.error) throw helperBuild.error;
+  if (helperBuild.status !== 0) process.exit(helperBuild.status ?? 1);
+}
 if (process.platform === 'darwin' && !environment.CARGO_BUILD_JOBS) {
   environment.CARGO_BUILD_JOBS = '1';
 }

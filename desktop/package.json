@@ -11,6 +11,8 @@
     "build:installer-ui": "vite build --mode installer --config ui/vite.config.mts",
     "build:installer-frontend": "pnpm build:installer-ui && node scripts/build-installer-frontend.mjs",
     "build:frontend": "pnpm build:settings && node scripts/build-frontend.mjs",
+    "build:macos-mediaremote": "zsh scripts/build-macos-mediaremote.sh",
+    "build:macos-app": "zsh scripts/build-macos-app.sh",
     "build:macos-saver": "zsh scripts/build-macos-saver.sh",
     "build:windows-scr": "node scripts/build-windows-scr.mjs",
     "build:windows-installer": "node scripts/build-windows-installer.mjs",

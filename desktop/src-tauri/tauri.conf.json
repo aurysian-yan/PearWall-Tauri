@@ -40,7 +40,8 @@
       "minimumSystemVersion": "13.0",
       "infoPlist": "Info.macos.plist",
       "files": {
-        "Resources/Assets.car": "resources/Assets.car"
+        "Resources/Assets.car": "resources/Assets.car",
+        "Resources/mediaremote/PearWallMediaRemote.dylib": "resources/mediaremote/PearWallMediaRemote.dylib"
       }
     },
     "icon": [

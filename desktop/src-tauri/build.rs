@@ -1,8 +1,23 @@
 use std::process::Command;
 
 fn main() {
+    build_macos_now_playing();
     add_macos_swift_runtime_paths();
     tauri_build::build()
+}
+
+fn build_macos_now_playing() {
+    if std::env::var("CARGO_CFG_TARGET_OS").as_deref() != Ok("macos") {
+        return;
+    }
+    cc::Build::new()
+        .file("native/macos_now_playing.m")
+        .flag("-fobjc-arc")
+        .flag("-fblocks")
+        .flag("-mmacosx-version-min=13.0")
+        .compile("pearwall_macos_now_playing");
+    println!("cargo:rustc-link-lib=framework=Foundation");
+    println!("cargo:rerun-if-changed=native/macos_now_playing.m");
 }
 
 fn add_macos_swift_runtime_paths() {
@@ -22,9 +37,7 @@ fn add_macos_swift_runtime_paths() {
         return;
     }
     for path in [
-        format!(
-            "{developer_dir}/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift-5.5/macosx"
-        ),
+        format!("{developer_dir}/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift-5.5/macosx"),
         format!("{developer_dir}/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/macosx"),
     ] {
         println!("cargo:rustc-link-arg-bin=pearwall-desktop=-Wl,-rpath,{path}");

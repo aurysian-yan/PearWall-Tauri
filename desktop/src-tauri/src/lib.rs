@@ -1,5 +1,7 @@
 use pearwall_core::SpectrumAnalyzer;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
+#[cfg(target_os = "macos")]
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::Mutex;
 use tauri::{webview::PageLoadEvent, Manager, State};
@@ -7,6 +9,8 @@ use tauri::{webview::PageLoadEvent, Manager, State};
 mod desktop_wallpaper;
 #[cfg(target_os = "macos")]
 mod macos_audio;
+#[cfg(target_os = "macos")]
+mod macos_now_playing;
 #[cfg(windows)]
 mod windows_media;
 
@@ -71,7 +75,7 @@ fn set_preview_parent(window: &tauri::WebviewWindow, parent: isize) -> tauri::Re
 
 struct AudioState(Arc<Mutex<SpectrumAnalyzer>>);
 
-#[derive(Clone, Default, Serialize)]
+#[derive(Clone, Default, Deserialize, Serialize)]
 struct MediaArtwork {
     key: String,
     data_url: Option<String>,
@@ -139,7 +143,13 @@ fn get_media_artwork(
         return windows_media::get_media_artwork(&state, current_key.as_deref());
     }
 
-    #[cfg(not(windows))]
+    #[cfg(target_os = "macos")]
+    {
+        let _ = state;
+        return macos_now_playing::get_media_artwork(current_key.as_deref());
+    }
+
+    #[cfg(not(any(windows, target_os = "macos")))]
     {
         let _ = current_key;
         let _ = state;
@@ -165,6 +175,61 @@ fn get_desktop_wallpaper() -> Result<String, String> {
     desktop_wallpaper::data_url()
 }
 
+#[cfg(target_os = "macos")]
+fn shared_settings_path() -> Result<PathBuf, String> {
+    let home = std::env::var_os("HOME").ok_or_else(|| "无法定位用户目录".to_string())?;
+    Ok(PathBuf::from(home)
+        .join("Library")
+        .join("Application Support")
+        .join("PearWall")
+        .join("settings.json"))
+}
+
+fn validate_settings_json(settings: &str) -> Result<(), String> {
+    let value: serde_json::Value =
+        serde_json::from_str(settings).map_err(|_| "设置数据格式无效".to_string())?;
+    if !value.is_object() {
+        return Err("设置数据格式无效".to_string());
+    }
+    Ok(())
+}
+
+#[tauri::command]
+fn load_shared_settings() -> Result<Option<String>, String> {
+    #[cfg(target_os = "macos")]
+    {
+        let path = shared_settings_path()?;
+        if !path.exists() {
+            return Ok(None);
+        }
+        let settings = std::fs::read_to_string(path).map_err(|_| "无法读取屏保设置".to_string())?;
+        validate_settings_json(&settings)?;
+        return Ok(Some(settings));
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    Ok(None)
+}
+
+#[tauri::command]
+fn save_shared_settings(settings: String) -> Result<(), String> {
+    validate_settings_json(&settings)?;
+
+    #[cfg(target_os = "macos")]
+    {
+        let path = shared_settings_path()?;
+        let directory = path
+            .parent()
+            .ok_or_else(|| "无法定位屏保设置目录".to_string())?;
+        std::fs::create_dir_all(directory).map_err(|_| "无法创建屏保设置目录".to_string())?;
+        let temporary = directory.join(format!(".settings-{}.tmp", std::process::id()));
+        std::fs::write(&temporary, settings).map_err(|_| "无法保存屏保设置".to_string())?;
+        std::fs::rename(&temporary, path).map_err(|_| "无法更新屏保设置".to_string())?;
+    }
+
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let mode = launch_mode();
@@ -180,6 +245,8 @@ pub fn run() {
             get_media_artwork,
             get_desktop_wallpaper,
             is_screen_saver_mode,
+            load_shared_settings,
+            save_shared_settings,
         ])
         .on_page_load(move |webview, payload| {
             if webview.label() != "main" || payload.event() != PageLoadEvent::Finished {
