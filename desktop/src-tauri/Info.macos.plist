@@ -4,5 +4,7 @@
 <dict>
     <key>CFBundleIconName</key>
     <string>AppIcon</string>
+    <key>NSAudioCaptureUsageDescription</key>
+    <string>Pear Wall 需要分析系统音频的实时音量与节奏，用于驱动音乐可视化效果。</string>
 </dict>
 </plist>

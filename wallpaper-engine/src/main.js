@@ -8,6 +8,7 @@
   const artworkMissingConfirmationMs = 2500;
   const settings = {
     audioVisualization: true,
+    audioIntensity: 1,
     pauseFlow: true,
     hideCursor: true,
     renderScale: 0.75,
@@ -28,7 +29,12 @@
   let lastFrameTime = performance.now();
   let targetFps = 0;
   let lastRenderedAt = 0;
-  let rustAudioPulse = 0;
+  const rustAudioFrame = {
+    previousPulse: 0,
+    currentPulse: 0,
+    previousUpdatedAt: 0,
+    currentUpdatedAt: 0,
+  };
   let lastRustAudioPollAt = 0;
   let rustAudioPollPending = false;
   let lastMediaArtworkPollAt = 0;
@@ -44,6 +50,14 @@
   let desktopArtworkFailed = false;
   let screenSaverMode = false;
   let previewReady = false;
+  const beatLogState = {
+    count: 0,
+    previousPulse: 0,
+    valleyPulse: 1,
+    peakPulse: 0,
+    peakHasRisen: false,
+    lastLogAt: -Infinity,
+  };
 
   canvas.addEventListener('webglcontextlost', (event) => {
     event.preventDefault();
@@ -76,17 +90,79 @@
 
   function pollRustAudio(timestamp) {
     if (!tauriInvoke || !settings.audioVisualization || !playbackPlaying) return;
-    if (rustAudioPollPending || timestamp - lastRustAudioPollAt < 33) return;
+    if (rustAudioPollPending || timestamp - lastRustAudioPollAt < 50) return;
     lastRustAudioPollAt = timestamp;
     rustAudioPollPending = true;
     tauriInvoke('get_audio_pulse', { timestampSeconds: audioTimestampSeconds() })
       .then((pulse) => {
-        rustAudioPulse = Number(pulse) || 0;
+        updateRustAudioPulse(pulse);
       })
       .catch(() => {})
       .finally(() => {
         rustAudioPollPending = false;
       });
+  }
+
+  function updateRustAudioPulse(pulse) {
+    const value = Math.max(0, Math.min(1, Number(pulse) || 0));
+    const receivedAt = performance.now();
+    if (!rustAudioFrame.currentUpdatedAt) {
+      rustAudioFrame.previousPulse = value;
+      rustAudioFrame.previousUpdatedAt = receivedAt;
+    } else {
+      rustAudioFrame.previousPulse = rustAudioFrame.currentPulse;
+      rustAudioFrame.previousUpdatedAt = rustAudioFrame.currentUpdatedAt;
+    }
+    rustAudioFrame.currentPulse = value;
+    rustAudioFrame.currentUpdatedAt = receivedAt;
+  }
+
+  function interpolatedRustAudioPulse(timestamp) {
+    if (!rustAudioFrame.currentUpdatedAt || timestamp - rustAudioFrame.currentUpdatedAt > 250) {
+      return 0;
+    }
+    const reportMilliseconds = rustAudioFrame.currentUpdatedAt - rustAudioFrame.previousUpdatedAt;
+    if (reportMilliseconds <= 0) return rustAudioFrame.currentPulse;
+    const sampleTimestamp = timestamp - reportMilliseconds;
+    const amount = Math.max(0, Math.min(
+      1,
+      (sampleTimestamp - rustAudioFrame.previousUpdatedAt) / reportMilliseconds,
+    ));
+    return rustAudioFrame.previousPulse
+      + (rustAudioFrame.currentPulse - rustAudioFrame.previousPulse) * amount;
+  }
+
+  function resetRustAudioPulse() {
+    rustAudioFrame.previousPulse = 0;
+    rustAudioFrame.currentPulse = 0;
+    rustAudioFrame.previousUpdatedAt = 0;
+    rustAudioFrame.currentUpdatedAt = 0;
+  }
+
+  function logBeat(pulse, timestamp, source) {
+    const value = Math.max(0, Math.min(1, Number(pulse) || 0));
+    const state = beatLogState;
+    state.valleyPulse = Math.min(state.valleyPulse, value);
+    if (value >= state.peakPulse) {
+      if (value > state.previousPulse) state.peakHasRisen = true;
+      state.peakPulse = value;
+    }
+    const peakFinished = state.peakHasRisen
+      && value < state.previousPulse
+      && state.peakPulse - value >= 0.04
+      && state.peakPulse - state.valleyPulse >= 0.08;
+    if (peakFinished && state.peakPulse >= 0.15 && timestamp - state.lastLogAt >= 160) {
+      state.count += 1;
+      const scale = 1 + 0.33 * settings.audioIntensity * state.peakPulse * state.peakPulse;
+      console.info(
+        `[Pear Wall 音频] 鼓点 #${state.count} source=${source} pulse=${state.peakPulse.toFixed(3)} intensity=${settings.audioIntensity.toFixed(1)} scale=${scale.toFixed(3)}`,
+      );
+      state.lastLogAt = timestamp;
+      state.valleyPulse = value;
+      state.peakPulse = value;
+      state.peakHasRisen = false;
+    }
+    state.previousPulse = value;
   }
 
   function enableScreenSaverExit() {
@@ -265,6 +341,7 @@
     const previousArtworkFallback = settings.artworkFallback;
     const artworkFallbackProvided = Boolean(properties.artworkFallback && properties.artworkFallback.value != null);
     settings.audioVisualization = booleanValue(properties.audioVisualization, settings.audioVisualization);
+    settings.audioIntensity = Math.max(0.5, Math.min(3, numberValue(properties.audioIntensity, settings.audioIntensity)));
     settings.pauseFlow = booleanValue(properties.pauseFlow, settings.pauseFlow);
     settings.hideCursor = booleanValue(properties.hideCursor, settings.hideCursor);
     settings.blurEnabled = booleanValue(properties.blurEnabled, settings.blurEnabled);
@@ -296,7 +373,7 @@
       mediaArtworkMissing = false;
       analyzer.reset();
       if (tauriInvoke) tauriInvoke('reset_audio').catch(() => {});
-      rustAudioPulse = 0;
+      resetRustAudioPulse();
     } else if (mediaArtworkMissing) {
       confirmMissingMediaArtwork();
     }
@@ -360,7 +437,7 @@
           audio: Array.from(audioArray, Number),
           timestampSeconds,
         }).then((pulse) => {
-          rustAudioPulse = Number(pulse) || 0;
+          updateRustAudioPulse(pulse);
         }).catch(() => {});
       } else {
         analyzer.push(audioArray, timestampSeconds);
@@ -395,11 +472,17 @@
       pollRustAudio(timestamp);
       pollMediaArtwork(timestamp);
       if (!paused && (!settings.pauseFlow || playbackPlaying)) animationTime += delta;
+      const source = Number.isFinite(nativeAudioPulse)
+        ? 'native-frame'
+        : (tauriInvoke ? 'native-pcm' : 'wallpaper-spectrum');
       const pulse = settings.audioVisualization && playbackPlaying
         ? (Number.isFinite(nativeAudioPulse)
             ? nativeAudioPulse
-            : (tauriInvoke ? rustAudioPulse : analyzer.getInterpolated(timestamp / 1000)))
+            : (tauriInvoke
+                ? interpolatedRustAudioPulse(timestamp)
+                : analyzer.getInterpolated(timestamp / 1000)))
         : 0;
+      logBeat(pulse, timestamp, source);
       renderer.render(animationTime, pulse);
       if (!previewReady) {
         previewReady = true;

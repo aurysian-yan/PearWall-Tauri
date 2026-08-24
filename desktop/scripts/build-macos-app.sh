@@ -14,15 +14,9 @@ if [[ "${PEARWALL_SKIP_FRONTEND_BUILD:-0}" != "1" ]]; then
   pnpm --dir "${DESKTOP_ROOT}" run build:frontend
 fi
 
-if [[ "${PEARWALL_SKIP_APP_BUILD:-0}" == "1" ]]; then
-  zsh "${SCRIPT_DIR}/build-macos-mediaremote.sh" >/dev/null
-fi
+zsh "${SCRIPT_DIR}/build-macos-mediaremote.sh" >/dev/null
 
 if [[ "${PEARWALL_SKIP_APP_BUILD:-0}" != "1" ]]; then
-  OUTPUT_APP_BUNDLE="${OUTPUT_APP}" \
-  PEARWALL_AGENT_BINARY_ONLY=1 \
-  PEARWALL_CODESIGN_IDENTITY="${CODESIGN_IDENTITY}" \
-  zsh "${SCRIPT_DIR}/build-macos-agent.sh" >/dev/null
   pnpm --dir "${DESKTOP_ROOT}" tauri build \
     --bundles app \
     --target "${TARGET}" \
@@ -42,15 +36,6 @@ cp \
   "${OUTPUT_APP}/Contents/Resources/mediaremote/PearWallMediaRemote.dylib"
 
 APP_EXECUTABLE="$(plutil -extract CFBundleExecutable raw "${OUTPUT_APP}/Contents/Info.plist")"
-if [[ "${APP_EXECUTABLE}" != "pearwall-agent" ]]; then
-  rm -f "${OUTPUT_APP}/Contents/MacOS/pearwall-agent"
-fi
-
-OUTPUT_APP_BUNDLE="${OUTPUT_APP}" \
-PEARWALL_SKIP_AGENT_BINARY_BUILD=1 \
-PEARWALL_CODESIGN_IDENTITY="${CODESIGN_IDENTITY}" \
-zsh "${SCRIPT_DIR}/build-macos-agent.sh" >/dev/null
-
 APP_BINARY="${OUTPUT_APP}/Contents/MacOS/${APP_EXECUTABLE}"
 lipo "${APP_BINARY}" -verify_arch arm64
 

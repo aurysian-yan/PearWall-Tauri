@@ -51,7 +51,7 @@ pnpm --dir desktop run build
 
 ## 屏保构建
 
-统一构建在 macOS 上运行，一次生成 macOS Universal App、`.saver`、DMG、Windows `.scr` 和自定义 UI 安装包。Windows 产物使用 `x86_64-pc-windows-msvc` 目标交叉编译。
+统一构建在 macOS 上运行，一次生成面向 macOS 15 及更高版本的 Apple Silicon App、`.saver`、DMG、Windows `.scr` 和自定义 UI 安装包。Windows 产物使用 `x86_64-pc-windows-msvc` 目标交叉编译。
 
 首次构建需要安装 Xcode Command Line Tools、Windows 交叉编译工具和 DMG 工具：
 
@@ -59,7 +59,7 @@ pnpm --dir desktop run build
 xcode-select --install
 brew install llvm create-dmg
 cargo install --locked cargo-xwin
-rustup target add aarch64-apple-darwin x86_64-apple-darwin
+rustup target add aarch64-apple-darwin
 rustup target add x86_64-pc-windows-msvc
 ```
 

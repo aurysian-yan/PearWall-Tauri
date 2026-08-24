@@ -15,6 +15,17 @@
         "type": "bool",
         "value": true
       },
+      "audioIntensity": {
+        "order": 15,
+        "text": "音频律动强度",
+        "type": "slider",
+        "value": 1,
+        "min": 0.5,
+        "max": 3,
+        "fraction": true,
+        "precision": 1,
+        "step": 0.1
+      },
       "pauseFlow": {
         "order": 20,
         "text": "暂停时冻结画面",

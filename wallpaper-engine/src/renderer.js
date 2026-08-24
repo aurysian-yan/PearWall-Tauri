@@ -166,6 +166,7 @@
       this.gl = canvas.getContext('webgl2', { antialias: false, alpha: false, premultipliedAlpha: false });
       if (!this.gl) throw new Error('WebGL2 is unavailable');
       this.settings = {
+        audioIntensity: 1,
         renderScale: 0.75,
         blurEnabled: true,
         blurMultiplier: 1,
@@ -453,7 +454,13 @@
       const timestamp = performance.now() / 1000;
       const transitionMix = this.getTransitionMix(timestamp);
       const blurSigma = 24 * this.settings.blurMultiplier;
-      this.drawBackdrop(1 + IMAGE_PULSE_INTENSITY * pulse * pulse, blurSigma, time, transitionMix, this.targets.lyrics);
+      this.drawBackdrop(
+        1 + IMAGE_PULSE_INTENSITY * this.settings.audioIntensity * pulse * pulse,
+        blurSigma,
+        time,
+        transitionMix,
+        this.targets.lyrics,
+      );
       this.renderMaterial(this.targets.lyrics.texture, this.targets.lyrics.texture, 1, time);
     }
 

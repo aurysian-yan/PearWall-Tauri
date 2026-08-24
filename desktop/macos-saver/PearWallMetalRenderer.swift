@@ -22,6 +22,7 @@ enum PearWallMoruStyle: String {
 }
 
 struct PearWallMetalConfiguration: Equatable {
+    var audioIntensity: Float = 1
     var renderScale: Float = 0.75
     var blurEnabled = true
     var blurMultiplier: Float = 1
@@ -32,6 +33,7 @@ struct PearWallMetalConfiguration: Equatable {
     var moruStyle = PearWallMoruStyle.off
 
     init(
+        audioIntensity: Double = 1,
         renderScale: Double = 0.75,
         blurEnabled: Bool = true,
         blurMultiplier: Double = 1,
@@ -41,6 +43,7 @@ struct PearWallMetalConfiguration: Equatable {
         randomPreset: Bool = false,
         moruStyle: String = "OFF"
     ) {
+        self.audioIntensity = Float(min(3, max(0.5, audioIntensity)))
         self.renderScale = Float(min(1, max(0.25, renderScale)))
         self.blurEnabled = blurEnabled
         self.blurMultiplier = Float(min(2, max(0, blurMultiplier)))
@@ -159,9 +162,9 @@ vertex RotationVertexOutput pearwallArtworkVertex(
     if (artworkFill != 0) {
         output.position = float4(input.position, 0.0, 1.0);
         output.currentTextureCoordinate =
-            (input.textureCoordinate - 0.5) * currentTextureScale + 0.5;
+            (input.textureCoordinate - 0.5) * currentTextureScale / imageScale + 0.5;
         output.previousTextureCoordinate =
-            (input.textureCoordinate - 0.5) * previousTextureScale + 0.5;
+            (input.textureCoordinate - 0.5) * previousTextureScale / imageScale + 0.5;
         return output;
     }
 
@@ -899,7 +902,8 @@ final class PearWallMetalRenderer: NSObject, MTKViewDelegate {
         )
         var viewScale = rotationViewScale(aspect: viewAspect)
         var time = animationTime
-        var imageScale = 1 + Self.imagePulseIntensity * audioPulse * audioPulse
+        var imageScale = 1
+            + Self.imagePulseIntensity * configuration.audioIntensity * audioPulse * audioPulse
         var mix = transitionMix
         encoder.setRenderPipelineState(artworkPipeline)
         encoder.setVertexBuffer(vertexBuffer, offset: 0, index: 0)

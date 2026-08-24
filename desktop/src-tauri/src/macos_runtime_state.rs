@@ -1,6 +1,5 @@
 #![allow(dead_code)]
 
-use fs2::FileExt;
 use memmap2::{Mmap, MmapMut};
 use std::fs::{self, File, OpenOptions};
 use std::io;
@@ -8,12 +7,14 @@ use std::mem::size_of;
 use std::os::unix::fs::PermissionsExt;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+
+use pearwall_core::{PcmAnalysisSnapshot, SpectrumAnalyzer};
 
 const RUNTIME_STATE_MAGIC: [u8; 8] = *b"PWRSTATE";
 const RUNTIME_STATE_VERSION: u32 = 1;
 const RUNTIME_STATE_FILE_NAME: &str = "runtime-state-v1.bin";
-const AGENT_LOCK_FILE_NAME: &str = "agent-v1.lock";
 
 #[repr(C, align(64))]
 struct SharedRuntimeState {
@@ -41,6 +42,87 @@ pub struct RuntimeSnapshot {
 
 pub struct RuntimeStateWriter {
     mapping: MmapMut,
+}
+
+struct AudioBeatLogger {
+    beat_count: u64,
+    previous_pulse: f32,
+    valley_pulse: f32,
+    peak_pulse: f32,
+    peak_snapshot: Option<PcmAnalysisSnapshot>,
+    peak_has_risen: bool,
+    last_log_at: Option<Instant>,
+}
+
+impl Default for AudioBeatLogger {
+    fn default() -> Self {
+        Self {
+            beat_count: 0,
+            previous_pulse: 0.0,
+            valley_pulse: 1.0,
+            peak_pulse: 0.0,
+            peak_snapshot: None,
+            peak_has_risen: false,
+            last_log_at: None,
+        }
+    }
+}
+
+impl AudioBeatLogger {
+    fn update(&mut self, pulse: f32, snapshot: Option<PcmAnalysisSnapshot>) {
+        let pulse = pulse.clamp(0.0, 1.0);
+        self.valley_pulse = self.valley_pulse.min(pulse);
+        if pulse >= self.peak_pulse {
+            if pulse > self.previous_pulse {
+                self.peak_has_risen = true;
+            }
+            self.peak_pulse = pulse;
+            self.peak_snapshot = snapshot;
+        }
+
+        let now = Instant::now();
+        let cooldown_finished = self.last_log_at.is_none_or(|last_log_at| {
+            now.duration_since(last_log_at) >= Duration::from_millis(160)
+        });
+        let peak_finished = self.peak_has_risen
+            && pulse < self.previous_pulse
+            && self.peak_pulse - pulse >= 0.04
+            && self.peak_pulse - self.valley_pulse >= 0.08;
+        if cooldown_finished && peak_finished && self.peak_pulse >= 0.15 {
+            self.beat_count += 1;
+            let peak = self.peak_pulse;
+            let scale_1x = 1.0 + 0.33 * peak * peak;
+            let scale_3x = 1.0 + 0.99 * peak * peak;
+            if let Some(snapshot) = self.peak_snapshot {
+                eprintln!(
+                    "[Pear Wall 音频] 鼓点 #{} pulse={:.3} analyzer={:.3} transient={:.3} onset={:.3} bands_db=[低频:{:.1}, 鼓组:{:.1}, 上低频:{:.1}, 低中频:{:.1}, 中频:{:.1}] scale_1x={:.3} scale_3x={:.3}",
+                    self.beat_count,
+                    peak,
+                    snapshot.pulse,
+                    snapshot.transient,
+                    snapshot.onset,
+                    snapshot.band_db[0],
+                    snapshot.band_db[1],
+                    snapshot.band_db[2],
+                    snapshot.band_db[3],
+                    snapshot.band_db[4],
+                    scale_1x,
+                    scale_3x,
+                );
+            } else {
+                eprintln!(
+                    "[Pear Wall 音频] 鼓点 #{} pulse={:.3} scale_1x={:.3} scale_3x={:.3}",
+                    self.beat_count, peak, scale_1x, scale_3x,
+                );
+            }
+            self.last_log_at = Some(now);
+            self.valley_pulse = pulse;
+            self.peak_pulse = pulse;
+            self.peak_snapshot = snapshot;
+            self.peak_has_risen = false;
+        }
+        self.previous_pulse = pulse;
+    }
 }
 
 impl RuntimeStateWriter {
@@ -97,6 +179,41 @@ impl RuntimeStateWriter {
     }
 }
 
+pub fn start_publisher(
+    analyzer: Arc<Mutex<SpectrumAnalyzer>>,
+    started_at: Instant,
+) -> Result<(), String> {
+    let mut state = RuntimeStateWriter::open().map_err(|error| error.to_string())?;
+    std::thread::Builder::new()
+        .name("pearwall-runtime-state".to_string())
+        .spawn(move || {
+            let interval = Duration::from_millis(33);
+            let mut next_frame = Instant::now();
+            let mut beat_logger = AudioBeatLogger::default();
+            loop {
+                next_frame += interval;
+                let now = Instant::now();
+                if next_frame > now {
+                    std::thread::sleep(next_frame - now);
+                } else if now.duration_since(next_frame) > Duration::from_secs(1) {
+                    next_frame = now;
+                }
+                let timestamp = started_at.elapsed().as_secs_f64();
+                let (pulse, snapshot) = analyzer
+                    .lock()
+                    .map(|mut analyzer| {
+                        let pulse = analyzer.get_interpolated(timestamp);
+                        (pulse, analyzer.pcm_analysis_snapshot())
+                    })
+                    .unwrap_or((0.0, None));
+                beat_logger.update(pulse, snapshot);
+                state.publish(pulse, true, 0);
+            }
+        })
+        .map(|_| ())
+        .map_err(|error| format!("无法启动运行时状态线程：{error}"))
+}
+
 pub struct RuntimeStateReader {
     mapping: Mmap,
 }
@@ -140,31 +257,6 @@ impl RuntimeStateReader {
         let snapshot = self.snapshot()?;
         let age = unix_time_milliseconds().checked_sub(snapshot.updated_at_milliseconds)?;
         (age <= maximum_age.as_millis() as u64).then_some(snapshot.pulse.clamp(0.0, 1.0))
-    }
-}
-
-pub struct AgentInstance {
-    _file: File,
-}
-
-impl AgentInstance {
-    pub fn acquire() -> io::Result<Option<Self>> {
-        let directory = application_support_directory()?;
-        fs::create_dir_all(&directory)?;
-        fs::set_permissions(&directory, fs::Permissions::from_mode(0o700))?;
-        let path = directory.join(AGENT_LOCK_FILE_NAME);
-        let file = OpenOptions::new()
-            .create(true)
-            .read(true)
-            .write(true)
-            .truncate(false)
-            .open(&path)?;
-        fs::set_permissions(path, fs::Permissions::from_mode(0o600))?;
-        match file.try_lock_exclusive() {
-            Ok(()) => Ok(Some(Self { _file: file })),
-            Err(error) if error.kind() == io::ErrorKind::WouldBlock => Ok(None),
-            Err(error) => Err(error),
-        }
     }
 }
 

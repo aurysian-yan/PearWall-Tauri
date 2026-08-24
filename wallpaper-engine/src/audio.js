@@ -15,8 +15,8 @@
   const HARMONIC_BASS_ATTACK_BOOST = 0.9;
   const SUSTAINED_BASS_RESPONSE = 0.1;
   const SPECTRUM_SAMPLE_RAMP = [0.1, 0.2, 0.3, 0.4];
-  const SPECTRUM_TARGET_DECAY = 0.99;
-  const SPECTRUM_POWER_FOLLOW = 0.5;
+  const TARGET_RELEASE_SECONDS = 1;
+  const POWER_FOLLOW_SECONDS = 0.07;
   const LOW_BASS_START = 30;
   const LOW_BASS_END = 105;
   const BASS_NOTE_START = 75;
@@ -31,6 +31,12 @@
   const BASELINE_RELEASE_SECONDS = 0.16;
   const CONFIRMATION_WINDOW_SECONDS = 0.09;
   const REPORT_INTERVAL_SECONDS = 1 / 30;
+  const SPECTRUM_BIN_COUNT = 64;
+  const SPECTRAL_FLUX_HISTORY_SIZE = 30;
+  const SPECTRAL_FLUX_LOG_GAIN = 40;
+  const SPECTRAL_FLUX_THRESHOLD_MULTIPLIER = 1.35;
+  const SPECTRAL_FLUX_MINIMUM_LEVEL = 0.01;
+  const SPECTRAL_FLUX_FULL_LEVEL = 0.06;
 
   function clamp(value, min, max) {
     return Math.max(min, Math.min(max, value));
@@ -72,6 +78,9 @@
       };
       this.previousTimestamp = 0;
       this.currentReportTimestamp = 0;
+      this.previousReportTimestamp = 0;
+      this.previousReportPower = 0;
+      this.currentReportPower = 0;
       this.unprocessedHistory = [0, 0, 0];
       this.historyWriteIndex = 0;
       this.historyCount = 0;
@@ -79,12 +88,17 @@
       this.recentSpectrumWriteIndex = 0;
       this.targetPower = 0;
       this.power = 0;
+      this.previousSpectrum = new Array(SPECTRUM_BIN_COUNT).fill(0);
+      this.spectrumInitialized = false;
+      this.spectralFluxHistory = [];
+      this.currentOnset = 0;
     }
 
     push(audio, timestamp) {
       if (!audio || audio.length < 2) return;
       const half = Math.floor(audio.length / 2);
       const powers = this.readPowers(audio, half);
+      const onset = this.analyzeSpectralFlux(this.readSpectrum(audio, half));
       const deltaSeconds = this.previousTimestamp > 0
         ? clamp(timestamp - this.previousTimestamp, 0, 0.25)
         : REPORT_INTERVAL_SECONDS;
@@ -93,6 +107,21 @@
       const confirmed = this.confirmResponse(response, response >= SHARP_ATTACK_RESPONSE);
       this.recentSpectrumSamples[this.recentSpectrumWriteIndex] = confirmed;
       this.recentSpectrumWriteIndex = (this.recentSpectrumWriteIndex + 1) % this.recentSpectrumSamples.length;
+      this.currentOnset = onset;
+      let weighted = 0;
+      for (let index = 0; index < this.recentSpectrumSamples.length; index += 1) {
+        const sampleIndex = (this.recentSpectrumWriteIndex + index) % this.recentSpectrumSamples.length;
+        weighted += this.recentSpectrumSamples[sampleIndex] * SPECTRUM_SAMPLE_RAMP[index];
+      }
+      this.targetPower = Math.max(
+        weighted,
+        this.targetPower * Math.exp(-deltaSeconds / TARGET_RELEASE_SECONDS),
+      );
+      this.power += (this.targetPower - this.power)
+        * (1 - Math.exp(-deltaSeconds / POWER_FOLLOW_SECONDS));
+      this.previousReportPower = this.currentReportPower;
+      this.currentReportPower = Math.max(this.power, onset);
+      this.previousReportTimestamp = this.currentReportTimestamp;
       this.currentReportTimestamp = timestamp;
     }
 
@@ -111,6 +140,72 @@
         result.push((left + right) * 0.5);
       }
       return result;
+    }
+
+    readSpectrum(audio, half) {
+      const spectrum = new Array(SPECTRUM_BIN_COUNT).fill(0);
+      if (half <= 0) return spectrum;
+      for (let index = 0; index < spectrum.length; index += 1) {
+        const sourceIndex = half === 1
+          ? 0
+          : Math.floor(index * (half - 1) / (SPECTRUM_BIN_COUNT - 1));
+        const left = Math.max(0, Number(audio[sourceIndex]) || 0);
+        const rightValue = Number(audio[half + sourceIndex]);
+        const right = Number.isFinite(rightValue) ? Math.max(0, rightValue) : left;
+        spectrum[index] = (left + right) * 0.5;
+      }
+      return spectrum;
+    }
+
+    analyzeSpectralFlux(spectrum) {
+      const current = spectrum.map((value) => Math.log1p(SPECTRAL_FLUX_LOG_GAIN * Math.max(0, value)));
+      const level = current.reduce((total, value) => total + value, 0) / current.length;
+      if (!this.spectrumInitialized) {
+        this.previousSpectrum = current;
+        this.spectrumInitialized = true;
+        return 0;
+      }
+
+      const bands = [
+        [0, 20, 1],
+        [20, 43, 0.85],
+        [43, 64, 0.65],
+      ];
+      let flux = 0;
+      for (const [start, end, weight] of bands) {
+        let positiveChange = 0;
+        let currentEnergy = 0;
+        for (let index = start; index < end; index += 1) {
+          positiveChange += Math.max(0, current[index] - this.previousSpectrum[index]);
+          currentEnergy += current[index];
+        }
+        flux = Math.max(flux, weight * positiveChange / (currentEnergy + 1e-5));
+      }
+      this.previousSpectrum = current;
+
+      const baseline = this.spectralFluxMedian();
+      this.spectralFluxHistory.push(flux);
+      if (this.spectralFluxHistory.length > SPECTRAL_FLUX_HISTORY_SIZE) {
+        this.spectralFluxHistory.shift();
+      }
+      if (this.spectralFluxHistory.length < 4 || level <= SPECTRAL_FLUX_MINIMUM_LEVEL) return 0;
+
+      const threshold = Math.max(1e-4, baseline * SPECTRAL_FLUX_THRESHOLD_MULTIPLIER);
+      const onset = smoothRange(flux / threshold, 0.85, 2);
+      return onset * smoothRange(
+        level,
+        SPECTRAL_FLUX_MINIMUM_LEVEL,
+        SPECTRAL_FLUX_FULL_LEVEL,
+      );
+    }
+
+    spectralFluxMedian() {
+      if (!this.spectralFluxHistory.length) return 0;
+      const values = [...this.spectralFluxHistory].sort((left, right) => left - right);
+      const middle = Math.floor(values.length / 2);
+      return values.length % 2
+        ? values[middle]
+        : (values[middle - 1] + values[middle]) * 0.5;
     }
 
     averageBandPower(audio, offset, end, startHz, endHz) {
@@ -141,10 +236,11 @@
       const state = this.featureState;
 
       if (!state.initialized) {
-        state.slowBassDb = Math.max(DB_FLOOR, bassDecibels - SHARP_ATTACK_RISE_CEILING);
+        state.slowBassDb = Math.max(DB_FLOOR, bassDecibels - BASS_RISE_CEILING);
         state.slowReferenceDb = referenceDecibels;
         state.previousBassDb = bassDecibels;
         state.initialized = true;
+        return 0;
       }
 
       const frameBassRise = Math.max(0, bassDecibels - state.previousBassDb);
@@ -198,23 +294,18 @@
     }
 
     getInterpolated(timestamp) {
-      const reportIsCurrent = this.currentReportTimestamp && timestamp - this.currentReportTimestamp <= 0.25;
-      let weightedSamples = 0;
-      if (reportIsCurrent) {
-        for (let index = 0; index < this.recentSpectrumSamples.length; index += 1) {
-          const sampleIndex = (this.recentSpectrumWriteIndex + index) % this.recentSpectrumSamples.length;
-          weightedSamples += this.recentSpectrumSamples[sampleIndex] * SPECTRUM_SAMPLE_RAMP[index];
-        }
+      if (!this.currentReportTimestamp || timestamp - this.currentReportTimestamp > 0.25) return 0;
+      const reportSeconds = this.currentReportTimestamp - this.previousReportTimestamp;
+      if (!this.previousReportTimestamp || reportSeconds <= 0) {
+        return clamp(this.currentReportPower, 0, 1);
       }
-      this.targetPower = Math.max(weightedSamples, this.targetPower * SPECTRUM_TARGET_DECAY);
-      this.power += (this.targetPower - this.power) * SPECTRUM_POWER_FOLLOW;
-      if (this.power * this.power < 1e-8) this.power = 0;
-      return this.processSpectrumPower(this.power);
-    }
-
-    processSpectrumPower(value) {
-      const x = clamp(value, 0, 1);
-      return x * x * x * (x * (x * 6 - 15) + 10);
+      const sampleTimestamp = timestamp - reportSeconds;
+      const amount = clamp(
+        (sampleTimestamp - this.previousReportTimestamp) / reportSeconds,
+        0,
+        1,
+      );
+      return clamp(lerp(this.previousReportPower, this.currentReportPower, amount), 0, 1);
     }
 
     getScale(timestamp) {

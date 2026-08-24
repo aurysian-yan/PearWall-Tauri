@@ -5,6 +5,7 @@ export type ScreenSaverDisplay = 'PRIMARY' | 'SECONDARY';
 
 export type Settings = {
   audioVisualization: boolean;
+  audioIntensity: number;
   pauseFlow: boolean;
   hideCursor: boolean;
   screenSaverDisplay: ScreenSaverDisplay;

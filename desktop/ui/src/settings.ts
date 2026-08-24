@@ -15,6 +15,7 @@ export const settingsStorageKey = 'pearwall.settings';
 
 export const defaultSettings: Settings = {
   audioVisualization: true,
+  audioIntensity: 1,
   pauseFlow: true,
   hideCursor: true,
   screenSaverDisplay: 'PRIMARY',
@@ -56,6 +57,10 @@ function normalizedSettings(saved: Partial<Settings>): Settings {
   return {
     ...defaultSettings,
     ...saved,
+    audioIntensity: Math.min(
+      3,
+      Math.max(0.5, Number(saved.audioIntensity) || defaultSettings.audioIntensity),
+    ),
     artworkFallback,
     screenSaverDisplay,
     screenSaverDisplayIds,

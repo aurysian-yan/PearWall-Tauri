@@ -23,7 +23,7 @@ xcrun swiftc \
   -emit-library \
   -parse-as-library \
   -module-name PearWallScreenSaver \
-  -target arm64-apple-macos11.0 \
+  -target arm64-apple-macos15.0 \
   -Xlinker -bundle \
   -o "${ARM64_BINARY}" \
   "${SWIFT_SOURCES[@]}" \

@@ -2,6 +2,7 @@ use pearwall_core::SpectrumAnalyzer;
 use serde::{Deserialize, Serialize};
 #[cfg(target_os = "macos")]
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::sync::Mutex;
 #[cfg(target_os = "macos")]
@@ -10,13 +11,19 @@ use tauri::{webview::PageLoadEvent, Manager, State};
 
 mod desktop_wallpaper;
 #[cfg(target_os = "macos")]
-mod macos_agent_service;
+mod macos_app_service;
+#[cfg(target_os = "macos")]
+mod macos_audio;
 #[cfg(target_os = "macos")]
 mod macos_now_playing;
 #[cfg(target_os = "macos")]
 mod macos_runtime_state;
 #[cfg(target_os = "macos")]
+mod macos_status_item;
+#[cfg(target_os = "macos")]
 mod macos_wallpaper;
+#[cfg(windows)]
+mod windows_audio;
 #[cfg(windows)]
 mod windows_media;
 
@@ -83,7 +90,6 @@ fn set_preview_parent(window: &tauri::WebviewWindow, parent: isize) -> tauri::Re
 
 struct AudioState {
     analyzer: Arc<Mutex<SpectrumAnalyzer>>,
-    #[cfg(target_os = "macos")]
     started_at: Instant,
     #[cfg(target_os = "macos")]
     shared: Mutex<SharedAudioState>,
@@ -99,7 +105,6 @@ impl AudioState {
     fn new(analyzer: Arc<Mutex<SpectrumAnalyzer>>) -> Self {
         Self {
             analyzer,
-            #[cfg(target_os = "macos")]
             started_at: Instant::now(),
             #[cfg(target_os = "macos")]
             shared: Mutex::new(SharedAudioState {
@@ -109,14 +114,8 @@ impl AudioState {
         }
     }
 
-    #[cfg(target_os = "macos")]
     fn timestamp_seconds(&self, _requested: f64) -> f64 {
         self.started_at.elapsed().as_secs_f64()
-    }
-
-    #[cfg(not(target_os = "macos"))]
-    fn timestamp_seconds(&self, requested: f64) -> f64 {
-        requested
     }
 
     #[cfg(target_os = "macos")]
@@ -351,11 +350,28 @@ fn page_matches_launch_mode(mode: LaunchMode, path: &str) -> bool {
     }
 }
 
+#[cfg(target_os = "macos")]
+fn start_macos_background_runtime(
+    analyzer: Arc<Mutex<SpectrumAnalyzer>>,
+    started_at: Instant,
+) -> Result<(), String> {
+    macos_audio::start(analyzer.clone(), started_at);
+    macos_runtime_state::start_publisher(analyzer, started_at)?;
+    std::thread::Builder::new()
+        .name("pearwall-media-artwork".to_string())
+        .spawn(|| loop {
+            let _ = macos_now_playing::get_media_artwork(None);
+            std::thread::sleep(Duration::from_secs(1));
+        })
+        .map_err(|error| format!("无法启动媒体封面线程：{error}"))?;
+    macos_status_item::install()
+}
+
 #[tauri::command]
 fn get_macos_runtime_status() -> Result<serde_json::Value, String> {
     #[cfg(target_os = "macos")]
     {
-        return serde_json::to_value(macos_agent_service::status())
+        return serde_json::to_value(macos_app_service::status())
             .map_err(|error| error.to_string());
     }
 
@@ -367,7 +383,7 @@ fn get_macos_runtime_status() -> Result<serde_json::Value, String> {
 fn set_macos_runtime_enabled(enabled: bool) -> Result<serde_json::Value, String> {
     #[cfg(target_os = "macos")]
     {
-        let status = macos_agent_service::set_enabled(enabled)?;
+        let status = macos_app_service::set_enabled(enabled)?;
         return serde_json::to_value(status).map_err(|error| error.to_string());
     }
 
@@ -477,6 +493,7 @@ fn save_shared_settings(settings: String) -> Result<(), String> {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let mode = launch_mode();
+    let show_main_window_on_launch = Arc::new(AtomicBool::new(true));
     #[cfg(target_os = "macos")]
     let wallpaper_listener = if matches!(mode, LaunchMode::Wallpaper) {
         match macos_wallpaper::prepare_server() {
@@ -493,8 +510,14 @@ pub fn run() {
         None
     };
     let audio_analyzer = Arc::new(Mutex::new(SpectrumAnalyzer::default()));
+    #[cfg(windows)]
+    windows_audio::start(audio_analyzer.clone());
     let audio_state = AudioState::new(audio_analyzer.clone());
-    tauri::Builder::default()
+    #[cfg(target_os = "macos")]
+    let macos_started_at = audio_state.started_at;
+    let page_load_visibility = show_main_window_on_launch.clone();
+    let _setup_visibility = show_main_window_on_launch.clone();
+    let app = tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .manage(audio_state)
         .manage(MediaArtworkState::default())
@@ -541,8 +564,21 @@ pub fn run() {
             if webview.label() != "main" {
                 return;
             }
-            if page_matches_launch_mode(mode, payload.url().path()) {
+            if page_matches_launch_mode(mode, payload.url().path())
+                && page_load_visibility.load(Ordering::Acquire)
+            {
                 let _ = webview.window().show();
+            }
+        })
+        .on_window_event(move |_window, _event| {
+            #[cfg(target_os = "macos")]
+            if matches!(mode, LaunchMode::App | LaunchMode::Configure)
+                && _window.label() == "main"
+            {
+                if let tauri::WindowEvent::CloseRequested { api, .. } = _event {
+                    api.prevent_close();
+                    let _ = _window.hide();
+                }
             }
         })
         .setup(move |app| {
@@ -555,8 +591,15 @@ pub fn run() {
                     return Ok(());
                 }
                 if matches!(mode, LaunchMode::App | LaunchMode::Configure) {
-                    let _ = macos_agent_service::ensure_enabled();
-                    let _ = macos_agent_service::launch_bundled_agent();
+                    _setup_visibility.store(
+                        cfg!(debug_assertions) || macos_status_item::application_is_active(),
+                        Ordering::Release,
+                    );
+                    let _ = macos_app_service::ensure_enabled();
+                    app.handle()
+                        .set_activation_policy(tauri::ActivationPolicy::Accessory)
+                        .map_err(|error| error.to_string())?;
+                    start_macos_background_runtime(audio_analyzer.clone(), macos_started_at)?;
                 }
             }
 
@@ -589,6 +632,17 @@ pub fn run() {
             }
             Ok(())
         })
-        .run(tauri::generate_context!())
-        .expect("启动 Pear Wall 失败");
+        .build(tauri::generate_context!())
+        .expect("创建 Pear Wall 失败");
+    app.run(move |_app_handle, _event| {
+        #[cfg(target_os = "macos")]
+        if matches!(mode, LaunchMode::App | LaunchMode::Configure)
+            && matches!(_event, tauri::RunEvent::Reopen { .. })
+        {
+            if let Some(window) = _app_handle.get_webview_window("main") {
+                let _ = window.show();
+                let _ = window.set_focus();
+            }
+        }
+    });
 }

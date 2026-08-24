@@ -28,6 +28,7 @@ private enum PearWallArtworkFallback: String {
 
 private struct PearWallSettings {
     var audioVisualization = true
+    var audioIntensity = 1.0
     var pauseFlow = true
     var hideCursor = true
     var screenSaverDisplay = PearWallScreenSaverDisplay.primary
@@ -58,6 +59,7 @@ private struct PearWallSettings {
 
     var metalConfiguration: PearWallMetalConfiguration {
         PearWallMetalConfiguration(
+            audioIntensity: audioIntensity,
             renderScale: renderScale,
             blurEnabled: blurEnabled,
             blurMultiplier: blurMultiplier,
@@ -75,6 +77,10 @@ private struct PearWallSettings {
             return
         }
         audioVisualization = Self.boolean(object, key: "audioVisualization", fallback: audioVisualization)
+        audioIntensity = min(
+            3,
+            max(0.5, Self.number(object, key: "audioIntensity", fallback: audioIntensity))
+        )
         pauseFlow = Self.boolean(object, key: "pauseFlow", fallback: pauseFlow)
         hideCursor = Self.boolean(object, key: "hideCursor", fallback: hideCursor)
         showConfigurationDetails = Self.boolean(
@@ -281,9 +287,10 @@ final class PearWallScreenSaverView: ScreenSaverView {
         }
         let snapshot = runtimeStateReader.currentSnapshot()
         metalRenderer?.animationTime = Float(animationTime)
-        metalRenderer?.audioPulse = settings.audioVisualization && playbackPlaying
+        let pulse = settings.audioVisualization && playbackPlaying
             ? snapshot?.pulse ?? 0
             : 0
+        metalRenderer?.audioPulse = Float(min(1, max(0, Double(pulse))))
         metalView?.draw()
     }
 
@@ -579,7 +586,7 @@ final class PearWallScreenSaverView: ScreenSaverView {
         模糊：\(blur)
         遮罩：\(Int((settings.scrimAlpha * 100).rounded()))%
         流动：\(speed) · \(playbackPlaying ? "运行中" : "已暂停")
-        音频响应：\(settings.audioVisualization ? "开启" : "关闭")
+        音频响应：\(settings.audioVisualization ? String(format: "开启 · %.1f×", settings.audioIntensity) : "关闭")
         光栅玻璃：\(moruStyle)
         """
         configurationDetailsLabel?.invalidateIntrinsicContentSize()

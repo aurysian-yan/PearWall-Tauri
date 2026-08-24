@@ -50,45 +50,62 @@ impl Default for TransientDetector {
 
 impl TransientDetector {
     fn process(&mut self, waveform: &[i8], sample_rate: f32) -> f32 {
-        if sample_rate != self.sample_rate {
-            self.sample_rate = sample_rate;
-            self.low = low_pass(25.0, sample_rate);
-            self.bass_top = low_pass(190.0, sample_rate);
-            self.reference_top = low_pass(760.0, sample_rate);
-            self.bass_power = 0.0;
-            self.reference_power = 0.0;
-        }
-
+        self.prepare(sample_rate);
         let mut strongest: f32 = 0.0;
         for raw in waveform {
             let sample = (*raw as f32 + 128.0) / 128.0 - 1.0;
-            let low = self.low.run(sample);
-            let bass_top = self.bass_top.run(sample);
-            let bass = bass_top - low;
-            let reference = self.reference_top.run(sample) - bass_top;
-            self.bass_power = envelope(
-                self.bass_power,
-                (bass * bass) as f64,
-                0.006,
-                0.045,
-                sample_rate,
-            );
-            self.reference_power = envelope(
-                self.reference_power,
-                (reference * reference) as f64,
-                0.006,
-                0.045,
-                sample_rate,
-            );
-            let bass_db = power_to_db(self.bass_power as f32);
-            let reference_db = power_to_db(self.reference_power as f32);
-            let rise = (bass_db - self.previous_db).max(0.0);
-            self.previous_db = bass_db;
-            let response = smooth_range(bass_db - reference_db, 0.0, 8.0);
-            let attack = smooth_range(rise, 7.0, 14.0);
-            strongest = strongest.max(response * attack);
+            strongest = strongest.max(self.process_sample(sample));
         }
         strongest * 0.82
+    }
+
+    fn process_pcm(&mut self, samples: &[f32], sample_rate: f32) -> f32 {
+        self.prepare(sample_rate);
+        let mut strongest: f32 = 0.0;
+        for sample in samples {
+            strongest = strongest.max(self.process_sample(sample.clamp(-1.0, 1.0)));
+        }
+        strongest * 0.82
+    }
+
+    fn prepare(&mut self, sample_rate: f32) {
+        if sample_rate == self.sample_rate {
+            return;
+        }
+        self.sample_rate = sample_rate;
+        self.low = low_pass(25.0, sample_rate);
+        self.bass_top = low_pass(190.0, sample_rate);
+        self.reference_top = low_pass(760.0, sample_rate);
+        self.bass_power = 0.0;
+        self.reference_power = 0.0;
+    }
+
+    fn process_sample(&mut self, sample: f32) -> f32 {
+        let low = self.low.run(sample);
+        let bass_top = self.bass_top.run(sample);
+        let bass = bass_top - low;
+        let reference = self.reference_top.run(sample) - bass_top;
+        self.bass_power = envelope(
+            self.bass_power,
+            (bass * bass) as f64,
+            0.006,
+            0.045,
+            self.sample_rate,
+        );
+        self.reference_power = envelope(
+            self.reference_power,
+            (reference * reference) as f64,
+            0.006,
+            0.045,
+            self.sample_rate,
+        );
+        let bass_db = power_to_db(self.bass_power as f32);
+        let reference_db = power_to_db(self.reference_power as f32);
+        let rise = (bass_db - self.previous_db).max(0.0);
+        self.previous_db = bass_db;
+        let response = smooth_range(bass_db - reference_db, 0.0, 8.0);
+        let attack = smooth_range(rise, 7.0, 14.0);
+        response * attack
     }
 }
 
@@ -115,6 +132,17 @@ const SPECTRUM_DB_FLOOR: f32 = -72.0;
 const SPECTRUM_BASS_LEVEL_FLOOR: f32 = -50.0;
 const SPECTRUM_BASS_LEVEL_CEILING: f32 = -18.0;
 const SPECTRUM_REPORT_INTERVAL_SECONDS: f64 = 1.0 / 30.0;
+const SPECTRUM_ATTACK_SECONDS: f64 = 0.03;
+const SPECTRUM_RELEASE_SECONDS: f64 = 0.12;
+const SPECTRUM_BIN_COUNT: usize = 64;
+const SPECTRAL_FLUX_HISTORY_SIZE: usize = 30;
+const SPECTRAL_FLUX_LOG_GAIN: f32 = 40.0;
+const SPECTRAL_FLUX_THRESHOLD_MULTIPLIER: f32 = 1.35;
+const SPECTRAL_FLUX_MINIMUM_LEVEL: f32 = 0.01;
+const SPECTRAL_FLUX_FULL_LEVEL: f32 = 0.06;
+const SPECTRUM_SUSTAINED_RESPONSE: f32 = 0.3;
+const PCM_REPORT_INTERVAL_SECONDS: f64 = 0.05;
+const PCM_WINDOW_SAMPLES: usize = 2048;
 
 pub struct SpectrumAnalyzer {
     slow_bass_db: f32,
@@ -124,6 +152,7 @@ pub struct SpectrumAnalyzer {
     initialized: bool,
     previous_timestamp: f64,
     current_report_timestamp: f64,
+    previous_output_timestamp: f64,
     unprocessed_history: [f32; 3],
     history_write: usize,
     history_count: usize,
@@ -131,6 +160,30 @@ pub struct SpectrumAnalyzer {
     recent_write: usize,
     target_power: f32,
     power: f32,
+    previous_spectrum: [f32; SPECTRUM_BIN_COUNT],
+    spectrum_initialized: bool,
+    spectral_flux_history: [f32; SPECTRAL_FLUX_HISTORY_SIZE],
+    spectral_flux_write: usize,
+    spectral_flux_count: usize,
+    current_onset: f32,
+    pcm_samples: Vec<f32>,
+    pcm_sample_rate_hz: f32,
+    pcm_pending_samples: usize,
+    pcm_classic_analyzer: AudioAnalyzer,
+    pcm_mode: bool,
+    previous_report_power: f32,
+    current_report_power: f32,
+    previous_report_timestamp: f64,
+    pcm_band_powers: [f32; 5],
+    pcm_spectral_onset: f32,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct PcmAnalysisSnapshot {
+    pub pulse: f32,
+    pub transient: f32,
+    pub onset: f32,
+    pub band_db: [f32; 5],
 }
 
 impl Default for SpectrumAnalyzer {
@@ -143,6 +196,7 @@ impl Default for SpectrumAnalyzer {
             initialized: false,
             previous_timestamp: 0.0,
             current_report_timestamp: 0.0,
+            previous_output_timestamp: 0.0,
             unprocessed_history: [0.0; 3],
             history_write: 0,
             history_count: 0,
@@ -150,6 +204,22 @@ impl Default for SpectrumAnalyzer {
             recent_write: 0,
             target_power: 0.0,
             power: 0.0,
+            previous_spectrum: [0.0; SPECTRUM_BIN_COUNT],
+            spectrum_initialized: false,
+            spectral_flux_history: [0.0; SPECTRAL_FLUX_HISTORY_SIZE],
+            spectral_flux_write: 0,
+            spectral_flux_count: 0,
+            current_onset: 0.0,
+            pcm_samples: Vec::with_capacity(PCM_WINDOW_SAMPLES),
+            pcm_sample_rate_hz: 0.0,
+            pcm_pending_samples: 0,
+            pcm_classic_analyzer: AudioAnalyzer::default(),
+            pcm_mode: false,
+            previous_report_power: 0.0,
+            current_report_power: 0.0,
+            previous_report_timestamp: 0.0,
+            pcm_band_powers: [0.0; 5],
+            pcm_spectral_onset: 0.0,
         }
     }
 }
@@ -161,7 +231,9 @@ impl SpectrumAnalyzer {
         }
         let half = audio.len() / 2;
         let powers = self.read_powers(audio, half);
-        self.push_powers(&powers, timestamp_seconds);
+        let spectrum = self.read_spectrum(audio, half);
+        let onset = self.analyze_spectral_flux(&spectrum);
+        self.push_powers(&powers, onset, timestamp_seconds);
     }
 
     pub fn push_pcm(&mut self, samples: &[f32], sample_rate_hz: f32, timestamp_seconds: f64) {
@@ -173,18 +245,57 @@ impl SpectrumAnalyzer {
             return;
         }
 
+        if (sample_rate_hz - self.pcm_sample_rate_hz).abs() > f32::EPSILON {
+            self.reset();
+            self.pcm_sample_rate_hz = sample_rate_hz;
+        }
+        self.pcm_mode = true;
+        let timestamp_ns = (timestamp_seconds * 1_000_000_000.0)
+            .round()
+            .clamp(0.0, i64::MAX as f64) as i64;
+        self.pcm_classic_analyzer
+            .process_pcm_waveform(samples, sample_rate_hz, timestamp_ns);
+
+        let hop_samples = (sample_rate_hz * PCM_REPORT_INTERVAL_SECONDS as f32)
+            .round()
+            .max(1.0) as usize;
+        self.pcm_samples
+            .extend(samples.iter().map(|sample| sample.clamp(-1.0, 1.0)));
+        if self.pcm_samples.len() > PCM_WINDOW_SAMPLES {
+            let extra = self.pcm_samples.len() - PCM_WINDOW_SAMPLES;
+            self.pcm_samples.drain(0..extra);
+        }
+        self.pcm_pending_samples = self.pcm_pending_samples.saturating_add(samples.len());
+        if self.pcm_samples.len() < PCM_WINDOW_SAMPLES || self.pcm_pending_samples < hop_samples {
+            return;
+        }
+        self.pcm_pending_samples %= hop_samples;
+
         let mut spectrum = [0.0; 128];
+        let mut magnitudes = [0.0; SPECTRUM_BIN_COUNT];
         for index in 0..64 {
             let normalized = index as f32 / 63.0;
             let frequency = 30.0 * (20_000.0_f32 / 30.0).powf(normalized);
-            let magnitude = pcm_frequency_magnitude(samples, sample_rate_hz, frequency);
+            let magnitude = pcm_frequency_magnitude(&self.pcm_samples, sample_rate_hz, frequency);
+            magnitudes[index] = magnitude;
             spectrum[index] = magnitude;
             spectrum[index + 64] = magnitude;
         }
-        self.push(&spectrum, timestamp_seconds);
+        let onset = self.analyze_spectral_flux(&magnitudes);
+        let powers = self.read_powers(&spectrum, 64);
+        self.pcm_band_powers = powers;
+        self.pcm_spectral_onset = onset;
+        let classic_power = self
+            .pcm_classic_analyzer
+            .process_spectrum_powers(&powers, timestamp_ns);
+        let power = classic_power.max(onset);
+        self.previous_report_power = self.current_report_power;
+        self.current_report_power = power;
+        self.previous_report_timestamp = self.current_report_timestamp;
+        self.current_report_timestamp = timestamp_seconds;
     }
 
-    fn push_powers(&mut self, powers: &[f32; 5], timestamp_seconds: f64) {
+    fn push_powers(&mut self, powers: &[f32; 5], onset: f32, timestamp_seconds: f64) {
         let delta_seconds = if self.previous_timestamp > 0.0 {
             (timestamp_seconds - self.previous_timestamp).clamp(0.0, 0.25)
         } else {
@@ -193,12 +304,24 @@ impl SpectrumAnalyzer {
         self.previous_timestamp = timestamp_seconds;
         let response = self.analyze(&powers, delta_seconds);
         let confirmed = self.confirm_response(response, response >= 0.72);
-        self.recent_samples[self.recent_write] = confirmed;
+        self.recent_samples[self.recent_write] = confirmed * SPECTRUM_SUSTAINED_RESPONSE;
         self.recent_write = (self.recent_write + 1) % self.recent_samples.len();
+        self.current_onset = onset;
         self.current_report_timestamp = timestamp_seconds;
     }
 
     pub fn get_interpolated(&mut self, timestamp_seconds: f64) -> f32 {
+        if self.pcm_mode {
+            return self.get_pcm_interpolated(timestamp_seconds);
+        }
+        let elapsed = if self.previous_output_timestamp > 0.0
+            && timestamp_seconds > self.previous_output_timestamp
+        {
+            (timestamp_seconds - self.previous_output_timestamp).min(0.25)
+        } else {
+            SPECTRUM_REPORT_INTERVAL_SECONDS
+        };
+        self.previous_output_timestamp = timestamp_seconds;
         let report_is_current = self.current_report_timestamp != 0.0
             && timestamp_seconds - self.current_report_timestamp <= 0.25;
         let mut weighted_samples = 0.0;
@@ -209,12 +332,52 @@ impl SpectrumAnalyzer {
                 weighted_samples += self.recent_samples[sample_index] * weight;
             }
         }
-        self.target_power = weighted_samples.max(self.target_power * 0.99);
-        self.power += (self.target_power - self.power) * 0.5;
+        self.target_power = weighted_samples.max(if report_is_current {
+            self.current_onset
+        } else {
+            0.0
+        });
+        let response_seconds = if self.target_power > self.power {
+            SPECTRUM_ATTACK_SECONDS
+        } else {
+            SPECTRUM_RELEASE_SECONDS
+        };
+        let response = 1.0 - (-elapsed / response_seconds).exp() as f32;
+        self.power += (self.target_power - self.power) * response;
         if self.power * self.power < 1e-8 {
             self.power = 0.0;
         }
         smooth_quintic(self.power)
+    }
+
+    fn get_pcm_interpolated(&self, timestamp_seconds: f64) -> f32 {
+        if self.current_report_timestamp == 0.0
+            || timestamp_seconds - self.current_report_timestamp > 0.25
+        {
+            return 0.0;
+        }
+        let report_seconds = self.current_report_timestamp - self.previous_report_timestamp;
+        if self.previous_report_timestamp == 0.0 || report_seconds <= 0.0 {
+            return self.current_report_power.clamp(0.0, 1.0);
+        }
+        let sample_timestamp = timestamp_seconds - report_seconds;
+        let amount = ((sample_timestamp - self.previous_report_timestamp) / report_seconds)
+            .clamp(0.0, 1.0) as f32;
+        (self.previous_report_power
+            + (self.current_report_power - self.previous_report_power) * amount)
+            .clamp(0.0, 1.0)
+    }
+
+    pub fn pcm_analysis_snapshot(&self) -> Option<PcmAnalysisSnapshot> {
+        if !self.pcm_mode || self.current_report_timestamp == 0.0 {
+            return None;
+        }
+        Some(PcmAnalysisSnapshot {
+            pulse: self.current_report_power.clamp(0.0, 1.0),
+            transient: self.pcm_classic_analyzer.transient_response.clamp(0.0, 1.0),
+            onset: self.pcm_spectral_onset.clamp(0.0, 1.0),
+            band_db: self.pcm_band_powers.map(power_to_db),
+        })
     }
 
     pub fn reset(&mut self) {
@@ -236,6 +399,93 @@ impl SpectrumAnalyzer {
             result[index] = (left + right) * 0.5;
         }
         result
+    }
+
+    fn read_spectrum(&self, audio: &[f32], half: usize) -> [f32; SPECTRUM_BIN_COUNT] {
+        let mut spectrum = [0.0; SPECTRUM_BIN_COUNT];
+        if half == 0 {
+            return spectrum;
+        }
+        for (index, value) in spectrum.iter_mut().enumerate() {
+            let source_index = if half == 1 {
+                0
+            } else {
+                index * (half - 1) / (SPECTRUM_BIN_COUNT - 1)
+            };
+            let left = audio
+                .get(source_index)
+                .copied()
+                .unwrap_or_default()
+                .max(0.0);
+            let right = audio
+                .get(half + source_index)
+                .copied()
+                .unwrap_or(left)
+                .max(0.0);
+            *value = (left + right) * 0.5;
+        }
+        spectrum
+    }
+
+    fn analyze_spectral_flux(&mut self, spectrum: &[f32; SPECTRUM_BIN_COUNT]) -> f32 {
+        let mut current = [0.0; SPECTRUM_BIN_COUNT];
+        let mut level = 0.0;
+        for (index, value) in spectrum.iter().enumerate() {
+            current[index] = (1.0 + SPECTRAL_FLUX_LOG_GAIN * value.max(0.0)).ln();
+            level += current[index];
+        }
+        level /= SPECTRUM_BIN_COUNT as f32;
+
+        if !self.spectrum_initialized {
+            self.previous_spectrum = current;
+            self.spectrum_initialized = true;
+            return 0.0;
+        }
+
+        let bands = [(0, 20, 1.0), (20, 43, 0.85), (43, 64, 0.65)];
+        let mut flux = 0.0_f32;
+        for (start, end, weight) in bands {
+            let mut positive_change = 0.0;
+            let mut current_energy = 0.0;
+            for index in start..end {
+                positive_change += (current[index] - self.previous_spectrum[index]).max(0.0);
+                current_energy += current[index];
+            }
+            let band_flux = positive_change / (current_energy + 1e-5);
+            flux = flux.max(band_flux * weight);
+        }
+        self.previous_spectrum = current;
+
+        let baseline = self.spectral_flux_median();
+        self.spectral_flux_history[self.spectral_flux_write] = flux;
+        self.spectral_flux_write =
+            (self.spectral_flux_write + 1) % self.spectral_flux_history.len();
+        self.spectral_flux_count =
+            (self.spectral_flux_count + 1).min(self.spectral_flux_history.len());
+        if self.spectral_flux_count < 4 || level <= SPECTRAL_FLUX_MINIMUM_LEVEL {
+            return 0.0;
+        }
+
+        let threshold = (baseline * SPECTRAL_FLUX_THRESHOLD_MULTIPLIER).max(1e-4);
+        let relative_flux = flux / threshold;
+        let onset = smooth_range(relative_flux, 0.85, 2.0);
+        onset * smooth_range(level, SPECTRAL_FLUX_MINIMUM_LEVEL, SPECTRAL_FLUX_FULL_LEVEL)
+    }
+
+    fn spectral_flux_median(&self) -> f32 {
+        if self.spectral_flux_count == 0 {
+            return 0.0;
+        }
+        let mut values = [0.0; SPECTRAL_FLUX_HISTORY_SIZE];
+        values[..self.spectral_flux_count]
+            .copy_from_slice(&self.spectral_flux_history[..self.spectral_flux_count]);
+        values[..self.spectral_flux_count].sort_by(f32::total_cmp);
+        let middle = self.spectral_flux_count / 2;
+        if self.spectral_flux_count % 2 == 0 {
+            (values[middle - 1] + values[middle]) * 0.5
+        } else {
+            values[middle]
+        }
     }
 
     fn average_band_power(
@@ -372,6 +622,26 @@ impl AudioAnalyzer {
             .max(self.transient_response * decay(elapsed, 0.063));
     }
 
+    pub fn process_pcm_waveform(
+        &mut self,
+        samples: &[f32],
+        sample_rate_hz: f32,
+        timestamp_ns: i64,
+    ) {
+        if samples.is_empty()
+            || !sample_rate_hz.is_finite()
+            || !(2_000.0..=192_000.0).contains(&sample_rate_hz)
+        {
+            return;
+        }
+        let elapsed = elapsed_seconds(self.previous_waveform_ns, timestamp_ns);
+        self.previous_waveform_ns = timestamp_ns;
+        self.transient_response = self
+            .transient_detector
+            .process_pcm(samples, sample_rate_hz)
+            .max(self.transient_response * decay(elapsed, 0.063));
+    }
+
     pub fn process_fft(&mut self, fft: &[i8], sample_rate_hz: f32, timestamp_ns: i64) -> f32 {
         if fft.len() < 8
             || !sample_rate_hz.is_finite()
@@ -379,14 +649,25 @@ impl AudioAnalyzer {
         {
             return 0.0;
         }
+        let powers = [
+            band_power(fft, sample_rate_hz, 30.0, 105.0),
+            band_power(fft, sample_rate_hz, 75.0, 155.0),
+            band_power(fft, sample_rate_hz, 145.0, 210.0),
+            band_power(fft, sample_rate_hz, 155.0, 380.0),
+            band_power(fft, sample_rate_hz, 380.0, 760.0),
+        ];
+        self.process_spectrum_powers(&powers, timestamp_ns)
+    }
+
+    pub fn process_spectrum_powers(&mut self, powers: &[f32; 5], timestamp_ns: i64) -> f32 {
         let elapsed = elapsed_seconds(self.previous_fft_ns, timestamp_ns);
         self.previous_fft_ns = timestamp_ns;
 
-        let low_bass = band_power(fft, sample_rate_hz, 30.0, 105.0);
-        let bass_note = band_power(fft, sample_rate_hz, 75.0, 155.0);
-        let upper_bass = band_power(fft, sample_rate_hz, 145.0, 210.0);
-        let low_mid = band_power(fft, sample_rate_hz, 155.0, 380.0);
-        let mid = band_power(fft, sample_rate_hz, 380.0, 760.0);
+        let low_bass = powers[0];
+        let bass_note = powers[1];
+        let upper_bass = powers[2];
+        let low_mid = powers[3];
+        let mid = powers[4];
         let core_bass = low_bass.max(bass_note * 0.9);
         let supported_upper = upper_bass.min(core_bass * 1.35);
         let bass_db = power_to_db(core_bass + supported_upper * 0.2);
@@ -588,5 +869,133 @@ mod tests {
         let mut analyzer = SpectrumAnalyzer::default();
         analyzer.push_pcm(&[0.0; 512], 48_000.0, 1.0);
         assert_eq!(analyzer.get_interpolated(1.0), 0.0);
+    }
+
+    #[test]
+    fn 频谱鼓点后会及时回落() {
+        let mut analyzer = SpectrumAnalyzer::default();
+        let mut timestamp = 1.0;
+        let silence = [0.0; 5];
+        let kick = [1.0, 1.0, 0.2, 0.0001, 0.0001];
+
+        for _ in 0..4 {
+            timestamp += SPECTRUM_REPORT_INTERVAL_SECONDS;
+            analyzer.push_powers(&silence, 0.0, timestamp);
+            analyzer.get_interpolated(timestamp);
+        }
+
+        let mut peak = 0.0_f32;
+        for _ in 0..4 {
+            timestamp += SPECTRUM_REPORT_INTERVAL_SECONDS;
+            analyzer.push_powers(&kick, 1.0, timestamp);
+            peak = peak.max(analyzer.get_interpolated(timestamp));
+        }
+
+        let mut released = peak;
+        for _ in 0..12 {
+            timestamp += SPECTRUM_REPORT_INTERVAL_SECONDS;
+            analyzer.push_powers(&silence, 0.0, timestamp);
+            released = analyzer.get_interpolated(timestamp);
+        }
+
+        let mut second_peak = released;
+        for _ in 0..4 {
+            timestamp += SPECTRUM_REPORT_INTERVAL_SECONDS;
+            analyzer.push_powers(&kick, 1.0, timestamp);
+            second_peak = second_peak.max(analyzer.get_interpolated(timestamp));
+        }
+
+        assert!(peak > 0.5, "鼓点峰值过低：{peak}");
+        assert!(released < 0.2, "鼓点释放过慢：{released}");
+        assert!(
+            second_peak > released + 0.5,
+            "连续鼓点没有形成明显峰谷：{released} -> {second_peak}"
+        );
+    }
+
+    #[test]
+    fn 高频打击乐也会触发脉冲() {
+        let mut analyzer = SpectrumAnalyzer::default();
+        let mut timestamp = 1.0;
+        let base = [0.08; 128];
+
+        for _ in 0..5 {
+            timestamp += SPECTRUM_REPORT_INTERVAL_SECONDS;
+            analyzer.push(&base, timestamp);
+            analyzer.get_interpolated(timestamp);
+        }
+
+        let mut clap = base;
+        for index in 43..64 {
+            clap[index] = 0.9;
+            clap[index + 64] = 0.9;
+        }
+        timestamp += SPECTRUM_REPORT_INTERVAL_SECONDS;
+        analyzer.push(&clap, timestamp);
+        let peak = analyzer.get_interpolated(timestamp);
+
+        assert!(peak > 0.5, "高频打击乐脉冲过低：{peak}");
+    }
+
+    #[test]
+    fn pcm低频瞬态使用安卓经典响应() {
+        let mut analyzer = SpectrumAnalyzer::default();
+        let sample_rate = 48_000.0_f32;
+        let mut sample_index = 0_usize;
+        let mut peak = 0.0_f32;
+        let mut released = 0.0_f32;
+
+        for _ in 0..300 {
+            let mut frame = [0.0_f32; 512];
+            for sample in &mut frame {
+                let seconds = sample_index as f32 / sample_rate;
+                if (1.0..1.12).contains(&seconds) {
+                    *sample = (seconds * 80.0 * std::f32::consts::TAU).sin() * 0.9;
+                }
+                sample_index += 1;
+            }
+            let timestamp = sample_index as f64 / sample_rate as f64;
+            analyzer.push_pcm(&frame, sample_rate, timestamp);
+            let pulse = analyzer.get_interpolated(timestamp);
+            if timestamp >= 1.0 {
+                peak = peak.max(pulse);
+            }
+            if timestamp >= 3.0 {
+                released = pulse;
+            }
+        }
+
+        assert!(peak > 0.5, "PCM 低频瞬态峰值过低：{peak}");
+        assert!(released < 0.2, "PCM 低频瞬态释放过慢：{released}");
+    }
+
+    #[test]
+    fn pcm重复鼓点会持续重新触发() {
+        let mut analyzer = SpectrumAnalyzer::default();
+        let sample_rate = 48_000.0_f32;
+        let mut sample_index = 0_usize;
+        let mut late_onset = 0.0_f32;
+
+        for _ in 0..480 {
+            let mut frame = [0.0_f32; 512];
+            for sample in &mut frame {
+                let seconds = sample_index as f32 / sample_rate;
+                let beat_phase = seconds % 0.5;
+                if beat_phase < 0.08 {
+                    let envelope = 1.0 - beat_phase / 0.08;
+                    *sample = (seconds * 82.0 * std::f32::consts::TAU).sin() * envelope * 0.85
+                        + (seconds * 2_200.0 * std::f32::consts::TAU).sin() * envelope * 0.12;
+                }
+                sample_index += 1;
+            }
+            let timestamp = sample_index as f64 / sample_rate as f64;
+            analyzer.push_pcm(&frame, sample_rate, timestamp);
+            analyzer.get_interpolated(timestamp);
+            if timestamp >= 3.0 {
+                late_onset = late_onset.max(analyzer.pcm_spectral_onset);
+            }
+        }
+
+        assert!(late_onset > 0.5, "后续鼓点没有重新触发：{late_onset}");
     }
 }

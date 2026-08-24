@@ -39,7 +39,7 @@ float rotationTimeScale(int instance) {
 void main() {
     if (uArtworkFill) {
         gl_Position = vec4(aPosition, 0.0, 1.0);
-        vTexCoord = (aTexCoord - 0.5) / uViewScale + 0.5;
+        vTexCoord = (aTexCoord - 0.5) / (uViewScale * uImageScales.x) + 0.5;
         return;
     }
 
@@ -49,10 +49,8 @@ void main() {
     position *= modelScale(uInstance);
     position += modelTranslation(uInstance);
     position *= uViewScale;
-    
     position *= uImageScales.x;
 
-    
     if (uInstance == 2) {
         float parentAngle = uTime * twoPi / rotationTimeScale(0);
         position = rotateCounterClockwise(position, parentAngle);

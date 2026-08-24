@@ -14,24 +14,32 @@ fn build_macos_native() {
         .file("native/macos_now_playing.m")
         .flag("-fobjc-arc")
         .flag("-fblocks")
-        .flag("-mmacosx-version-min=13.0")
+        .flag("-mmacosx-version-min=15.0")
         .compile("pearwall_macos_now_playing");
     cc::Build::new()
-        .file("native/macos_agent_service.m")
+        .file("native/macos_app_service.m")
         .flag("-fobjc-arc")
-        .flag("-mmacosx-version-min=13.0")
-        .compile("pearwall_macos_agent_service");
+        .flag("-mmacosx-version-min=15.0")
+        .compile("pearwall_macos_app_service");
     cc::Build::new()
-        .file("native/macos_agent_status_item.m")
+        .file("native/macos_status_item.m")
         .flag("-fobjc-arc")
-        .flag("-mmacosx-version-min=13.0")
-        .compile("pearwall_macos_agent_status_item");
+        .flag("-mmacosx-version-min=15.0")
+        .compile("pearwall_macos_status_item");
+    cc::Build::new()
+        .file("native/macos_audio_tap.m")
+        .flag("-fobjc-arc")
+        .flag("-fblocks")
+        .flag("-mmacosx-version-min=15.0")
+        .compile("pearwall_macos_audio_tap");
     println!("cargo:rustc-link-lib=framework=AppKit");
+    println!("cargo:rustc-link-lib=framework=CoreAudio");
     println!("cargo:rustc-link-lib=framework=Foundation");
     println!("cargo:rustc-link-lib=framework=ServiceManagement");
     println!("cargo:rerun-if-changed=native/macos_now_playing.m");
-    println!("cargo:rerun-if-changed=native/macos_agent_service.m");
-    println!("cargo:rerun-if-changed=native/macos_agent_status_item.m");
+    println!("cargo:rerun-if-changed=native/macos_app_service.m");
+    println!("cargo:rerun-if-changed=native/macos_status_item.m");
+    println!("cargo:rerun-if-changed=native/macos_audio_tap.m");
 }
 
 fn add_macos_swift_runtime_paths() {
@@ -39,9 +47,7 @@ fn add_macos_swift_runtime_paths() {
         return;
     }
 
-    for binary in ["pearwall-desktop", "pearwall-agent"] {
-        println!("cargo:rustc-link-arg-bin={binary}=-Wl,-rpath,/usr/lib/swift");
-    }
+    println!("cargo:rustc-link-arg-bin=pearwall-desktop=-Wl,-rpath,/usr/lib/swift");
     let Ok(output) = Command::new("xcode-select").arg("-p").output() else {
         return;
     };
@@ -56,8 +62,6 @@ fn add_macos_swift_runtime_paths() {
         format!("{developer_dir}/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift-5.5/macosx"),
         format!("{developer_dir}/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/macosx"),
     ] {
-        for binary in ["pearwall-desktop", "pearwall-agent"] {
-            println!("cargo:rustc-link-arg-bin={binary}=-Wl,-rpath,{path}");
-        }
+        println!("cargo:rustc-link-arg-bin=pearwall-desktop=-Wl,-rpath,{path}");
     }
 }

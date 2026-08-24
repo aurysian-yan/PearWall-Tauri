@@ -29,6 +29,7 @@ import {
   SlidersHorizontalIcon,
   SpeakerHighIcon,
   UploadSimpleIcon,
+  WaveformIcon,
   CircleHalfIcon,
   DropIcon,
 } from "@phosphor-icons/react";
@@ -124,7 +125,7 @@ const landscapePresets: SelectOption<number>[] = [
 
 const tintLogo = new URL("./tint-logo.png", import.meta.url).href;
 const projectDependencies = licenseDataJson.frontend;
-const permissionNoticeStorageKey = "pearwall.permission-notice.v1";
+const permissionNoticeStorageKey = "pearwall.permission-notice.v2";
 
 function shouldShowPermissionNotice() {
   try {
@@ -907,8 +908,9 @@ function PermissionNotice({
             <Modal.Body>
               <p>
                 为了让画面跟随当前播放的声音律动，macOS 要求 Pear Wall
-                获得“屏幕与系统音频录制”权限。Pear Wall
-                只分析实时音量与节奏，不会保存屏幕画面或音频内容。
+                获得系统音频录制权限。该权限由 macOS
+                归类在“屏幕与系统音频录制”中，但 Pear Wall
+                不会读取屏幕画面，也不会保存音频内容。
               </p>
               <div className="mt-4 space-y-3">
                 <div className="flex gap-3">
@@ -932,7 +934,7 @@ function PermissionNotice({
                     <p className="font-medium text-foreground">
                       屏幕保护程序与动态壁纸
                     </p>
-                    <p>由后台运行时持续提供声音节奏数据。</p>
+                    <p>由 Pear Wall 在后台持续提供声音节奏数据。</p>
                   </div>
                 </div>
               </div>
@@ -948,8 +950,7 @@ function PermissionNotice({
                   <li>若 macOS 显示“退出并重新打开”，请选择该操作。</li>
                   <li>
                     如果没有出现提示，从菜单栏的 Pear Wall
-                    图标中选择“退出后台运行时”，再按 ⌘Q 退出 Pear
-                    Wall 并重新打开。
+                    图标中选择“退出 Pear Wall”，然后重新打开。
                   </li>
                 </ol>
                 <p className="mt-3 text-xs">只关闭窗口不算完全退出。</p>
@@ -1466,6 +1467,20 @@ export function SettingsApp() {
                   onChange={(value) => update("audioVisualization", value)}
                 />
               </SettingRow>
+              {settings.audioVisualization && (
+                <>
+                  <Separator className="mx-2 w-[calc(100%-1rem)] bg-white/15" />
+                  <RangeSetting
+                    icon={WaveformIcon}
+                    label="音频律动强度"
+                    value={settings.audioIntensity}
+                    minValue={0.5}
+                    maxValue={3}
+                    step={0.1}
+                    onChange={(value) => update("audioIntensity", value)}
+                  />
+                </>
+              )}
               <Separator className="mx-2 w-[calc(100%-1rem)] bg-white/15" />
               <SettingRow
                 icon={MagicWandIcon}
