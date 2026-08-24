@@ -13,11 +13,14 @@ final class PearWallRuntimeStateReader {
     private static let magic: [UInt8] = Array("PWRSTATE".utf8)
     private var mapping: UnsafeMutableRawPointer?
     private var nextOpenAttempt = Date.distantPast
+    private let stateURL: URL?
+
+    init(stateURL: URL? = nil) {
+        self.stateURL = stateURL
+    }
 
     deinit {
-        if let mapping {
-            munmap(mapping, Self.stateSize)
-        }
+        closeMapping()
     }
 
     func currentSnapshot() -> PearWallRuntimeSnapshot? {
@@ -41,6 +44,7 @@ final class PearWallRuntimeStateReader {
             let now = UInt64(max(0, Date().timeIntervalSince1970 * 1_000))
             guard now >= updatedAtMilliseconds,
                   now - updatedAtMilliseconds <= Self.maximumAgeMilliseconds else {
+                closeMapping(retryAfter: 1)
                 return nil
             }
             return PearWallRuntimeSnapshot(
@@ -55,7 +59,7 @@ final class PearWallRuntimeStateReader {
     private func openIfNeeded() {
         guard mapping == nil, Date() >= nextOpenAttempt else { return }
         nextOpenAttempt = Date().addingTimeInterval(1)
-        guard let url = pearWallApplicationSupportDirectory()?
+        guard let url = stateURL ?? pearWallApplicationSupportDirectory()?
             .appendingPathComponent("runtime-state-v1.bin") else {
             return
         }
@@ -77,6 +81,13 @@ final class PearWallRuntimeStateReader {
             return
         }
         mapping = candidate
+    }
+
+    private func closeMapping(retryAfter: TimeInterval = 0) {
+        guard let mapping else { return }
+        munmap(mapping, Self.stateSize)
+        self.mapping = nil
+        nextOpenAttempt = Date().addingTimeInterval(retryAfter)
     }
 
     private func validState(_ mapping: UnsafeMutableRawPointer) -> Bool {

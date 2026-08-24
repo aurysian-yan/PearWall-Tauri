@@ -138,6 +138,12 @@ private struct PearWallMediaArtwork {
     let playing: Bool
 }
 
+private struct PearWallFileSignature: Equatable {
+    let modificationDate: Date
+    let size: UInt64
+    let fileNumber: UInt64
+}
+
 private enum PearWallMediaArtworkCache {
     private static let maximumAgeMilliseconds: UInt64 = 10_000
 
@@ -175,8 +181,9 @@ final class PearWallScreenSaverView: ScreenSaverView {
     private var configurationDetailsLabel: NSTextField?
     private var configurationWindow: NSWindow?
     private var refreshTimer: Timer?
+    private var screenParametersObserver: NSObjectProtocol?
     private var settings = PearWallSettings()
-    private var lastSettingsModificationDate: Date?
+    private var lastSettingsSignature: PearWallFileSignature?
     private var lastArtworkKey = ""
     private var previewMode = false
     private var renderingActive = false
@@ -202,18 +209,43 @@ final class PearWallScreenSaverView: ScreenSaverView {
         configureView()
     }
 
+    deinit {
+        refreshTimer?.invalidate()
+        if let screenParametersObserver {
+            NotificationCenter.default.removeObserver(screenParametersObserver)
+        }
+        restoreCursorVisibility()
+    }
+
     private func configureView() {
         animationTimeInterval = 1.0 / 60.0
         wantsLayer = true
         layer?.backgroundColor = NSColor.black.cgColor
         settings = PearWallSettings(json: loadSettingsJSON())
         configureConfigurationDetailsLabel()
+        screenParametersObserver = NotificationCenter.default.addObserver(
+            forName: NSApplication.didChangeScreenParametersNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            guard let self, self.renderingActive else { return }
+            self.reconcileRenderTarget()
+            self.refreshArtwork()
+            self.updateConfigurationDetails()
+        }
     }
 
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
+        updateConfigurationDetails()
         guard renderingActive else { return }
         reconcileRenderTarget()
+        refreshArtwork()
+    }
+
+    override func setFrameSize(_ newSize: NSSize) {
+        super.setFrameSize(newSize)
+        updateConfigurationDetails()
     }
 
     override func startAnimation() {
@@ -288,11 +320,11 @@ final class PearWallScreenSaverView: ScreenSaverView {
 
     private func reconcileRenderTarget() {
         let shouldRender = previewMode || isCurrentScreenSelected()
+        configurationDetailsLabel?.isHidden = !shouldRender
         guard shouldRender != renderTargetActive || (shouldRender && metalView == nil) else {
             return
         }
         renderTargetActive = shouldRender
-        configurationDetailsLabel?.isHidden = !shouldRender
         if shouldRender {
             createMetalViewIfNeeded()
             refreshArtwork()
@@ -303,17 +335,26 @@ final class PearWallScreenSaverView: ScreenSaverView {
 
     private func isCurrentScreenSelected() -> Bool {
         let screens = NSScreen.screens
-        guard !screens.isEmpty,
-              let currentScreen = window?.screen,
-              let currentDisplayID = Self.displayID(for: currentScreen) else {
+        guard !screens.isEmpty else {
             return false
         }
-        let targetScreen: NSScreen?
+        guard let currentScreen = window?.screen,
+              let currentDisplayID = Self.displayID(for: currentScreen) else {
+            return screens.count == 1
+        }
+        let primaryScreen = screens.first(where: {
+            $0.frame.origin == .zero
+        }) ?? screens[0]
+        let primaryDisplayID = Self.displayID(for: primaryScreen)
+        let secondaryScreen = screens.first(where: {
+            Self.displayID(for: $0) != primaryDisplayID
+        })
+        let targetScreen: NSScreen
         switch settings.screenSaverDisplay {
         case .primary:
-            targetScreen = screens.first
+            targetScreen = primaryScreen
         case .secondary:
-            targetScreen = screens.dropFirst().first
+            targetScreen = secondaryScreen ?? primaryScreen
         }
         guard let targetDisplayID = Self.displayID(for: targetScreen) else {
             return false
@@ -329,6 +370,7 @@ final class PearWallScreenSaverView: ScreenSaverView {
         guard refreshTimer == nil else { return }
         let timer = Timer(timeInterval: 1, repeats: true) { [weak self] _ in
             self?.refreshSharedSettings()
+            self?.reconcileRenderTarget()
             self?.refreshArtwork()
         }
         RunLoop.main.add(timer, forMode: .common)
@@ -345,7 +387,7 @@ final class PearWallScreenSaverView: ScreenSaverView {
            let data = try? Data(contentsOf: url),
            let json = String(data: data, encoding: .utf8),
            Self.isSettingsJSON(json) {
-            lastSettingsModificationDate = Self.modificationDate(for: url)
+            lastSettingsSignature = Self.fileSignature(for: url)
             return json
         }
         if let legacy = screenSaverDefaults?.string(forKey: Self.settingsKey),
@@ -357,16 +399,16 @@ final class PearWallScreenSaverView: ScreenSaverView {
 
     private func refreshSharedSettings() {
         guard let url = Self.sharedSettingsURL,
-              let modificationDate = Self.modificationDate(for: url),
-              modificationDate != lastSettingsModificationDate else {
+              let signature = Self.fileSignature(for: url),
+              signature != lastSettingsSignature else {
             return
         }
-        lastSettingsModificationDate = modificationDate
         guard let data = try? Data(contentsOf: url),
               let json = String(data: data, encoding: .utf8),
               Self.isSettingsJSON(json) else {
             return
         }
+        lastSettingsSignature = signature
         settings = PearWallSettings(json: json)
         metalRenderer?.setConfiguration(settings.metalConfiguration)
         reconcileRenderTarget()
@@ -375,9 +417,16 @@ final class PearWallScreenSaverView: ScreenSaverView {
         refreshArtwork()
     }
 
-    private static func modificationDate(for url: URL) -> Date? {
+    private static func fileSignature(for url: URL) -> PearWallFileSignature? {
         let attributes = try? FileManager.default.attributesOfItem(atPath: url.path)
-        return attributes?[.modificationDate] as? Date
+        guard let modificationDate = attributes?[.modificationDate] as? Date else {
+            return nil
+        }
+        return PearWallFileSignature(
+            modificationDate: modificationDate,
+            size: (attributes?[.size] as? NSNumber)?.uint64Value ?? 0,
+            fileNumber: (attributes?[.systemFileNumber] as? NSNumber)?.uint64Value ?? 0
+        )
     }
 
     private static func isSettingsJSON(_ value: String) -> Bool {
@@ -397,6 +446,8 @@ final class PearWallScreenSaverView: ScreenSaverView {
                applyArtwork(source: artwork.source, key: "media:\(artwork.key)", to: metalRenderer) {
                 return
             }
+        } else {
+            playbackPlaying = true
         }
         switch settings.artworkFallback {
         case .custom where !settings.customArtwork.isEmpty:
@@ -438,14 +489,18 @@ final class PearWallScreenSaverView: ScreenSaverView {
             ofSize: NSFont.smallSystemFontSize,
             weight: .regular
         )
-        label.maximumNumberOfLines = 8
+        label.maximumNumberOfLines = 0
         label.setContentHuggingPriority(.required, for: .vertical)
         label.translatesAutoresizingMaskIntoConstraints = false
         addSubview(label)
+        let minimumHeight = ceil(
+            (label.font?.boundingRectForFont.height ?? NSFont.smallSystemFontSize) * 8
+        )
         NSLayoutConstraint.activate([
             label.topAnchor.constraint(equalTo: topAnchor, constant: 16),
             label.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 16),
             label.widthAnchor.constraint(lessThanOrEqualToConstant: 320),
+            label.heightAnchor.constraint(greaterThanOrEqualToConstant: minimumHeight),
         ])
         configurationDetailsLabel = label
         updateConfigurationDetails()

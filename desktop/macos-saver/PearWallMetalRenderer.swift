@@ -453,6 +453,7 @@ final class PearWallMetalRenderer: NSObject, MTKViewDelegate {
     private static let blurDownsample = 4
     private static let kawaseSigmaPerOffset: Float = 16
     private static let maximumScreenSaverPixels = 1920 * 1080
+    private let inFlightSemaphore = DispatchSemaphore(value: 3)
     private let commandQueue: MTLCommandQueue
     private let artworkPipeline: MTLRenderPipelineState
     private let blurPipeline: MTLRenderPipelineState
@@ -625,11 +626,18 @@ final class PearWallMetalRenderer: NSObject, MTKViewDelegate {
         guard let currentArtwork,
               let device = view.device,
               let targets = ensureTargets(view: view, device: device),
-              let mesh = ensureMesh(view: view, device: device),
-              let descriptor = view.currentRenderPassDescriptor,
+              let mesh = ensureMesh(view: view, device: device) else {
+            return
+        }
+        guard inFlightSemaphore.wait(timeout: .now()) == .success else { return }
+        guard let descriptor = view.currentRenderPassDescriptor,
               let drawable = view.currentDrawable,
               let commandBuffer = commandQueue.makeCommandBuffer() else {
+            inFlightSemaphore.signal()
             return
+        }
+        commandBuffer.addCompletedHandler { [inFlightSemaphore] _ in
+            inFlightSemaphore.signal()
         }
         let transitionMix = updateArtworkTransition(
             at: ProcessInfo.processInfo.systemUptime
