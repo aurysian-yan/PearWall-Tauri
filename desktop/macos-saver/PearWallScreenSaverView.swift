@@ -54,6 +54,18 @@ private struct PearWallSettings {
         }
     }
 
+    var metalConfiguration: PearWallMetalConfiguration {
+        PearWallMetalConfiguration(
+            renderScale: renderScale,
+            blurEnabled: blurEnabled,
+            blurMultiplier: blurMultiplier,
+            scrimAlpha: scrimAlpha,
+            portraitPreset: portraitPreset,
+            landscapePreset: landscapePreset,
+            randomPreset: randomPreset
+        )
+    }
+
     init(json: String = "{}") {
         guard let data = json.data(using: .utf8),
               let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
@@ -159,6 +171,7 @@ final class PearWallScreenSaverView: ScreenSaverView {
     private static let companionAppBundleIdentifier = "com.nevoit.pearwall.desktop"
     private var metalView: MTKView?
     private var metalRenderer: PearWallMetalRenderer?
+    private var configurationDetailsLabel: NSTextField?
     private var configurationWindow: NSWindow?
     private var refreshTimer: Timer?
     private var settings = PearWallSettings()
@@ -193,6 +206,7 @@ final class PearWallScreenSaverView: ScreenSaverView {
         wantsLayer = true
         layer?.backgroundColor = NSColor.black.cgColor
         settings = PearWallSettings(json: loadSettingsJSON())
+        configureConfigurationDetailsLabel()
     }
 
     override func viewDidMoveToWindow() {
@@ -253,7 +267,12 @@ final class PearWallScreenSaverView: ScreenSaverView {
         guard let renderer = try? PearWallMetalRenderer(view: view) else {
             return
         }
-        addSubview(view)
+        renderer.setConfiguration(settings.metalConfiguration)
+        if let configurationDetailsLabel {
+            addSubview(view, positioned: .below, relativeTo: configurationDetailsLabel)
+        } else {
+            addSubview(view)
+        }
         metalView = view
         metalRenderer = renderer
         lastArtworkKey = ""
@@ -272,6 +291,7 @@ final class PearWallScreenSaverView: ScreenSaverView {
             return
         }
         renderTargetActive = shouldRender
+        configurationDetailsLabel?.isHidden = !shouldRender
         if shouldRender {
             createMetalViewIfNeeded()
             refreshArtwork()
@@ -347,8 +367,10 @@ final class PearWallScreenSaverView: ScreenSaverView {
             return
         }
         settings = PearWallSettings(json: json)
+        metalRenderer?.setConfiguration(settings.metalConfiguration)
         reconcileRenderTarget()
         applyCursorVisibility()
+        updateConfigurationDetails()
         refreshArtwork()
     }
 
@@ -367,6 +389,7 @@ final class PearWallScreenSaverView: ScreenSaverView {
 
     private func refreshArtwork() {
         guard renderTargetActive, let metalRenderer else { return }
+        defer { updateConfigurationDetails() }
         if let artwork = PearWallMediaArtworkCache.current() {
             playbackPlaying = artwork.playing
             if !artwork.source.isEmpty,
@@ -400,6 +423,74 @@ final class PearWallScreenSaverView: ScreenSaverView {
             return
         }
         _ = applyArtwork(source: url.absoluteString, key: "default", to: metalRenderer)
+    }
+
+    private func configureConfigurationDetailsLabel() {
+        let label = NSTextField(wrappingLabelWithString: "")
+        label.isEditable = false
+        label.isSelectable = false
+        label.isBordered = true
+        label.drawsBackground = true
+        label.backgroundColor = .controlBackgroundColor
+        label.textColor = .labelColor
+        label.font = .monospacedSystemFont(
+            ofSize: NSFont.smallSystemFontSize,
+            weight: .regular
+        )
+        label.maximumNumberOfLines = 8
+        label.setContentHuggingPriority(.required, for: .vertical)
+        label.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(label)
+        NSLayoutConstraint.activate([
+            label.topAnchor.constraint(equalTo: topAnchor, constant: 16),
+            label.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 16),
+            label.widthAnchor.constraint(lessThanOrEqualToConstant: 320),
+        ])
+        configurationDetailsLabel = label
+        updateConfigurationDetails()
+    }
+
+    private func updateConfigurationDetails() {
+        let portrait = bounds.height >= bounds.width
+        let preset = portrait ? settings.portraitPreset : settings.landscapePreset
+        let presetCount = portrait ? 4 : 5
+        let speed: String
+        switch settings.flowSpeed.uppercased() {
+        case "SLOW":
+            speed = "舒缓"
+        case "FAST":
+            speed = "活跃"
+        default:
+            speed = "标准"
+        }
+        let moruStyle: String
+        switch settings.moruStyle.uppercased() {
+        case "NARROW":
+            moruStyle = "窄纹"
+        case "WIDE":
+            moruStyle = "宽纹"
+        case "SMOOTH":
+            moruStyle = "平滑"
+        default:
+            moruStyle = "关闭"
+        }
+        let blur = settings.blurEnabled
+            ? String(format: "开启 · %.1f×", settings.blurMultiplier)
+            : "关闭"
+        let presetValue = settings.randomPreset
+            ? "随机"
+            : "\(preset + 1)/\(presetCount)"
+        configurationDetailsLabel?.stringValue = """
+        当前配置
+        画面：\(portrait ? "竖屏" : "横屏") · 预设 \(presetValue)
+        渲染比例：\(Int((settings.renderScale * 100).rounded()))%
+        模糊：\(blur)
+        遮罩：\(Int((settings.scrimAlpha * 100).rounded()))%
+        流动：\(speed) · \(playbackPlaying ? "运行中" : "已暂停")
+        音频响应：\(settings.audioVisualization ? "开启" : "关闭")
+        光栅玻璃：\(moruStyle)
+        """
+        configurationDetailsLabel?.invalidateIntrinsicContentSize()
     }
 
     private func applyArtwork(

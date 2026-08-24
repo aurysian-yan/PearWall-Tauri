@@ -38,6 +38,11 @@ cp "${DESKTOP_ROOT}/macos-saver/Info.plist" "${BUNDLE_PATH}/Contents/Info.plist"
 cp \
   "${PROJECT_ROOT}/wallpaper-engine/assets/default_artwork.svg" \
   "${BUNDLE_PATH}/Contents/Resources/assets/default_artwork.svg"
+sed \
+  -e 's/^window.PearWallPresets = //' \
+  -e 's/;$//' \
+  "${PROJECT_ROOT}/wallpaper-engine/src/presets.js" \
+  > "${BUNDLE_PATH}/Contents/Resources/assets/presets.json"
 cp -R \
   "${PROJECT_ROOT}/wallpaper-engine/assets/moru/." \
   "${BUNDLE_PATH}/Contents/Resources/assets/moru/"
