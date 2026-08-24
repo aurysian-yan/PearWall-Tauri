@@ -39,6 +39,12 @@ static NSString *const PearWallMainAppIdentifier = @"com.nevoit.pearwall.desktop
                                               keyEquivalent:@""];
     openItem.target = self;
     [menu addItem:openItem];
+    [menu addItem:NSMenuItem.separatorItem];
+    NSMenuItem *quitItem = [[NSMenuItem alloc] initWithTitle:@"退出后台运行时"
+                                                     action:@selector(quitAgent:)
+                                              keyEquivalent:@"q"];
+    quitItem.target = self;
+    [menu addItem:quitItem];
     self.statusItem.menu = menu;
     self.statusItem.visible = YES;
 }
@@ -59,6 +65,10 @@ static NSString *const PearWallMainAppIdentifier = @"com.nevoit.pearwall.desktop
     [workspace openApplicationAtURL:appURL
                       configuration:configuration
                   completionHandler:nil];
+}
+
+- (void)quitAgent:(id)sender {
+    [NSApplication.sharedApplication terminate:nil];
 }
 
 - (NSURL *)parentAppURL {

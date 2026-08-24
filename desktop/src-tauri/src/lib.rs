@@ -12,8 +12,6 @@ mod desktop_wallpaper;
 #[cfg(target_os = "macos")]
 mod macos_agent_service;
 #[cfg(target_os = "macos")]
-mod macos_audio;
-#[cfg(target_os = "macos")]
 mod macos_now_playing;
 #[cfg(target_os = "macos")]
 mod macos_runtime_state;
@@ -381,8 +379,6 @@ pub fn run() {
     };
     let audio_analyzer = Arc::new(Mutex::new(SpectrumAnalyzer::default()));
     let audio_state = AudioState::new(audio_analyzer.clone());
-    #[cfg(target_os = "macos")]
-    let audio_started_at = audio_state.started_at;
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .manage(audio_state)
@@ -442,15 +438,9 @@ pub fn run() {
                     macos_wallpaper::setup(app.handle(), listener, instance)?;
                     return Ok(());
                 }
-                let uses_agent = matches!(mode, LaunchMode::App | LaunchMode::Configure)
-                    && {
-                        let registered = macos_agent_service::ensure_enabled()
-                            .map(|status| status.enabled)
-                            .unwrap_or(false);
-                        macos_agent_service::launch_bundled_agent() || registered
-                    };
-                if !uses_agent {
-                    macos_audio::start(audio_analyzer.clone(), audio_started_at);
+                if matches!(mode, LaunchMode::App | LaunchMode::Configure) {
+                    let _ = macos_agent_service::ensure_enabled();
+                    let _ = macos_agent_service::launch_bundled_agent();
                 }
             }
 

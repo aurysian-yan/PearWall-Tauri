@@ -2,7 +2,5 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-    <key>NSScreenCaptureUsageDescription</key>
-    <string>Pear Wall 需要访问屏幕与系统音频，以便根据音乐节奏驱动画面。</string>
 </dict>
 </plist>

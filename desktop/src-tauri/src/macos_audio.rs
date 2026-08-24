@@ -2,15 +2,20 @@ use pearwall_core::SpectrumAnalyzer;
 use screencapturekit::cm::{AudioBuffer, CMSampleBuffer, CMSampleBufferExt};
 use screencapturekit::prelude::*;
 use std::sync::{Arc, Mutex};
-use std::time::{Duration, Instant};
+use std::time::Instant;
+
+#[link(name = "CoreGraphics", kind = "framework")]
+unsafe extern "C" {
+    fn CGPreflightScreenCaptureAccess() -> bool;
+    fn CGRequestScreenCaptureAccess() -> bool;
+}
 
 pub fn start(analyzer: Arc<Mutex<SpectrumAnalyzer>>, started_at: Instant) {
     let result = std::thread::Builder::new()
         .name("pearwall-macos-audio".to_string())
-        .spawn(move || loop {
+        .spawn(move || {
             if let Err(error) = run(analyzer.clone(), started_at) {
                 eprintln!("Pear Wall macOS 音频捕获失败：{error}");
-                std::thread::sleep(Duration::from_secs(5));
             }
         });
 
@@ -20,6 +25,7 @@ pub fn start(analyzer: Arc<Mutex<SpectrumAnalyzer>>, started_at: Instant) {
 }
 
 fn run(analyzer: Arc<Mutex<SpectrumAnalyzer>>, started_at: Instant) -> Result<(), String> {
+    ensure_screen_capture_permission()?;
     let content =
         SCShareableContent::get().map_err(|error| format!("无法访问屏幕音频：{error}"))?;
     let display = content
@@ -64,6 +70,16 @@ fn run(analyzer: Arc<Mutex<SpectrumAnalyzer>>, started_at: Instant) -> Result<()
     loop {
         std::thread::park();
     }
+}
+
+fn ensure_screen_capture_permission() -> Result<(), String> {
+    if unsafe { CGPreflightScreenCaptureAccess() } {
+        return Ok(());
+    }
+    if unsafe { CGRequestScreenCaptureAccess() } {
+        return Ok(());
+    }
+    Err("未授予屏幕与系统音频录制权限".to_string())
 }
 
 fn decode_audio(sample: &CMSampleBuffer) -> Option<Vec<f32>> {

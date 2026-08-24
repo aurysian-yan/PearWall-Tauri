@@ -4,7 +4,5 @@
 <dict>
     <key>CFBundleIconName</key>
     <string>AppIcon</string>
-    <key>NSScreenCaptureUsageDescription</key>
-    <string>Pear Wall 需要访问屏幕与系统音频，以便根据音乐节奏驱动画面。</string>
 </dict>
 </plist>

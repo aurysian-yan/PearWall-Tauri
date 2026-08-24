@@ -545,8 +545,9 @@ function PermissionNotice({
                   </li>
                   <li>若 macOS 显示“退出并重新打开”，请选择该操作。</li>
                   <li>
-                    如果没有出现提示，按 ⌘Q 退出 Pear Wall，再在“活动监视器”中结束“Pear
-                    Wall 后台运行时”，随后重新打开 Pear Wall。
+                    如果没有出现提示，从菜单栏的 Pear Wall
+                    图标中选择“退出后台运行时”，再按 ⌘Q 退出 Pear
+                    Wall 并重新打开。
                   </li>
                 </ol>
                 <p className="mt-3 text-xs">只关闭窗口不算完全退出。</p>
