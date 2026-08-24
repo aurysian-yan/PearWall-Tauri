@@ -31,6 +31,7 @@ private struct PearWallSettings {
     var pauseFlow = true
     var hideCursor = true
     var screenSaverDisplay = PearWallScreenSaverDisplay.primary
+    var screenSaverDisplayIds: [String]?
     var renderScale = 0.75
     var blurEnabled = true
     var blurMultiplier = 1.0
@@ -89,6 +90,9 @@ private struct PearWallSettings {
             rawValue: Self.string(object, key: "screenSaverDisplay", fallback: "PRIMARY")
         ) {
             screenSaverDisplay = value
+        }
+        if let values = object["screenSaverDisplayIds"] as? [String] {
+            screenSaverDisplayIds = values
         }
         if let value = PearWallArtworkFallback(
             rawValue: Self.string(object, key: "artworkFallback", fallback: "DEFAULT")
@@ -341,6 +345,9 @@ final class PearWallScreenSaverView: ScreenSaverView {
         guard let currentScreen = window?.screen,
               let currentDisplayID = Self.displayID(for: currentScreen) else {
             return screens.count == 1
+        }
+        if let selectedDisplayIDs = settings.screenSaverDisplayIds {
+            return selectedDisplayIDs.contains(currentDisplayID.stringValue)
         }
         let primaryScreen = screens.first(where: {
             $0.frame.origin == .zero

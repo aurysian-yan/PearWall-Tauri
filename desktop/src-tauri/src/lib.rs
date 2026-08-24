@@ -140,6 +140,121 @@ struct MediaArtwork {
     playing: bool,
 }
 
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ConnectedDisplay {
+    id: String,
+    name: String,
+    width: u32,
+    height: u32,
+    position_x: f64,
+    position_y: f64,
+    physical_width_mm: Option<f64>,
+    physical_height_mm: Option<f64>,
+    scale_factor: f64,
+    is_builtin: bool,
+    is_primary: bool,
+}
+
+#[tauri::command]
+fn get_connected_displays(app: tauri::AppHandle) -> Result<Vec<ConnectedDisplay>, String> {
+    #[cfg(target_os = "macos")]
+    {
+        use objc2_core_graphics::{
+            CGDirectDisplayID, CGDisplayBounds, CGDisplayIsBuiltin, CGDisplayPixelsHigh,
+            CGDisplayPixelsWide, CGDisplayScreenSize, CGError, CGGetActiveDisplayList,
+            CGMainDisplayID,
+        };
+
+        let monitors = app
+            .available_monitors()
+            .map_err(|error| format!("无法读取显示器信息：{error}"))?;
+        let mut display_ids = [0 as CGDirectDisplayID; 32];
+        let mut display_count = 0_u32;
+        let error = unsafe {
+            CGGetActiveDisplayList(
+                display_ids.len() as u32,
+                display_ids.as_mut_ptr(),
+                &mut display_count,
+            )
+        };
+        if error != CGError::Success {
+            return Err("无法读取 macOS 显示器信息".to_string());
+        }
+
+        let primary_id = CGMainDisplayID();
+        return Ok(display_ids[..display_count as usize]
+            .iter()
+            .enumerate()
+            .map(|(index, display_id)| {
+                let bounds = CGDisplayBounds(*display_id);
+                let physical_size = CGDisplayScreenSize(*display_id);
+                let monitor = monitors.get(index);
+                let size = monitor.map(|value| value.size());
+                ConnectedDisplay {
+                    id: display_id.to_string(),
+                    name: monitor
+                        .and_then(|value| value.name().cloned())
+                        .unwrap_or_else(|| format!("显示器 {}", index + 1)),
+                    width: size
+                        .map_or(CGDisplayPixelsWide(*display_id) as u32, |value| value.width),
+                    height: size.map_or(CGDisplayPixelsHigh(*display_id) as u32, |value| {
+                        value.height
+                    }),
+                    position_x: bounds.origin.x,
+                    position_y: bounds.origin.y,
+                    physical_width_mm: (physical_size.width > 0.0).then_some(physical_size.width),
+                    physical_height_mm: (physical_size.height > 0.0)
+                        .then_some(physical_size.height),
+                    scale_factor: monitor.map_or(1.0, |value| value.scale_factor()),
+                    is_builtin: CGDisplayIsBuiltin(*display_id),
+                    is_primary: *display_id == primary_id,
+                }
+            })
+            .collect());
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    {
+        let monitors = app
+            .available_monitors()
+            .map_err(|error| format!("无法读取显示器信息：{error}"))?;
+        let primary = app
+            .primary_monitor()
+            .map_err(|error| format!("无法读取主显示器信息：{error}"))?;
+        Ok(monitors
+            .iter()
+            .enumerate()
+            .map(|(index, monitor)| {
+                let position = monitor.position();
+                let size = monitor.size();
+                let is_primary = primary
+                    .as_ref()
+                    .is_some_and(|value| value.position() == position && value.size() == size);
+                ConnectedDisplay {
+                    id: format!(
+                        "{}:{}:{}:{}:{}",
+                        position.x, position.y, size.width, size.height, index
+                    ),
+                    name: monitor
+                        .name()
+                        .cloned()
+                        .unwrap_or_else(|| format!("显示器 {}", index + 1)),
+                    width: size.width,
+                    height: size.height,
+                    position_x: position.x as f64,
+                    position_y: position.y as f64,
+                    physical_width_mm: None,
+                    physical_height_mm: None,
+                    scale_factor: monitor.scale_factor(),
+                    is_builtin: false,
+                    is_primary,
+                }
+            })
+            .collect())
+    }
+}
+
 #[cfg(windows)]
 struct MediaArtworkState {
     current: Arc<Mutex<MediaArtwork>>,
@@ -388,6 +503,7 @@ pub fn run() {
             get_audio_pulse,
             reset_audio,
             get_media_artwork,
+            get_connected_displays,
             get_desktop_wallpaper,
             is_screen_saver_mode,
             load_shared_settings,

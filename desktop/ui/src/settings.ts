@@ -18,6 +18,7 @@ export const defaultSettings: Settings = {
   pauseFlow: true,
   hideCursor: true,
   screenSaverDisplay: 'PRIMARY',
+  screenSaverDisplayIds: null,
   renderScale: 0.75,
   blurEnabled: true,
   blurMultiplier: 1,
@@ -46,11 +47,17 @@ function normalizedSettings(saved: Partial<Settings>): Settings {
   const screenSaverDisplay = saved.screenSaverDisplay === 'SECONDARY'
     ? 'SECONDARY'
     : 'PRIMARY';
+  const screenSaverDisplayIds = Array.isArray(saved.screenSaverDisplayIds)
+    ? saved.screenSaverDisplayIds.filter(
+      (value): value is string => typeof value === 'string',
+    )
+    : null;
   return {
     ...defaultSettings,
     ...saved,
     artworkFallback,
     screenSaverDisplay,
+    screenSaverDisplayIds,
   } as Settings;
 }
 

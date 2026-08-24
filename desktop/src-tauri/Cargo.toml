@@ -31,7 +31,7 @@ fs2 = "0.4"
 memmap2 = "0.9"
 objc2 = "0.6"
 objc2-app-kit = { version = "0.3", default-features = false, features = ["NSScreen", "NSWindow", "NSWorkspace"] }
-objc2-core-graphics = { version = "0.3", default-features = false, features = ["CGWindowLevel"] }
+objc2-core-graphics = { version = "0.3", default-features = false, features = ["CGDirectDisplay", "CGDisplayConfiguration", "CGError", "CGWindowLevel", "libc"] }
 screencapturekit = { version = "8.0.1", features = ["macos_13_0"] }
 
 [profile.release]

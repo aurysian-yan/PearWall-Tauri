@@ -8,6 +8,7 @@ export type Settings = {
   pauseFlow: boolean;
   hideCursor: boolean;
   screenSaverDisplay: ScreenSaverDisplay;
+  screenSaverDisplayIds: string[] | null;
   renderScale: number;
   blurEnabled: boolean;
   blurMultiplier: number;
