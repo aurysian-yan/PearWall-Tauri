@@ -1125,7 +1125,7 @@ export function SettingsApp() {
           : { ...artwork, data_url: cached.data_url };
         mediaArtworkCache.current = nextArtwork;
         previewRef.current?.contentWindow?.postMessage(
-          { type: "pearwall:media-artwork", artwork },
+          { type: "pearwall:media-artwork", artwork: nextArtwork },
           window.location.protocol === "file:" ? "*" : window.location.origin,
         );
       } catch {
@@ -1558,7 +1558,7 @@ export function SettingsApp() {
               <SettingRow
                 avatar={tintLogo}
                 title="Pear Wall"
-                description="版本 0.1.0"
+                description="版本 0.1.1"
               />
               <Separator className="ml-12 mr-2 w-[calc(100%-3.5rem)] bg-white/15" />
               <ExternalSettingRow

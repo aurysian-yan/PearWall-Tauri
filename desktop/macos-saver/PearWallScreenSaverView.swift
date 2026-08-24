@@ -186,6 +186,7 @@ final class PearWallScreenSaverView: ScreenSaverView {
     private static let settingsKey = "pearwall.settings"
     private static let sharedSettingsFileName = "settings.json"
     private static let companionAppBundleIdentifier = "com.nevoit.pearwall.desktop"
+    private static let missingArtworkConfirmationInterval: TimeInterval = 2.5
     private var metalView: MTKView?
     private var metalRenderer: PearWallMetalRenderer?
     private var configurationDetailsLabel: NSTextField?
@@ -195,6 +196,7 @@ final class PearWallScreenSaverView: ScreenSaverView {
     private var settings = PearWallSettings()
     private var lastSettingsSignature: PearWallFileSignature?
     private var lastArtworkKey = ""
+    private var missingArtworkSince: Date?
     private var previewMode = false
     private var renderingActive = false
     private var renderTargetActive = false
@@ -319,6 +321,7 @@ final class PearWallScreenSaverView: ScreenSaverView {
         metalView = view
         metalRenderer = renderer
         lastArtworkKey = ""
+        missingArtworkSince = nil
     }
 
     private func destroyMetalView() {
@@ -326,6 +329,7 @@ final class PearWallScreenSaverView: ScreenSaverView {
         metalView = nil
         metalRenderer = nil
         lastArtworkKey = ""
+        missingArtworkSince = nil
     }
 
     private func reconcileRenderTarget() {
@@ -457,11 +461,29 @@ final class PearWallScreenSaverView: ScreenSaverView {
             playbackPlaying = artwork.playing
             if !artwork.source.isEmpty,
                applyArtwork(source: artwork.source, key: "media:\(artwork.key)", to: metalRenderer) {
+                missingArtworkSince = nil
                 return
             }
         } else {
             playbackPlaying = true
         }
+        if lastArtworkKey.hasPrefix("media:") {
+            if !playbackPlaying {
+                missingArtworkSince = nil
+                return
+            }
+            let now = Date()
+            if let missingArtworkSince {
+                if now.timeIntervalSince(missingArtworkSince)
+                    < Self.missingArtworkConfirmationInterval {
+                    return
+                }
+            } else {
+                missingArtworkSince = now
+                return
+            }
+        }
+        missingArtworkSince = nil
         switch settings.artworkFallback {
         case .custom where !settings.customArtwork.isEmpty:
             if applyArtwork(

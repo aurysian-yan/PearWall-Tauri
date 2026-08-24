@@ -225,6 +225,7 @@
       const image = new Image();
       if (/^https?:/i.test(source)) image.crossOrigin = 'anonymous';
       image.onload = () => {
+        if (this.requestedArtworkSource !== source) return;
         this.artworkAspect = image.width / Math.max(1, image.height);
         if (Number.isFinite(this.artworkTransitionStart)) {
           this.pendingArtwork = image;

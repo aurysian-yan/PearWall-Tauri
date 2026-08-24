@@ -5,6 +5,7 @@
   const tauriInvoke = window.__TAURI__ && window.__TAURI__.core && window.__TAURI__.core.invoke;
   const tauriWindowApi = window.__TAURI__ && window.__TAURI__.window;
   const settingsStorageKey = 'pearwall.settings';
+  const artworkMissingConfirmationMs = 2500;
   const settings = {
     audioVisualization: true,
     pauseFlow: true,
@@ -36,6 +37,8 @@
   const nativeFrameDriver = Boolean(window.PearWallNativeFrameDriver);
   let nativeArtworkKey = '';
   let mediaArtworkAvailable = false;
+  let mediaArtworkMissing = false;
+  let mediaArtworkFallbackTimer = 0;
   let desktopArtworkSource = '';
   let desktopArtworkPending = false;
   let desktopArtworkFailed = false;
@@ -148,22 +151,49 @@
     return source.startsWith('file:') ? source : `file:///${source}`;
   }
 
+  function clearMediaArtworkFallbackTimer() {
+    if (!mediaArtworkFallbackTimer) return;
+    window.clearTimeout(mediaArtworkFallbackTimer);
+    mediaArtworkFallbackTimer = 0;
+  }
+
+  function useMediaArtwork(dataUrl) {
+    const source = artworkSource(dataUrl);
+    if (!source) return false;
+    mediaArtworkMissing = false;
+    clearMediaArtworkFallbackTimer();
+    mediaArtworkAvailable = true;
+    renderer.setArtworkSource(source);
+    return true;
+  }
+
+  function confirmMissingMediaArtwork() {
+    mediaArtworkMissing = true;
+    if (!mediaArtworkAvailable) {
+      applyArtworkFallback();
+      return;
+    }
+    if (!playbackPlaying || mediaArtworkFallbackTimer) return;
+    mediaArtworkFallbackTimer = window.setTimeout(() => {
+      mediaArtworkFallbackTimer = 0;
+      if (!mediaArtworkMissing || !playbackPlaying) return;
+      mediaArtworkAvailable = false;
+      applyArtworkFallback();
+    }, artworkMissingConfirmationMs);
+  }
+
   function setNativeArtwork(key, dataUrl) {
     const nextKey = String(key || '');
     if (nextKey === nativeArtworkKey) {
-      const hasArtwork = Boolean(dataUrl);
-      if (hasArtwork && !mediaArtworkAvailable) {
-        mediaArtworkAvailable = true;
-        renderer.setArtworkSource(artworkSource(dataUrl));
+      if (dataUrl) {
+        useMediaArtwork(dataUrl);
       } else if (!mediaArtworkAvailable) {
         applyArtworkFallback();
       }
       return;
     }
     nativeArtworkKey = nextKey;
-    mediaArtworkAvailable = Boolean(dataUrl);
-    if (mediaArtworkAvailable) renderer.setArtworkSource(artworkSource(dataUrl));
-    else applyArtworkFallback();
+    if (!useMediaArtwork(dataUrl)) confirmMissingMediaArtwork();
   }
 
   window.PearWallSetArtwork = (key, dataUrl) => {
@@ -262,9 +292,13 @@
   function setPlaybackState(playing) {
     playbackPlaying = playing;
     if (!playing) {
+      clearMediaArtworkFallbackTimer();
+      mediaArtworkMissing = false;
       analyzer.reset();
       if (tauriInvoke) tauriInvoke('reset_audio').catch(() => {});
       rustAudioPulse = 0;
+    } else if (mediaArtworkMissing) {
+      confirmMissingMediaArtwork();
     }
     if (playing) return;
     applyArtworkFallback();
@@ -337,9 +371,7 @@
   if (typeof window.wallpaperRegisterMediaThumbnailListener === 'function') {
     window.wallpaperRegisterMediaThumbnailListener((event) => {
       const thumbnail = typeof event === 'string' ? event : event && (event.thumbnail || event.data);
-      mediaArtworkAvailable = Boolean(thumbnail);
-      if (mediaArtworkAvailable) renderer.setArtworkSource(artworkSource(thumbnail));
-      else applyArtworkFallback();
+      if (!useMediaArtwork(thumbnail)) confirmMissingMediaArtwork();
     });
   }
 
