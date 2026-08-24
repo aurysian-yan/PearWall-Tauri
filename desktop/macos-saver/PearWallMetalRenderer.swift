@@ -1,6 +1,26 @@
 import AppKit
 import MetalKit
 
+enum PearWallMoruStyle: String {
+    case off = "OFF"
+    case narrow = "NARROW"
+    case wide = "WIDE"
+    case smooth = "SMOOTH"
+
+    init(value: String) {
+        switch value.uppercased() {
+        case "ON", "TRUE", "1", "NARROW":
+            self = .narrow
+        case "WIDE":
+            self = .wide
+        case "SMOOTH":
+            self = .smooth
+        default:
+            self = .off
+        }
+    }
+}
+
 struct PearWallMetalConfiguration: Equatable {
     var renderScale: Float = 0.75
     var blurEnabled = true
@@ -9,6 +29,7 @@ struct PearWallMetalConfiguration: Equatable {
     var portraitPreset = 0
     var landscapePreset = 0
     var randomPreset = false
+    var moruStyle = PearWallMoruStyle.off
 
     init(
         renderScale: Double = 0.75,
@@ -17,7 +38,8 @@ struct PearWallMetalConfiguration: Equatable {
         scrimAlpha: Double = 0.4,
         portraitPreset: Int = 0,
         landscapePreset: Int = 0,
-        randomPreset: Bool = false
+        randomPreset: Bool = false,
+        moruStyle: String = "OFF"
     ) {
         self.renderScale = Float(min(1, max(0.25, renderScale)))
         self.blurEnabled = blurEnabled
@@ -26,6 +48,7 @@ struct PearWallMetalConfiguration: Equatable {
         self.portraitPreset = min(3, max(0, portraitPreset))
         self.landscapePreset = min(4, max(0, landscapePreset))
         self.randomPreset = randomPreset
+        self.moruStyle = PearWallMoruStyle(value: moruStyle)
     }
 }
 
@@ -45,6 +68,11 @@ private struct PearWallRenderTarget {
     let height: Int
 }
 
+private struct PearWallMoruTextures {
+    let normal: MTLTexture
+    let light: MTLTexture
+}
+
 private struct PearWallRenderTargets {
     let rotation: PearWallRenderTarget
     let half: PearWallRenderTarget
@@ -52,6 +80,7 @@ private struct PearWallRenderTargets {
     let eighth: PearWallRenderTarget
     let backdrop: PearWallRenderTarget
     let material: PearWallRenderTarget
+    let moru: PearWallRenderTarget
 }
 
 private struct PearWallRenderSize: Equatable {
@@ -297,6 +326,117 @@ fragment float4 pearwallMaterialFragment(
     return float4(clamp(color, 0.07, 0.97), 1.0);
 }
 
+float3 pearwallSampleMoru(
+    texture2d<float> source,
+    texture2d<float> normalTexture,
+    texture2d<float> lightTexture,
+    sampler sourceSampler,
+    float2 screenCoordinate,
+    float2 delta,
+    float aspect,
+    float normalScale,
+    float ior,
+    float surfaceRatio,
+    float displacement,
+    float thickness,
+    float darkness,
+    float lightness,
+    float shadowness) {
+    float2 coordinate = screenCoordinate + delta;
+    float2 local = float2(
+        fract((coordinate.x - 0.5) * normalScale + 0.5),
+        fract(coordinate.y * aspect + 0.5 * aspect)
+    );
+    float3 upperNormal = normalize(
+        normalTexture.sample(sourceSampler, local).xyz * 2.0 - 1.0
+    );
+    float3 lowerNormal = float3(0.0, 1.0, 0.0);
+    float4 lightShadow = lightTexture.sample(sourceSampler, local);
+    float depth = -lightShadow.r * displacement - thickness;
+    float3 upperOut = normalize(refract(float3(0.0, 1.0, 0.0), upperNormal, ior));
+    float3 lowerOut = normalize(refract(upperOut, lowerNormal, ior));
+    float3 path = upperOut * depth + lowerOut * thickness;
+    float2 offset = float2(path.x * surfaceRatio * ior, 0.0);
+    float3 color = source.sample(
+        sourceSampler,
+        clamp(screenCoordinate + offset, 0.001, 0.999)
+    ).rgb;
+    color *= 1.0 - darkness;
+    color *= mix(float3(1.0), lightShadow.bbb, shadowness);
+    color = mix(color, float3(1.0), lightShadow.g * lightness);
+    return color;
+}
+
+fragment float4 pearwallMoruFragment(
+    TextureVertexOutput input [[stage_in]],
+    texture2d<float> source [[texture(0)]],
+    texture2d<float> normalTexture [[texture(1)]],
+    texture2d<float> lightTexture [[texture(2)]],
+    sampler sourceSampler [[sampler(0)]],
+    constant float &aspect [[buffer(0)]],
+    constant float &normalScale [[buffer(1)]],
+    constant float &ior [[buffer(2)]],
+    constant float &surfaceRatio [[buffer(3)]],
+    constant float &displacement [[buffer(4)]],
+    constant float &thickness [[buffer(5)]],
+    constant float &darkness [[buffer(6)]],
+    constant float &lightness [[buffer(7)]],
+    constant float &shadowness [[buffer(8)]]) {
+    const float stepCoordinate = 1.736e-4;
+    float3 color = pearwallSampleMoru(
+        source,
+        normalTexture,
+        lightTexture,
+        sourceSampler,
+        input.textureCoordinate,
+        float2(0.0),
+        aspect,
+        normalScale,
+        ior,
+        surfaceRatio,
+        displacement,
+        thickness,
+        darkness,
+        lightness,
+        shadowness
+    );
+    color += pearwallSampleMoru(
+        source,
+        normalTexture,
+        lightTexture,
+        sourceSampler,
+        input.textureCoordinate,
+        float2(-stepCoordinate),
+        aspect,
+        normalScale,
+        ior,
+        surfaceRatio,
+        displacement,
+        thickness,
+        darkness,
+        lightness,
+        shadowness
+    );
+    color += pearwallSampleMoru(
+        source,
+        normalTexture,
+        lightTexture,
+        sourceSampler,
+        input.textureCoordinate,
+        float2(stepCoordinate),
+        aspect,
+        normalScale,
+        ior,
+        surfaceRatio,
+        displacement,
+        thickness,
+        darkness,
+        lightness,
+        shadowness
+    );
+    return float4(color / 3.0, 1.0);
+}
+
 fragment float4 pearwallCopyFragment(
     TextureVertexOutput input [[stage_in]],
     texture2d<float> source [[texture(0)]],
@@ -318,11 +458,13 @@ final class PearWallMetalRenderer: NSObject, MTKViewDelegate {
     private let blurPipeline: MTLRenderPipelineState
     private let materialFullscreenPipeline: MTLRenderPipelineState
     private let materialMeshPipeline: MTLRenderPipelineState
+    private let moruPipeline: MTLRenderPipelineState
     private let copyPipeline: MTLRenderPipelineState
     private let sampler: MTLSamplerState
     private let vertexBuffer: MTLBuffer
     private let textureLoader: MTKTextureLoader
     private let meshLibrary: PearWallMeshLibrary
+    private let moruTextures: [PearWallMoruStyle: PearWallMoruTextures]
     private var configuration = PearWallMetalConfiguration()
     private var currentArtwork: PearWallArtworkTexture?
     private var previousArtwork: PearWallArtworkTexture?
@@ -372,6 +514,13 @@ final class PearWallMetalRenderer: NSObject, MTKViewDelegate {
             fragment: "pearwallMaterialFragment",
             pixelFormat: view.colorPixelFormat
         )
+        moruPipeline = try Self.makePipeline(
+            device: device,
+            library: library,
+            vertex: "pearwallFullscreenVertex",
+            fragment: "pearwallMoruFragment",
+            pixelFormat: view.colorPixelFormat
+        )
         copyPipeline = try Self.makePipeline(
             device: device,
             library: library,
@@ -406,9 +555,15 @@ final class PearWallMetalRenderer: NSObject, MTKViewDelegate {
         }
         self.vertexBuffer = vertexBuffer
         self.commandQueue = commandQueue
-        textureLoader = MTKTextureLoader(device: device)
+        let resolvedBundle = resourceBundle ?? Bundle(for: PearWallMetalRenderer.self)
+        let resolvedTextureLoader = MTKTextureLoader(device: device)
+        textureLoader = resolvedTextureLoader
         meshLibrary = try PearWallMeshLibrary(
-            bundle: resourceBundle ?? Bundle(for: PearWallMetalRenderer.self)
+            bundle: resolvedBundle
+        )
+        moruTextures = try Self.loadMoruTextures(
+            bundle: resolvedBundle,
+            textureLoader: resolvedTextureLoader
         )
         super.init()
         view.delegate = self
@@ -496,8 +651,21 @@ final class PearWallMetalRenderer: NSObject, MTKViewDelegate {
             portrait: targets.material.height >= targets.material.width,
             commandBuffer: commandBuffer
         )
+        let output: PearWallRenderTarget
+        if configuration.moruStyle == .off {
+            output = targets.material
+        } else {
+            drawMoru(
+                source: targets.material,
+                target: targets.moru,
+                artworkAspect: activeCurrentArtwork.aspect,
+                style: configuration.moruStyle,
+                commandBuffer: commandBuffer
+            )
+            output = targets.moru
+        }
         drawOutput(
-            source: targets.material,
+            source: output,
             descriptor: descriptor,
             commandBuffer: commandBuffer
         )
@@ -521,6 +689,38 @@ final class PearWallMetalRenderer: NSObject, MTKViewDelegate {
         descriptor.fragmentFunction = fragmentFunction
         descriptor.colorAttachments[0].pixelFormat = pixelFormat
         return try device.makeRenderPipelineState(descriptor: descriptor)
+    }
+
+    private static func loadMoruTextures(
+        bundle: Bundle,
+        textureLoader: MTKTextureLoader
+    ) throws -> [PearWallMoruStyle: PearWallMoruTextures] {
+        let options: [MTKTextureLoader.Option: Any] = [
+            .SRGB: false,
+            .origin: MTKTextureLoader.Origin.topLeft.rawValue,
+            .generateMipmaps: true,
+        ]
+        var textures = [PearWallMoruStyle: PearWallMoruTextures]()
+        for style in [PearWallMoruStyle.narrow, .wide, .smooth] {
+            let suffix = style.rawValue.lowercased()
+            guard let normalURL = bundle.url(
+                      forResource: "moru_\(suffix)",
+                      withExtension: "png",
+                      subdirectory: "assets/moru"
+                  ),
+                  let lightURL = bundle.url(
+                      forResource: "depth_light_shadow_\(suffix)",
+                      withExtension: "png",
+                      subdirectory: "assets/moru"
+                  ) else {
+                throw NSError(domain: "PearWallMetal", code: 5)
+            }
+            textures[style] = PearWallMoruTextures(
+                normal: try textureLoader.newTexture(URL: normalURL, options: options),
+                light: try textureLoader.newTexture(URL: lightURL, options: options)
+            )
+        }
+        return textures
     }
 
     private func ensureTargets(
@@ -587,6 +787,11 @@ final class PearWallMetalRenderer: NSObject, MTKViewDelegate {
                   device: device,
                   width: outputWidth,
                   height: outputHeight
+              ),
+              let moru = makeTarget(
+                  device: device,
+                  width: outputWidth,
+                  height: outputHeight
               ) else {
             return nil
         }
@@ -596,7 +801,8 @@ final class PearWallMetalRenderer: NSObject, MTKViewDelegate {
             quarter: quarter,
             eighth: eighth,
             backdrop: backdrop,
-            material: material
+            material: material,
+            moru: moru
         )
         renderSize = size
         targets = nextTargets
@@ -840,6 +1046,7 @@ final class PearWallMetalRenderer: NSObject, MTKViewDelegate {
             return
         }
         var scrimAlpha = configuration.scrimAlpha
+            * (configuration.moruStyle == .off ? 1 : 0.5)
         encoder.setFragmentTexture(source.texture, index: 0)
         encoder.setFragmentSamplerState(sampler, index: 0)
         encoder.setFragmentBytes(
@@ -872,6 +1079,100 @@ final class PearWallMetalRenderer: NSObject, MTKViewDelegate {
             indexBuffer: mesh.indexBuffer,
             indexBufferOffset: 0
         )
+        encoder.endEncoding()
+    }
+
+    private func drawMoru(
+        source: PearWallRenderTarget,
+        target: PearWallRenderTarget,
+        artworkAspect: Float,
+        style: PearWallMoruStyle,
+        commandBuffer: MTLCommandBuffer
+    ) {
+        guard let textures = moruTextures[style],
+              let encoder = commandBuffer.makeRenderCommandEncoder(
+                  descriptor: renderPassDescriptor(target: target)
+              ) else {
+            return
+        }
+        let screenAspect = Float(target.width) / Float(max(1, target.height))
+        let scale: Float
+        let iorValue: Float
+        let displacementValue: Float
+        let thicknessValue: Float
+        switch style {
+        case .narrow:
+            scale = 0.15
+            iorValue = 0.68
+            displacementValue = 0.36
+            thicknessValue = 0.3
+        case .wide:
+            scale = 0.31
+            iorValue = 0.58
+            displacementValue = 0.58
+            thicknessValue = 0.36
+        case .smooth:
+            scale = 0.24
+            iorValue = 0.6
+            displacementValue = 0.37
+            thicknessValue = 0.06
+        case .off:
+            encoder.endEncoding()
+            return
+        }
+        var aspect = 1 / max(artworkAspect, 0.001)
+        var normalScale = 1 / scale
+        var ior = iorValue
+        var surfaceRatio = min(screenAspect, 1 / max(screenAspect, 0.001))
+        var displacement = displacementValue
+        var thickness = thicknessValue
+        var darkness: Float = style == .wide ? 0.1 : 0
+        var lightness: Float = style == .wide ? 0.65 : 0.4
+        var shadowness: Float = style == .wide ? 0.36 : 1
+        encoder.setRenderPipelineState(moruPipeline)
+        encoder.setVertexBuffer(vertexBuffer, offset: 0, index: 0)
+        encoder.setFragmentTexture(source.texture, index: 0)
+        encoder.setFragmentTexture(textures.normal, index: 1)
+        encoder.setFragmentTexture(textures.light, index: 2)
+        encoder.setFragmentSamplerState(sampler, index: 0)
+        encoder.setFragmentBytes(&aspect, length: MemoryLayout<Float>.stride, index: 0)
+        encoder.setFragmentBytes(
+            &normalScale,
+            length: MemoryLayout<Float>.stride,
+            index: 1
+        )
+        encoder.setFragmentBytes(&ior, length: MemoryLayout<Float>.stride, index: 2)
+        encoder.setFragmentBytes(
+            &surfaceRatio,
+            length: MemoryLayout<Float>.stride,
+            index: 3
+        )
+        encoder.setFragmentBytes(
+            &displacement,
+            length: MemoryLayout<Float>.stride,
+            index: 4
+        )
+        encoder.setFragmentBytes(
+            &thickness,
+            length: MemoryLayout<Float>.stride,
+            index: 5
+        )
+        encoder.setFragmentBytes(
+            &darkness,
+            length: MemoryLayout<Float>.stride,
+            index: 6
+        )
+        encoder.setFragmentBytes(
+            &lightness,
+            length: MemoryLayout<Float>.stride,
+            index: 7
+        )
+        encoder.setFragmentBytes(
+            &shadowness,
+            length: MemoryLayout<Float>.stride,
+            index: 8
+        )
+        encoder.drawPrimitives(type: .triangleStrip, vertexStart: 0, vertexCount: 4)
         encoder.endEncoding()
     }
 

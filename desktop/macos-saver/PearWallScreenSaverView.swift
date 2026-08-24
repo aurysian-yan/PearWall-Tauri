@@ -62,7 +62,8 @@ private struct PearWallSettings {
             scrimAlpha: scrimAlpha,
             portraitPreset: portraitPreset,
             landscapePreset: landscapePreset,
-            randomPreset: randomPreset
+            randomPreset: randomPreset,
+            moruStyle: moruStyle
         )
     }
 
