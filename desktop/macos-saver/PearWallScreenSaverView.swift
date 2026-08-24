@@ -43,6 +43,17 @@ private struct PearWallSettings {
     var artworkFallback = PearWallArtworkFallback.defaultArtwork
     var customArtwork = ""
 
+    var flowSpeedMultiplier: Double {
+        switch flowSpeed.uppercased() {
+        case "SLOW":
+            return 0.5
+        case "FAST":
+            return 2
+        default:
+            return 1
+        }
+    }
+
     init(json: String = "{}") {
         guard let data = json.data(using: .utf8),
               let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
@@ -158,6 +169,8 @@ final class PearWallScreenSaverView: ScreenSaverView {
     private var renderTargetActive = false
     private var cursorHidden = false
     private var playbackPlaying = true
+    private var animationTime: TimeInterval = 0
+    private var lastFrameUptime: TimeInterval?
     private let runtimeStateReader = PearWallRuntimeStateReader()
     private lazy var screenSaverDefaults = ScreenSaverDefaults(
         forModuleWithName: "com.nevoit.pearwall.screensaver",
@@ -191,6 +204,7 @@ final class PearWallScreenSaverView: ScreenSaverView {
     override func startAnimation() {
         super.startAnimation()
         renderingActive = true
+        lastFrameUptime = ProcessInfo.processInfo.systemUptime
         startRefreshTimer()
         refreshSharedSettings()
         reconcileRenderTarget()
@@ -200,15 +214,24 @@ final class PearWallScreenSaverView: ScreenSaverView {
     override func animateOneFrame() {
         super.animateOneFrame()
         guard renderingActive, renderTargetActive else { return }
+        let now = ProcessInfo.processInfo.systemUptime
+        let delta = min(0.1, max(0, now - (lastFrameUptime ?? now)))
+        lastFrameUptime = now
+        if !settings.pauseFlow || playbackPlaying {
+            animationTime += delta * settings.flowSpeedMultiplier
+        }
         let snapshot = runtimeStateReader.currentSnapshot()
-        metalRenderer?.audioPulse = settings.audioVisualization ? snapshot?.pulse ?? 0 : 0
-        metalRenderer?.playbackPlaying = playbackPlaying
+        metalRenderer?.animationTime = Float(animationTime)
+        metalRenderer?.audioPulse = settings.audioVisualization && playbackPlaying
+            ? snapshot?.pulse ?? 0
+            : 0
         metalView?.draw()
     }
 
     override func stopAnimation() {
         renderingActive = false
         renderTargetActive = false
+        lastFrameUptime = nil
         refreshTimer?.invalidate()
         refreshTimer = nil
         restoreCursorVisibility()
@@ -324,7 +347,6 @@ final class PearWallScreenSaverView: ScreenSaverView {
             return
         }
         settings = PearWallSettings(json: json)
-        lastArtworkKey = ""
         reconcileRenderTarget()
         applyCursorVisibility()
         refreshArtwork()
@@ -352,12 +374,11 @@ final class PearWallScreenSaverView: ScreenSaverView {
                 return
             }
         }
-        playbackPlaying = false
         switch settings.artworkFallback {
         case .custom where !settings.customArtwork.isEmpty:
             if applyArtwork(
                 source: settings.customArtwork,
-                key: "custom",
+                key: "custom:\(settings.customArtwork.hashValue)",
                 to: metalRenderer
             ) {
                 return
