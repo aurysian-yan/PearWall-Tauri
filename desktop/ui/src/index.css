@@ -2,6 +2,11 @@
 @import "@heroui/styles";
 @import "overlayscrollbars/overlayscrollbars.css";
 
+@font-face {
+    font-family: "Manrope";
+    src: "./Manrope-VariableFont_wght.ttf";
+}
+
 @layer base {
     html,
     body,
@@ -20,8 +25,14 @@
 
     body {
         font-family:
-            -apple-system, BlinkMacSystemFont, "SF Pro Display", "PingFang SC",
-            "Segoe UI Variable", "Segoe UI", "Microsoft YaHei UI", "微软雅黑",
+            -apple-system,
+            BlinkMacSystemFont,
+            "SF Pro Display",
+            "PingFang SC",
+            "Manrope", "Segoe UI Variable",
+            "Segoe UI",
+            "Microsoft YaHei UI",
+            "微软雅黑",
             sans-serif;
     }
 
@@ -83,11 +94,11 @@
 
 .drawer-content {
     border-radius: 32px 32px 0 0;
-    corner-shape: superellipse(1.5);
+    /*corner-shape: superellipse(1.5);*/
 }
 
-@supports (corner-shape: superellipse(1.5)) {
+/*@supports (corner-shape: superellipse(1.5)) {
     .drawer-content {
         border-radius: 48px 48px 0 0;
     }
-}
+}*/

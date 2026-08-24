@@ -7,6 +7,7 @@ SOURCE="${DESKTOP_ROOT}/src-tauri/native/macos_now_playing.m"
 RESOURCE_DIR="${DESKTOP_ROOT}/src-tauri/resources/mediaremote"
 OUTPUT="${RESOURCE_DIR}/PearWallMediaRemote.dylib"
 TEMP_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/pearwall-mediaremote.XXXXXX")"
+CODESIGN_IDENTITY="${PEARWALL_CODESIGN_IDENTITY:--}"
 trap 'rm -rf "${TEMP_ROOT}"' EXIT
 
 mkdir -p "${RESOURCE_DIR}"
@@ -28,7 +29,18 @@ lipo -create \
   "${TEMP_ROOT}/PearWallMediaRemote-x86_64.dylib" \
   -output "${OUTPUT}"
 
-codesign --force --sign - --timestamp=none "${OUTPUT}"
+CODESIGN_ARGS=(
+  --force
+  --sign "${CODESIGN_IDENTITY}"
+  --options runtime
+)
+if [[ "${CODESIGN_IDENTITY}" == "-" ]]; then
+  CODESIGN_ARGS+=(--timestamp=none)
+else
+  CODESIGN_ARGS+=(--timestamp)
+fi
+codesign "${CODESIGN_ARGS[@]}" "${OUTPUT}"
+codesign --verify --strict --verbose=2 "${OUTPUT}"
 lipo "${OUTPUT}" -verify_arch arm64
 lipo "${OUTPUT}" -verify_arch x86_64
 

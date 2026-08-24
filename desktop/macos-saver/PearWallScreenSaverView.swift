@@ -4,10 +4,38 @@ import Foundation
 import ScreenSaver
 import WebKit
 
+@_silgen_name("pearwall_runtime_state_open")
+private func pearwallRuntimeStateOpen(_ path: UnsafePointer<CChar>) -> UnsafeMutableRawPointer?
+
+@_silgen_name("pearwall_runtime_state_read")
+private func pearwallRuntimeStateRead(
+    _ handle: UnsafeMutableRawPointer,
+    _ pulse: UnsafeMutablePointer<Float>,
+    _ updatedAtMilliseconds: UnsafeMutablePointer<UInt64>
+) -> Int32
+
+@_silgen_name("pearwall_runtime_state_close")
+private func pearwallRuntimeStateClose(_ handle: UnsafeMutableRawPointer)
+
+private func pearWallApplicationSupportDirectory() -> URL? {
+    guard let user = getpwuid(getuid()),
+          let homeDirectory = user.pointee.pw_dir else {
+        return nil
+    }
+    return URL(fileURLWithPath: String(cString: homeDirectory), isDirectory: true)
+        .appendingPathComponent("Library", isDirectory: true)
+        .appendingPathComponent("Application Support", isDirectory: true)
+        .appendingPathComponent("PearWall", isDirectory: true)
+}
+
+private enum PearWallScreenSaverDisplay: String {
+    case primary = "PRIMARY"
+    case secondary = "SECONDARY"
+}
+
 @objc(PearWallScreenSaverView)
 final class PearWallScreenSaverView: ScreenSaverView, WKNavigationDelegate {
     private static let settingsKey = "pearwall.settings"
-    private static let sharedSettingsDirectoryName = "PearWall"
     private static let sharedSettingsFileName = "settings.json"
     private static let companionAppBundleIdentifier = "com.nevoit.pearwall.desktop"
     private var webView: WKWebView?
@@ -18,7 +46,18 @@ final class PearWallScreenSaverView: ScreenSaverView, WKNavigationDelegate {
     private var lastAppliedSettingsJSON = "{}"
     private var lastSettingsModificationDate: Date?
     private var previewMode = false
+    private var pageReady = false
+    private var renderingActive = false
+    private var renderTargetActive = false
+    private var selectedDisplay = PearWallScreenSaverDisplay.primary
+    private var pulseTimer: Timer?
+    private var pulseEvaluationPending = false
+    private var pulseEvaluationStartedAt: TimeInterval = 0
+    private var pulseEvaluationID: UInt64 = 0
+    private var pulseGeneration: UInt64 = 0
+    private var pageReloadRequired = false
     private let mediaRemote = MediaRemoteBridge()
+    private let runtimePulseReader = RuntimePulseReader()
     private lazy var screenSaverDefaults = ScreenSaverDefaults(
         forModuleWithName: "com.nevoit.pearwall.screensaver",
     )
@@ -26,8 +65,32 @@ final class PearWallScreenSaverView: ScreenSaverView, WKNavigationDelegate {
     override init?(frame: NSRect, isPreview: Bool) {
         super.init(frame: frame, isPreview: isPreview)
         previewMode = isPreview
-        animationTimeInterval = 1.0 / 60.0
+        configureView()
+    }
 
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+        previewMode = isPreview
+        configureView()
+    }
+
+    private func configureView() {
+        animationTimeInterval = 1.0 / 60.0
+        wantsLayer = true
+        layer?.backgroundColor = NSColor.black.cgColor
+        let json = loadSettingsJSON()
+        lastAppliedSettingsJSON = json
+        selectedDisplay = Self.screenSaverDisplay(from: json)
+    }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        guard renderingActive else { return }
+        reconcileRenderTarget()
+    }
+
+    private func createWebViewIfNeeded() {
+        guard webView == nil else { return }
         let configuration = makeWebViewConfiguration()
         let view = WKWebView(frame: bounds, configuration: configuration)
         view.autoresizingMask = [.width, .height]
@@ -43,7 +106,17 @@ final class PearWallScreenSaverView: ScreenSaverView, WKNavigationDelegate {
             return
         }
         view.loadFileURL(indexURL, allowingReadAccessTo: indexURL.deletingLastPathComponent())
-        startRefreshTimer()
+    }
+
+    private func destroyWebView() {
+        pageReady = false
+        pageReloadRequired = false
+        pulseGeneration &+= 1
+        pulseEvaluationPending = false
+        webView?.stopLoading()
+        webView?.navigationDelegate = nil
+        webView?.removeFromSuperview()
+        webView = nil
     }
 
     private func startRefreshTimer() {
@@ -55,14 +128,14 @@ final class PearWallScreenSaverView: ScreenSaverView, WKNavigationDelegate {
         }
     }
 
-    required init?(coder: NSCoder) {
-        super.init(coder: coder)
-    }
-
     override func startAnimation() {
         super.startAnimation()
+        renderingActive = true
+        pulseGeneration &+= 1
+        pulseEvaluationPending = false
         startRefreshTimer()
         refreshSharedSettings()
+        reconcileRenderTarget()
     }
 
     override func animateOneFrame() {
@@ -70,10 +143,105 @@ final class PearWallScreenSaverView: ScreenSaverView, WKNavigationDelegate {
     }
 
     override func stopAnimation() {
+        renderingActive = false
+        renderTargetActive = false
+        pulseGeneration &+= 1
+        pulseEvaluationPending = false
         artworkTimer?.invalidate()
         artworkTimer = nil
-        webView?.stopLoading()
+        pulseTimer?.invalidate()
+        pulseTimer = nil
         super.stopAnimation()
+    }
+
+    private func startPulseTimer() {
+        guard pulseTimer == nil else { return }
+        let timer = Timer(timeInterval: 1.0 / 30.0, repeats: true) { [weak self] _ in
+            self?.publishPulseIfNeeded()
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        pulseTimer = timer
+    }
+
+    private func reconcileRenderTarget() {
+        let shouldRender = previewMode || isCurrentScreenSelected()
+        guard shouldRender != renderTargetActive || (shouldRender && webView == nil) else {
+            return
+        }
+        renderTargetActive = shouldRender
+        pulseGeneration &+= 1
+        pulseEvaluationPending = false
+        if shouldRender {
+            createWebViewIfNeeded()
+            startPulseTimer()
+            if pageReloadRequired {
+                pageReloadRequired = false
+                webView?.reload()
+            }
+            refreshArtwork()
+            refreshDesktopWallpaper()
+            publishPulseIfNeeded()
+            return
+        }
+        pulseTimer?.invalidate()
+        pulseTimer = nil
+        destroyWebView()
+    }
+
+    private func isCurrentScreenSelected() -> Bool {
+        let screens = NSScreen.screens
+        guard !screens.isEmpty,
+              let currentScreen = window?.screen,
+              let currentDisplayID = Self.displayID(for: currentScreen) else {
+            return false
+        }
+        let targetScreen: NSScreen?
+        switch selectedDisplay {
+        case .primary:
+            targetScreen = screens.first
+        case .secondary:
+            targetScreen = screens.dropFirst().first
+        }
+        guard let targetDisplayID = Self.displayID(for: targetScreen) else {
+            return false
+        }
+        return currentDisplayID == targetDisplayID
+    }
+
+    private static func displayID(for screen: NSScreen?) -> NSNumber? {
+        screen?.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber
+    }
+
+    private func publishPulseIfNeeded() {
+        guard renderingActive,
+              renderTargetActive,
+              pageReady,
+              let webView else {
+            return
+        }
+        let now = ProcessInfo.processInfo.systemUptime
+        if pulseEvaluationPending,
+           now - pulseEvaluationStartedAt < 0.25 {
+            return
+        }
+        pulseEvaluationPending = true
+        pulseEvaluationStartedAt = now
+        pulseEvaluationID &+= 1
+        let evaluationID = pulseEvaluationID
+        let generation = pulseGeneration
+        let pulse = runtimePulseReader.currentPulse()
+        let timestamp = now * 1_000
+        let script = "window.PearWallRenderFrame && window.PearWallRenderFrame(\(timestamp), \(pulse));"
+        webView.evaluateJavaScript(script) { [weak self] _, _ in
+            DispatchQueue.main.async { [weak self] in
+                guard let self,
+                      self.pulseGeneration == generation,
+                      self.pulseEvaluationID == evaluationID else {
+                    return
+                }
+                self.pulseEvaluationPending = false
+            }
+        }
     }
 
     override var hasConfigureSheet: Bool {
@@ -177,12 +345,12 @@ final class PearWallScreenSaverView: ScreenSaverView, WKNavigationDelegate {
 
     private func makeWebViewConfiguration() -> WKWebViewConfiguration {
         let configuration = WKWebViewConfiguration()
-        let json = loadSettingsJSON()
-        lastAppliedSettingsJSON = json
+        let json = lastAppliedSettingsJSON
         let jsonString = Self.javascriptString(json)
         configuration.userContentController.addUserScript(
             WKUserScript(
-                source: "window.PearWallScreenSaverSettings = JSON.parse(\(jsonString));",
+                source: "window.PearWallNativeFrameDriver = true;" +
+                    "window.PearWallScreenSaverSettings = JSON.parse(\(jsonString));",
                 injectionTime: .atDocumentStart,
                 forMainFrameOnly: false,
             ),
@@ -191,11 +359,7 @@ final class PearWallScreenSaverView: ScreenSaverView, WKNavigationDelegate {
     }
 
     private static var sharedSettingsURL: URL? {
-        FileManager.default.urls(
-            for: .applicationSupportDirectory,
-            in: .userDomainMask,
-        ).first?
-            .appendingPathComponent(sharedSettingsDirectoryName, isDirectory: true)
+        pearWallApplicationSupportDirectory()?
             .appendingPathComponent(sharedSettingsFileName)
     }
 
@@ -209,24 +373,9 @@ final class PearWallScreenSaverView: ScreenSaverView, WKNavigationDelegate {
         }
         if let legacy = screenSaverDefaults?.string(forKey: Self.settingsKey),
            Self.isSettingsJSON(legacy) {
-            saveSettingsJSON(legacy)
             return legacy
         }
         return "{}"
-    }
-
-    private func saveSettingsJSON(_ json: String) {
-        guard Self.isSettingsJSON(json) else { return }
-        screenSaverDefaults?.set(json, forKey: Self.settingsKey)
-        screenSaverDefaults?.synchronize()
-        guard let url = Self.sharedSettingsURL else { return }
-        try? FileManager.default.createDirectory(
-            at: url.deletingLastPathComponent(),
-            withIntermediateDirectories: true,
-        )
-        try? Data(json.utf8).write(to: url, options: .atomic)
-        lastSettingsModificationDate = Self.modificationDate(for: url)
-        lastAppliedSettingsJSON = json
     }
 
     private func refreshSharedSettings() {
@@ -243,6 +392,9 @@ final class PearWallScreenSaverView: ScreenSaverView, WKNavigationDelegate {
             return
         }
         lastAppliedSettingsJSON = json
+        selectedDisplay = Self.screenSaverDisplay(from: json)
+        reconcileRenderTarget()
+        guard renderTargetActive else { return }
         applySettingsJSON(json)
     }
 
@@ -267,9 +419,20 @@ final class PearWallScreenSaverView: ScreenSaverView, WKNavigationDelegate {
         return object is [String: Any]
     }
 
+    private static func screenSaverDisplay(from json: String) -> PearWallScreenSaverDisplay {
+        guard let data = json.data(using: .utf8),
+              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let value = object["screenSaverDisplay"] as? String,
+              let display = PearWallScreenSaverDisplay(rawValue: value) else {
+            return .primary
+        }
+        return display
+    }
+
     private func refreshArtwork() {
+        guard renderTargetActive, pageReady else { return }
         mediaRemote.fetchNowPlaying { [weak self] artwork in
-            guard let self else { return }
+            guard let self, self.renderTargetActive else { return }
             let key = artwork?.key ?? ""
             let dataURL = artwork?.dataURL ?? ""
             guard key != self.lastSentArtworkKey else { return }
@@ -277,9 +440,13 @@ final class PearWallScreenSaverView: ScreenSaverView, WKNavigationDelegate {
             let keyJSON = Self.javascriptString(key)
             let dataJSON = Self.javascriptString(dataURL)
             webView.evaluateJavaScript(
-                "window.PearWallSetArtwork && window.PearWallSetArtwork(\(keyJSON), \(dataJSON));",
-            ) { [weak self] _, error in
-                if error == nil {
+                "(() => {" +
+                    "if (typeof window.PearWallSetArtwork !== 'function') return false;" +
+                    "window.PearWallSetArtwork(\(keyJSON), \(dataJSON));" +
+                    "return true;" +
+                    "})()",
+            ) { [weak self] value, error in
+                if error == nil, value as? Bool == true {
                     self?.lastSentArtworkKey = key
                 }
             }
@@ -287,6 +454,13 @@ final class PearWallScreenSaverView: ScreenSaverView, WKNavigationDelegate {
     }
 
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        guard renderTargetActive, webView === self.webView else { return }
+        pageReady = true
+        pageReloadRequired = false
+        lastSentArtworkKey = ""
+        lastSentDesktopWallpaperPath = ""
+        pulseGeneration &+= 1
+        pulseEvaluationPending = false
         if !previewMode {
             webView.evaluateJavaScript(
                 "window.PearWallSetScreenSaverMode && window.PearWallSetScreenSaverMode(true);",
@@ -294,10 +468,43 @@ final class PearWallScreenSaverView: ScreenSaverView, WKNavigationDelegate {
         }
         refreshArtwork()
         refreshDesktopWallpaper()
+        publishPulseIfNeeded()
+    }
+
+    func webView(
+        _ webView: WKWebView,
+        didFail navigation: WKNavigation!,
+        withError error: Error
+    ) {
+        pageReady = false
+        pulseGeneration &+= 1
+        pulseEvaluationPending = false
+    }
+
+    func webView(
+        _ webView: WKWebView,
+        didFailProvisionalNavigation navigation: WKNavigation!,
+        withError error: Error
+    ) {
+        pageReady = false
+        pulseGeneration &+= 1
+        pulseEvaluationPending = false
+    }
+
+    func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
+        pageReady = false
+        pageReloadRequired = true
+        pulseGeneration &+= 1
+        pulseEvaluationPending = false
+        guard renderingActive else { return }
+        pageReloadRequired = false
+        webView.reload()
     }
 
     private func refreshDesktopWallpaper() {
-        guard let screen = NSScreen.main,
+        guard renderTargetActive,
+              pageReady,
+              let screen = window?.screen ?? NSScreen.screens.first,
               let url = NSWorkspace.shared.desktopImageURL(for: screen) else {
             return
         }
@@ -313,9 +520,13 @@ final class PearWallScreenSaverView: ScreenSaverView, WKNavigationDelegate {
         let dataURL = "data:\(mimeType);base64,\(data.base64EncodedString())"
         let dataJSON = Self.javascriptString(dataURL)
         webView.evaluateJavaScript(
-            "window.PearWallSetDesktopArtwork && window.PearWallSetDesktopArtwork(\(dataJSON));",
-        ) { [weak self] _, error in
-            if error == nil {
+            "(() => {" +
+                "if (typeof window.PearWallSetDesktopArtwork !== 'function') return false;" +
+                "window.PearWallSetDesktopArtwork(\(dataJSON));" +
+                "return true;" +
+                "})()",
+        ) { [weak self] value, error in
+            if error == nil, value as? Bool == true {
                 self?.lastSentDesktopWallpaperPath = path
             }
         }
@@ -343,6 +554,50 @@ final class PearWallScreenSaverView: ScreenSaverView, WKNavigationDelegate {
             return "\"\""
         }
         return String(array.dropFirst().dropLast())
+    }
+}
+
+private final class RuntimePulseReader {
+    private static let maximumAgeMilliseconds: UInt64 = 1_000
+    private var handle: UnsafeMutableRawPointer?
+    private var nextOpenAttempt = Date.distantPast
+
+    deinit {
+        if let handle {
+            pearwallRuntimeStateClose(handle)
+        }
+    }
+
+    func currentPulse() -> Float {
+        openIfNeeded()
+        guard let handle else { return 0 }
+        var pulse: Float = 0
+        var updatedAtMilliseconds: UInt64 = 0
+        guard pearwallRuntimeStateRead(handle, &pulse, &updatedAtMilliseconds) == 1,
+              pulse.isFinite else {
+            return 0
+        }
+        let now = UInt64(max(0, Date().timeIntervalSince1970 * 1_000))
+        guard now >= updatedAtMilliseconds,
+              now - updatedAtMilliseconds <= Self.maximumAgeMilliseconds else {
+            return 0
+        }
+        return min(1, max(0, pulse))
+    }
+
+    private func openIfNeeded() {
+        guard handle == nil,
+              Date() >= nextOpenAttempt else {
+            return
+        }
+        nextOpenAttempt = Date().addingTimeInterval(1)
+        guard let url = Self.runtimeStateURL else { return }
+        handle = url.path.withCString { pearwallRuntimeStateOpen($0) }
+    }
+
+    private static var runtimeStateURL: URL? {
+        pearWallApplicationSupportDirectory()?
+            .appendingPathComponent("runtime-state-v1.bin")
     }
 }
 
@@ -402,6 +657,10 @@ private final class MediaRemoteBridge {
         fetchPending = true
         helperQueue.async { [weak self] in
             guard let self else { return }
+            if let artwork = Self.readViaSharedCache() {
+                self.finishFetch(artwork, completion: completion)
+                return
+            }
             if let artwork = Self.readViaSystemHost() {
                 self.finishFetch(artwork, completion: completion)
                 return
@@ -410,6 +669,28 @@ private final class MediaRemoteBridge {
                 self.fetchLegacy(completion: completion)
             }
         }
+    }
+
+    private static func readViaSharedCache() -> MediaArtwork? {
+        guard let url = pearWallApplicationSupportDirectory()?
+            .appendingPathComponent("media-artwork.json"),
+              let data = try? Data(contentsOf: url),
+              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let key = object["key"] as? String,
+              !key.isEmpty,
+              let updatedAt = object["updated_at_milliseconds"] as? NSNumber else {
+            return nil
+        }
+        let now = UInt64(max(0, Date().timeIntervalSince1970 * 1_000))
+        let updatedAtMilliseconds = updatedAt.uint64Value
+        guard now >= updatedAtMilliseconds,
+              now - updatedAtMilliseconds <= 10_000 else {
+            return nil
+        }
+        return MediaArtwork(
+            key: key,
+            dataURL: object["data_url"] as? String ?? "",
+        )
     }
 
     private func fetchLegacy(completion: @escaping (MediaArtwork?) -> Void) {

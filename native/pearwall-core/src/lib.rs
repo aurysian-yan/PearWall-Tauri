@@ -533,9 +533,7 @@ fn pcm_frequency_magnitude(samples: &[f32], sample_rate_hz: f32, frequency_hz: f
     for (index, sample) in samples.iter().enumerate() {
         let position = index as f32 / (samples.len() - 1) as f32;
         let window = 0.5 - 0.5 * (2.0 * std::f32::consts::PI * position).cos();
-        let current = sample.clamp(-1.0, 1.0) * window
-            + coefficient * previous
-            - previous_previous;
+        let current = sample.clamp(-1.0, 1.0) * window + coefficient * previous - previous_previous;
         previous_previous = previous;
         previous = current;
     }

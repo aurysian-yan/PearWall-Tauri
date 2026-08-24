@@ -32,6 +32,8 @@
   let rustAudioPollPending = false;
   let lastMediaArtworkPollAt = 0;
   let mediaArtworkPollPending = false;
+  let nativeAudioPulse = Number.NaN;
+  const nativeFrameDriver = Boolean(window.PearWallNativeFrameDriver);
   let nativeArtworkKey = '';
   let mediaArtworkAvailable = false;
   let desktopArtworkSource = '';
@@ -39,6 +41,11 @@
   let desktopArtworkFailed = false;
   let screenSaverMode = false;
   let previewReady = false;
+
+  canvas.addEventListener('webglcontextlost', (event) => {
+    event.preventDefault();
+    window.setTimeout(() => window.location.reload(), 250);
+  }, { once: true });
 
   renderer.setArtworkSource('assets/default_artwork.svg');
 
@@ -167,6 +174,11 @@
     desktopArtworkSource = artworkSource(dataUrl);
     desktopArtworkFailed = !desktopArtworkSource;
     if (!mediaArtworkAvailable) applyArtworkFallback();
+  };
+
+  window.PearWallSetNativePulse = (pulse) => {
+    const value = Number(pulse);
+    nativeAudioPulse = Number.isFinite(value) ? Math.max(0, Math.min(1, value)) : 0;
   };
 
   function pollMediaArtwork(timestamp) {
@@ -343,7 +355,7 @@
     window.wallpaperRegisterMediaPropertiesListener(() => {});
   }
 
-  function frame(timestamp) {
+  function renderFrame(timestamp) {
     const delta = Math.min(0.1, Math.max(0, (timestamp - lastFrameTime) / 1000));
     lastFrameTime = timestamp;
     const minFrameInterval = targetFps > 0 ? 1000 / targetFps : 0;
@@ -352,7 +364,9 @@
       pollMediaArtwork(timestamp);
       if (!paused && (!settings.pauseFlow || playbackPlaying)) animationTime += delta;
       const pulse = settings.audioVisualization && playbackPlaying
-        ? (tauriInvoke ? rustAudioPulse : analyzer.getInterpolated(timestamp / 1000))
+        ? (Number.isFinite(nativeAudioPulse)
+            ? nativeAudioPulse
+            : (tauriInvoke ? rustAudioPulse : analyzer.getInterpolated(timestamp / 1000)))
         : 0;
       renderer.render(animationTime, pulse);
       if (!previewReady) {
@@ -364,12 +378,21 @@
       }
       lastRenderedAt = timestamp;
     }
+  }
+
+  function frame(timestamp) {
+    renderFrame(timestamp);
     window.requestAnimationFrame(frame);
   }
+
+  window.PearWallRenderFrame = (timestamp, pulse) => {
+    window.PearWallSetNativePulse(pulse);
+    renderFrame(Number(timestamp) || performance.now());
+  };
 
   window.addEventListener('resize', () => renderer.resize());
   applySettingsValues(savedSettings());
   enableScreenSaverExit();
   renderer.resize();
-  window.requestAnimationFrame(frame);
+  if (!nativeFrameDriver) window.requestAnimationFrame(frame);
 }());

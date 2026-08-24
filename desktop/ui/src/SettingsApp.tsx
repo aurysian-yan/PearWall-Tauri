@@ -1,4 +1,4 @@
-import { Button, Separator, Slider, Tabs } from "@heroui/react";
+import { Button, Modal, Separator, Slider, Tabs } from "@heroui/react";
 import { SmoothCorners } from "@lisse/react";
 import { OverlayScrollbarsComponent } from "overlayscrollbars-react";
 import BlurEffect from "react-progressive-blur";
@@ -44,7 +44,12 @@ import {
   settingsFromJSON,
   wallpaperSettings,
 } from "./settings";
-import type { FlowSpeed, MoruStyle, Settings } from "./types";
+import type {
+  FlowSpeed,
+  MoruStyle,
+  ScreenSaverDisplay,
+  Settings,
+} from "./types";
 import { DynamicDrawerHandle } from "./DynamicDrawerHandle";
 import { PearWallLogo } from "./PearWallLogo";
 import { WindowTitleBar } from "./WindowTitleBar";
@@ -89,6 +94,11 @@ const renderScales: SelectOption<number>[] = [
   { value: 1, label: "清晰" },
 ];
 
+const screenSaverDisplays: SelectOption<ScreenSaverDisplay>[] = [
+  { value: "PRIMARY", label: "主屏" },
+  { value: "SECONDARY", label: "副屏" },
+];
+
 const portraitPresets: SelectOption<number>[] = [
   { value: 0, label: "方案 1" },
   { value: 1, label: "方案 2" },
@@ -106,6 +116,23 @@ const landscapePresets: SelectOption<number>[] = [
 
 const tintLogo = new URL("./tint-logo.png", import.meta.url).href;
 const projectDependencies = licenseDataJson.frontend;
+const permissionNoticeStorageKey = "pearwall.permission-notice.v1";
+
+function shouldShowPermissionNotice() {
+  try {
+    return window.localStorage.getItem(permissionNoticeStorageKey) !== "acknowledged";
+  } catch {
+    return true;
+  }
+}
+
+function acknowledgePermissionNotice() {
+  try {
+    window.localStorage.setItem(permissionNoticeStorageKey, "acknowledged");
+  } catch {
+    return;
+  }
+}
 
 function ExternalSettingRow({
   href,
@@ -450,11 +477,102 @@ function DrawerPageContent({
   );
 }
 
+function PermissionNotice({
+  open,
+  onOpenChange,
+  onAcknowledge,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onAcknowledge: () => void;
+}) {
+  return (
+    <Modal isOpen={open} onOpenChange={onOpenChange}>
+      <Modal.Backdrop
+        variant="blur"
+        isDismissable={false}
+        isKeyboardDismissDisabled
+        className="dark"
+      >
+        <Modal.Container size="md" placement="center">
+          <Modal.Dialog>
+            <Modal.Header>
+              <Modal.Icon className="bg-accent-soft text-accent-soft-foreground">
+                <SpeakerHighIcon aria-hidden size={22} weight="regular" />
+              </Modal.Icon>
+              <Modal.Heading>音频可视化需要系统权限</Modal.Heading>
+            </Modal.Header>
+            <Modal.Body>
+              <p>
+                为了让画面跟随当前播放的声音律动，macOS 要求 Pear Wall
+                获得“屏幕与系统音频录制”权限。Pear Wall
+                只分析实时音量与节奏，不会保存屏幕画面或音频内容。
+              </p>
+              <div className="mt-4 space-y-3">
+                <div className="flex gap-3">
+                  <SpeakerHighIcon
+                    aria-hidden
+                    size={20}
+                    className="mt-0.5 shrink-0 text-foreground"
+                  />
+                  <div>
+                    <p className="font-medium text-foreground">音频可视化</p>
+                    <p>让主界面和纯享模式根据系统声音实时律动。</p>
+                  </div>
+                </div>
+                <div className="flex gap-3">
+                  <MonitorIcon
+                    aria-hidden
+                    size={20}
+                    className="mt-0.5 shrink-0 text-foreground"
+                  />
+                  <div>
+                    <p className="font-medium text-foreground">
+                      屏幕保护程序与动态壁纸
+                    </p>
+                    <p>由后台运行时持续提供声音节奏数据。</p>
+                  </div>
+                </div>
+              </div>
+              <div className="mt-5 rounded-xl bg-surface-secondary p-4">
+                <p className="font-medium text-surface-secondary-foreground">
+                  授予权限后需要彻底重启
+                </p>
+                <ol className="mt-2 list-decimal space-y-2 pl-5">
+                  <li>
+                    在“系统设置 &gt; 隐私与安全性 &gt;
+                    屏幕与系统音频录制”中允许 Pear Wall。
+                  </li>
+                  <li>若 macOS 显示“退出并重新打开”，请选择该操作。</li>
+                  <li>
+                    如果没有出现提示，按 ⌘Q 退出 Pear Wall，再在“活动监视器”中结束“Pear
+                    Wall 后台运行时”，随后重新打开 Pear Wall。
+                  </li>
+                </ol>
+                <p className="mt-3 text-xs">只关闭窗口不算完全退出。</p>
+              </div>
+            </Modal.Body>
+            <Modal.Footer>
+              <Button onPress={onAcknowledge}>我知道了</Button>
+            </Modal.Footer>
+          </Modal.Dialog>
+        </Modal.Container>
+      </Modal.Backdrop>
+    </Modal>
+  );
+}
+
 export function SettingsApp() {
   const isTauriRuntime = isTauri();
-  const usesSharedMacSettings = isTauriRuntime
+  const isMacOSRuntime = isTauriRuntime
     && !document.documentElement.classList.contains("windows");
+  const usesSharedMacSettings = isMacOSRuntime;
   const [settings, setSettings] = useState<Settings>(loadSettings);
+  const [permissionNoticeOpen, setPermissionNoticeOpen] = useState(
+    () => isMacOSRuntime
+      && settings.audioVisualization
+      && shouldShowPermissionNotice(),
+  );
   const [sharedSettingsReady, setSharedSettingsReady] = useState(
     !usesSharedMacSettings,
   );
@@ -469,7 +587,20 @@ export function SettingsApp() {
   const mediaArtworkCache = useRef<MediaArtwork | null>(null);
 
   const update: UpdateSetting = (key, value) => {
+    if (
+      key === "audioVisualization"
+      && value === true
+      && isMacOSRuntime
+      && shouldShowPermissionNotice()
+    ) {
+      setPermissionNoticeOpen(true);
+    }
     setSettings((current) => ({ ...current, [key]: value }));
+  };
+
+  const handlePermissionNoticeAcknowledgement = () => {
+    acknowledgePermissionNotice();
+    setPermissionNoticeOpen(false);
   };
 
   const syncPreview = () => {
@@ -848,6 +979,18 @@ export function SettingsApp() {
                   onChange={(value) => update("hideCursor", value)}
                 />
               </SettingRow>
+              {isMacOSRuntime && (
+                <>
+                  <Separator className="mx-2 w-[calc(100%-1rem)] bg-white/15" />
+                  <ChoiceTabs
+                    icon={MonitorIcon}
+                    label="屏保显示器"
+                    value={settings.screenSaverDisplay}
+                    options={screenSaverDisplays}
+                    onChange={(value) => update("screenSaverDisplay", value)}
+                  />
+                </>
+              )}
             </SettingsCard>
           </section>
 
@@ -1057,6 +1200,11 @@ export function SettingsApp() {
           </Drawer.Content>
         </Drawer.Portal>
       </Drawer.Root>
+      <PermissionNotice
+        open={permissionNoticeOpen}
+        onOpenChange={setPermissionNoticeOpen}
+        onAcknowledge={handlePermissionNoticeAcknowledgement}
+      />
     </div>
   );
 }

@@ -24,7 +24,13 @@ mkdir -p \
   "${BUNDLE_PATH}/Contents/Resources/mediaremote"
 
 ARM64_BINARY="${TEMP_ROOT}/PearWallScreenSaver-arm64"
-X86_64_BINARY="${TEMP_ROOT}/PearWallScreenSaver-x86_64"
+ARM64_RUNTIME_STATE="${TEMP_ROOT}/PearWallRuntimeState-arm64.o"
+
+xcrun clang \
+  -std=c11 \
+  -target arm64-apple-macos11.0 \
+  -c "${DESKTOP_ROOT}/macos-saver/PearWallRuntimeState.c" \
+  -o "${ARM64_RUNTIME_STATE}"
 
 xcrun swiftc \
   -emit-library \
@@ -34,24 +40,12 @@ xcrun swiftc \
   -Xlinker -bundle \
   -o "${ARM64_BINARY}" \
   "${DESKTOP_ROOT}/macos-saver/PearWallScreenSaverView.swift" \
+  "${ARM64_RUNTIME_STATE}" \
   -framework AppKit \
   -framework ScreenSaver \
   -framework WebKit
 
-xcrun swiftc \
-  -emit-library \
-  -parse-as-library \
-  -module-name PearWallScreenSaver \
-  -target x86_64-apple-macos11.0 \
-  -Xlinker -bundle \
-  -o "${X86_64_BINARY}" \
-  "${DESKTOP_ROOT}/macos-saver/PearWallScreenSaverView.swift" \
-  -framework AppKit \
-  -framework ScreenSaver \
-  -framework WebKit
-
-lipo -create "${ARM64_BINARY}" "${X86_64_BINARY}" \
-  -output "${BUNDLE_PATH}/Contents/MacOS/PearWallScreenSaver"
+cp "${ARM64_BINARY}" "${BUNDLE_PATH}/Contents/MacOS/PearWallScreenSaver"
 cp "${DESKTOP_ROOT}/macos-saver/Info.plist" "${BUNDLE_PATH}/Contents/Info.plist"
 cp -R "${DESKTOP_ROOT}/dist/." "${BUNDLE_PATH}/Contents/Resources/web/"
 cp \
@@ -60,7 +54,6 @@ cp \
 
 plutil -lint "${BUNDLE_PATH}/Contents/Info.plist" >/dev/null
 lipo "${BUNDLE_PATH}/Contents/MacOS/PearWallScreenSaver" -verify_arch arm64
-lipo "${BUNDLE_PATH}/Contents/MacOS/PearWallScreenSaver" -verify_arch x86_64
 if ! otool -hv "${BUNDLE_PATH}/Contents/MacOS/PearWallScreenSaver" | grep -q "BUNDLE"; then
   echo "屏保主程序不是可加载的 Mach-O bundle" >&2
   exit 1

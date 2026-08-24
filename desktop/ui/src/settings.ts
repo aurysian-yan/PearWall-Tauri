@@ -17,6 +17,7 @@ export const defaultSettings: Settings = {
   audioVisualization: true,
   pauseFlow: true,
   hideCursor: true,
+  screenSaverDisplay: 'PRIMARY',
   renderScale: 0.75,
   blurEnabled: true,
   blurMultiplier: 1,
@@ -42,7 +43,15 @@ function normalizedSettings(saved: Partial<Settings>): Settings {
   const artworkFallback = savedArtworkFallback === 'CUSTOM' && !saved.customArtwork
     ? 'DEFAULT'
     : savedArtworkFallback;
-  return { ...defaultSettings, ...saved, artworkFallback } as Settings;
+  const screenSaverDisplay = saved.screenSaverDisplay === 'SECONDARY'
+    ? 'SECONDARY'
+    : 'PRIMARY';
+  return {
+    ...defaultSettings,
+    ...saved,
+    artworkFallback,
+    screenSaverDisplay,
+  } as Settings;
 }
 
 export function settingsFromJSON(json: string): Settings {

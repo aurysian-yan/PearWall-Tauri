@@ -13,6 +13,7 @@ import { openUrl } from "@tauri-apps/plugin-opener";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { PearWallLogo } from "./PearWallLogo";
 import { WindowTitleBar } from "./WindowTitleBar";
+import BlurEffect from "react-progressive-blur";
 
 type InstallerMode = "install" | "update" | "repair" | "uninstall";
 type OperationStatus = "loading" | "ready" | "running" | "complete" | "error";
@@ -88,7 +89,9 @@ function closeInstallerWindow() {
 }
 
 export function InstallerApp() {
-  const [installerState, setInstallerState] = useState<InstallerState | null>(null);
+  const [installerState, setInstallerState] = useState<InstallerState | null>(
+    null,
+  );
   const [activeMode, setActiveMode] = useState<InstallerMode>("install");
   const [status, setStatus] = useState<OperationStatus>("loading");
   const [options, setOptions] = useState<InstallOptions>({
@@ -274,16 +277,19 @@ export function InstallerApp() {
         className={`pointer-events-none absolute inset-0 h-full w-full border-0 transition-opacity duration-300 ${previewReady ? "opacity-100" : "opacity-0"}`}
       />
 
-      <div className="pointer-events-none absolute inset-x-0 bottom-0 z-[5] h-3/4 bg-gradient-to-t from-black/80 via-black/40 to-transparent" />
+      <BlurEffect
+        position="bottom"
+        intensity={90}
+        className={`pointer-events-none fixed inset-x-0 top-0 z-[70] w-screen h-[50dvh]`}
+      />
+      <div className="pointer-events-none absolute inset-x-0 bottom-0 z-[5] h-3/4 bg-gradient-to-t from-black via-black/60 to-transparent" />
 
       <main className="relative z-10 flex h-full items-end justify-center px-8 pb-10 pt-14 text-center">
         <div className="flex h-80 w-full max-w-lg flex-col items-center">
-          <PearWallLogo className="h-auto w-40 shrink-0 text-white/90" />
+          <PearWallLogo className="h-auto w-44 shrink-0 text-white/90" />
 
           {status === "loading" && (
-            <div className="mt-7 text-sm text-white/70">
-              正在检查安装状态…
-            </div>
+            <div className="mt-7 text-sm text-white/70">正在检查安装状态…</div>
           )}
 
           {status === "ready" && activeMode !== "uninstall" && (
@@ -306,7 +312,7 @@ export function InstallerApp() {
                   fullWidth
                   size="lg"
                   onPress={() => void runOperation()}
-                  className="h-14 bg-white/80 backdrop-blur-[10px] backdrop-saturate-150 text-base font-semibold !text-neutral-900"
+                  className="h-14 bg-white/20 backdrop-blur-[10px] backdrop-saturate-150 backdrop-brightness-150 text-base font-semibold !text-white"
                 >
                   {activeMode === "repair" && (
                     <ArrowClockwiseIcon aria-hidden size={20} />
@@ -383,7 +389,11 @@ export function InstallerApp() {
 
           {status === "complete" && (
             <div className="mt-7 flex flex-col items-center gap-2">
-              <CheckCircleIcon aria-hidden size={24} className="text-white/85" />
+              <CheckCircleIcon
+                aria-hidden
+                size={24}
+                className="text-white/85"
+              />
               <div className="text-sm font-semibold text-white">
                 {activeMode === "uninstall" ? "已完成卸载" : "已完成安装"}
               </div>
@@ -397,9 +407,15 @@ export function InstallerApp() {
 
           {status === "error" && (
             <div className="mt-7 flex flex-col items-center gap-2">
-              <WarningCircleIcon aria-hidden size={24} className="text-white/85" />
+              <WarningCircleIcon
+                aria-hidden
+                size={24}
+                className="text-white/85"
+              />
               <div className="text-sm font-semibold text-white">操作未完成</div>
-              <div className="text-xs text-white/60">{errorMessage || "请重试"}</div>
+              <div className="text-xs text-white/60">
+                {errorMessage || "请重试"}
+              </div>
             </div>
           )}
 
@@ -468,7 +484,9 @@ export function InstallerApp() {
                 <button
                   type="button"
                   className="text-white/75 hover:text-white"
-                  onClick={() => openExternal(unsplashLink(photo.user.links.html))}
+                  onClick={() =>
+                    openExternal(unsplashLink(photo.user.links.html))
+                  }
                 >
                   {photo.user.name}
                 </button>

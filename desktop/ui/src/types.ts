@@ -1,11 +1,13 @@
 export type FlowSpeed = 'SLOW' | 'NORMAL' | 'FAST';
 export type MoruStyle = 'OFF' | 'NARROW' | 'WIDE' | 'SMOOTH';
 export type ArtworkFallback = 'DEFAULT' | 'CUSTOM' | 'DESKTOP';
+export type ScreenSaverDisplay = 'PRIMARY' | 'SECONDARY';
 
 export type Settings = {
   audioVisualization: boolean;
   pauseFlow: boolean;
   hideCursor: boolean;
+  screenSaverDisplay: ScreenSaverDisplay;
   renderScale: number;
   blurEnabled: boolean;
   blurMultiplier: number;

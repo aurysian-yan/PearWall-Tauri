@@ -6,6 +6,7 @@
   const PORTRAIT = 'portrait';
   const MORU_STYLES = new Set(['OFF', 'NARROW', 'WIDE', 'SMOOTH']);
   const PRESET_COUNTS = { portrait: 4, landscape: 5 };
+  const SCREEN_SAVER_MAX_PIXELS = 1920 * 1080;
 
   function clamp(value, min, max) {
     return Math.max(min, Math.min(max, value));
@@ -186,10 +187,11 @@
       this.targets = {};
       this.animationTime = 0;
       this.artworkAspect = 1;
-      this.currentArtwork = createTexture(this.gl, [128, 128, 128, 255]);
+      this.currentArtwork = createTexture(this.gl, [0, 0, 0, 255]);
       this.previousArtwork = this.currentArtwork;
       this.artworkTransitionStart = -Infinity;
       this.pendingArtwork = null;
+      this.requestedArtworkSource = '';
       this.moruTextures = {
         NARROW: [createTexture(this.gl, [128, 255, 128, 255]), createTexture(this.gl, [0, 0, 255, 255])],
         WIDE: [createTexture(this.gl, [128, 255, 128, 255]), createTexture(this.gl, [0, 0, 255, 255])],
@@ -218,7 +220,8 @@
     }
 
     setArtworkSource(source) {
-      if (!source) return;
+      if (!source || source === this.requestedArtworkSource) return;
+      this.requestedArtworkSource = source;
       const image = new Image();
       if (/^https?:/i.test(source)) image.crossOrigin = 'anonymous';
       image.onload = () => {
@@ -228,6 +231,9 @@
         } else {
           this.startArtworkTransition(image, performance.now() / 1000);
         }
+      };
+      image.onerror = () => {
+        if (this.requestedArtworkSource === source) this.requestedArtworkSource = '';
       };
       image.src = source;
     }
@@ -246,7 +252,7 @@
 
     startArtworkTransition(image, timestamp) {
       if (this.currentArtwork === this.previousArtwork) this.previousArtwork = this.currentArtwork;
-      const texture = createTexture(this.gl, [128, 128, 128, 255]);
+      const texture = createTexture(this.gl, [0, 0, 0, 255]);
       updateTexture(this.gl, texture, image);
       this.previousArtwork = this.currentArtwork;
       this.currentArtwork = texture;
@@ -452,8 +458,14 @@
 
     resize() {
       const ratio = window.devicePixelRatio || 1;
-      const width = Math.max(1, Math.round(this.canvas.clientWidth * ratio));
-      const height = Math.max(1, Math.round(this.canvas.clientHeight * ratio));
+      const requestedWidth = Math.max(1, Math.round(this.canvas.clientWidth * ratio));
+      const requestedHeight = Math.max(1, Math.round(this.canvas.clientHeight * ratio));
+      const requestedPixels = requestedWidth * requestedHeight;
+      const budgetScale = window.PearWallNativeFrameDriver && requestedPixels > SCREEN_SAVER_MAX_PIXELS
+        ? Math.sqrt(SCREEN_SAVER_MAX_PIXELS / requestedPixels)
+        : 1;
+      const width = Math.max(1, Math.round(requestedWidth * budgetScale));
+      const height = Math.max(1, Math.round(requestedHeight * budgetScale));
       if (this.canvas.width !== width) this.canvas.width = width;
       if (this.canvas.height !== height) this.canvas.height = height;
       this.ensureSize(width, height);

@@ -4,6 +4,7 @@ version = "0.1.0"
 description = "Pear Wall desktop runtime"
 authors = ["Pear Wall"]
 edition = "2021"
+default-run = "pearwall-desktop"
 
 [lib]
 name = "pearwall_desktop_lib"
@@ -26,8 +27,11 @@ windows = { version = "0.61", features = ["Media_Control", "Storage_Streams", "W
 windows-future = "0.2"
 
 [target.'cfg(target_os = "macos")'.dependencies]
+fs2 = "0.4"
+memmap2 = "0.9"
 objc2 = "0.6"
-objc2-app-kit = { version = "0.3", default-features = false, features = ["NSScreen", "NSWorkspace"] }
+objc2-app-kit = { version = "0.3", default-features = false, features = ["NSScreen", "NSWindow", "NSWorkspace"] }
+objc2-core-graphics = { version = "0.3", default-features = false, features = ["CGWindowLevel"] }
 screencapturekit = { version = "8.0.1", features = ["macos_13_0"] }
 
 [profile.release]
