@@ -32,6 +32,7 @@ private struct PearWallSettings {
     var hideCursor = true
     var screenSaverDisplay = PearWallScreenSaverDisplay.primary
     var screenSaverDisplayIds: [String]?
+    var showConfigurationDetails = true
     var renderScale = 0.75
     var blurEnabled = true
     var blurMultiplier = 1.0
@@ -76,6 +77,11 @@ private struct PearWallSettings {
         audioVisualization = Self.boolean(object, key: "audioVisualization", fallback: audioVisualization)
         pauseFlow = Self.boolean(object, key: "pauseFlow", fallback: pauseFlow)
         hideCursor = Self.boolean(object, key: "hideCursor", fallback: hideCursor)
+        showConfigurationDetails = Self.boolean(
+            object,
+            key: "showConfigurationDetails",
+            fallback: showConfigurationDetails
+        )
         renderScale = Self.number(object, key: "renderScale", fallback: renderScale)
         blurEnabled = Self.boolean(object, key: "blurEnabled", fallback: blurEnabled)
         blurMultiplier = Self.number(object, key: "blurMultiplier", fallback: blurMultiplier)
@@ -324,7 +330,7 @@ final class PearWallScreenSaverView: ScreenSaverView {
 
     private func reconcileRenderTarget() {
         let shouldRender = previewMode || isCurrentScreenSelected()
-        configurationDetailsLabel?.isHidden = !shouldRender
+        configurationDetailsLabel?.isHidden = !shouldRender || !settings.showConfigurationDetails
         guard shouldRender != renderTargetActive || (shouldRender && metalView == nil) else {
             return
         }
@@ -509,6 +515,7 @@ final class PearWallScreenSaverView: ScreenSaverView {
             label.widthAnchor.constraint(lessThanOrEqualToConstant: 320),
             label.heightAnchor.constraint(greaterThanOrEqualToConstant: minimumHeight),
         ])
+        label.isHidden = !settings.showConfigurationDetails
         configurationDetailsLabel = label
         updateConfigurationDetails()
     }

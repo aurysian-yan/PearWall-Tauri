@@ -738,18 +738,21 @@ function DrawerPageContent({
   page,
   settings,
   update,
+  isMacOSRuntime,
 }: {
   page: DrawerPage;
   settings: Settings;
   update: UpdateSetting;
+  isMacOSRuntime: boolean;
 }) {
   const titles: Record<DrawerPage, string> = {
     advanced: "高级设置",
     licenses: "开源许可",
   };
   const descriptions: Record<DrawerPage, string> = {
-    advanced:
-      "为不同屏幕方向选择独立的流动方案，也可以让 Pear Wall 自动随机切换。",
+    advanced: isMacOSRuntime
+      ? "为不同屏幕方向选择独立的流动方案，并调整屏保显示选项。"
+      : "为不同屏幕方向选择独立的流动方案，也可以让 Pear Wall 自动随机切换。",
     licenses: "Pear Wall 能够顺利运行，离不开这些优秀的开源库。",
   };
   const icons: Record<DrawerPage, IconType> = {
@@ -821,6 +824,24 @@ function DrawerPageContent({
                     onChange={(value) => update("randomPreset", value)}
                   />
                 </SettingRow>
+                {isMacOSRuntime && (
+                  <>
+                    <Separator className="mx-2 w-[calc(100%-1rem)] bg-white/15" />
+                    <SettingRow
+                      icon={InfoIcon}
+                      title="显示配置详情"
+                      description="在屏幕保护程序中显示当前画面参数"
+                    >
+                      <Toggle
+                        label="显示配置详情"
+                        value={settings.showConfigurationDetails}
+                        onChange={(value) =>
+                          update("showConfigurationDetails", value)
+                        }
+                      />
+                    </SettingRow>
+                  </>
+                )}
               </DrawerCard>
             </div>
           )}
@@ -1518,7 +1539,9 @@ export function SettingsApp() {
                 <SettingRow
                   icon={SlidersHorizontalIcon}
                   title="高级设置"
-                  description="调整屏幕方向方案和随机切换"
+                  description={isMacOSRuntime
+                    ? "调整屏幕方向方案和屏保显示选项"
+                    : "调整屏幕方向方案和随机切换"}
                 >
                   <CaretRightIcon
                     aria-hidden
@@ -1632,6 +1655,7 @@ export function SettingsApp() {
                 page={drawerPage}
                 settings={settings}
                 update={update}
+                isMacOSRuntime={isMacOSRuntime}
               />
             )}
           </Drawer.Content>

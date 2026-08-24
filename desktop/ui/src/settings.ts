@@ -19,6 +19,7 @@ export const defaultSettings: Settings = {
   hideCursor: true,
   screenSaverDisplay: 'PRIMARY',
   screenSaverDisplayIds: null,
+  showConfigurationDetails: true,
   renderScale: 0.75,
   blurEnabled: true,
   blurMultiplier: 1,

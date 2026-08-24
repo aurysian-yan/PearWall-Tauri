@@ -9,6 +9,7 @@ export type Settings = {
   hideCursor: boolean;
   screenSaverDisplay: ScreenSaverDisplay;
   screenSaverDisplayIds: string[] | null;
+  showConfigurationDetails: boolean;
   renderScale: number;
   blurEnabled: boolean;
   blurMultiplier: number;
