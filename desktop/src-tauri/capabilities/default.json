@@ -2,7 +2,7 @@
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
   "description": "Pear Wall desktop permissions",
-  "windows": ["main"],
+  "windows": ["main", "pearwall-wallpaper-*"],
   "permissions": [
     "core:default",
     "core:window:allow-start-dragging",

@@ -981,20 +981,23 @@ function PermissionNotice({
 
 export function SettingsApp() {
   const isTauriRuntime = isTauri();
-  const isMacOSRuntime = isTauriRuntime
-    && !document.documentElement.classList.contains("windows");
+  const isWindowsRuntime = isTauriRuntime
+    && document.documentElement.classList.contains("windows");
+  const isMacOSRuntime = isTauriRuntime && !isWindowsRuntime;
+  const supportsDynamicWallpaper = isMacOSRuntime || isWindowsRuntime;
   const usesSharedSettings = isTauriRuntime;
   const [settings, setSettings] = useState<Settings>(loadSettings);
   const [connectedDisplays, setConnectedDisplays] = useState<ConnectedDisplay[]>([]);
-  const [displayLoading, setDisplayLoading] = useState(isMacOSRuntime);
+  const [displayLoading, setDisplayLoading] = useState(supportsDynamicWallpaper);
   const [displayDiscoveryFailed, setDisplayDiscoveryFailed] = useState(false);
   const [wallpaperStatus, setWallpaperStatus] = useState<WallpaperRuntimeStatus>({
-    supported: isMacOSRuntime,
+    supported: supportsDynamicWallpaper,
     running: settings.dynamicWallpaperEnabled,
     displayCount: 0,
   });
-  const [wallpaperLoading, setWallpaperLoading] = useState(isMacOSRuntime);
+  const [wallpaperLoading, setWallpaperLoading] = useState(supportsDynamicWallpaper);
   const [wallpaperFailed, setWallpaperFailed] = useState(false);
+  const [wallpaperError, setWallpaperError] = useState("");
   const [permissionNoticeOpen, setPermissionNoticeOpen] = useState(
     () => isMacOSRuntime
       && settings.audioVisualization
@@ -1064,7 +1067,7 @@ export function SettingsApp() {
   }, [usesSharedSettings]);
 
   useEffect(() => {
-    if (!isMacOSRuntime) return;
+    if (!supportsDynamicWallpaper) return;
     let disposed = false;
 
     const refreshDisplays = async () => {
@@ -1088,23 +1091,30 @@ export function SettingsApp() {
       disposed = true;
       window.clearInterval(timer);
     };
-  }, [isMacOSRuntime]);
+  }, [supportsDynamicWallpaper]);
 
   useEffect(() => {
-    if (!isMacOSRuntime) return;
+    if (!supportsDynamicWallpaper) return;
     let disposed = false;
+    let pending = false;
 
     const refreshWallpaperStatus = async () => {
+      if (pending) return;
+      pending = true;
       try {
         const status = await invoke<WallpaperRuntimeStatus>(
           "plugin:pearwall-wallpaper|status",
         );
         if (disposed) return;
         setWallpaperStatus(status);
-        setWallpaperFailed(false);
+        if (status.running) {
+          setWallpaperFailed(false);
+          setWallpaperError("");
+        }
       } catch {
         if (!disposed) setWallpaperFailed(true);
       } finally {
+        pending = false;
         if (!disposed) setWallpaperLoading(false);
       }
     };
@@ -1117,11 +1127,12 @@ export function SettingsApp() {
       disposed = true;
       window.clearInterval(timer);
     };
-  }, [isMacOSRuntime]);
+  }, [supportsDynamicWallpaper]);
 
   const setWallpaperEnabled = async (enabled: boolean) => {
     setWallpaperLoading(true);
     setWallpaperFailed(false);
+    setWallpaperError("");
     try {
       const command = enabled ? "start" : "stop";
       const status = await invoke<WallpaperRuntimeStatus>(
@@ -1129,15 +1140,20 @@ export function SettingsApp() {
       );
       setWallpaperStatus(status);
       update("dynamicWallpaperEnabled", status.running);
-    } catch {
+    } catch (error) {
       setWallpaperFailed(true);
+      setWallpaperError(String(error));
     } finally {
       setWallpaperLoading(false);
     }
   };
 
   useEffect(() => {
-    if (!sharedSettingsReady || connectedDisplays.length === 0) return;
+    if (
+      !isMacOSRuntime
+      || !sharedSettingsReady
+      || connectedDisplays.length === 0
+    ) return;
     setSettings((current) => {
       if (current.screenSaverDisplayIds !== null) return current;
       const primary = connectedDisplays.find((display) => display.isPrimary);
@@ -1149,7 +1165,7 @@ export function SettingsApp() {
         screenSaverDisplayIds: legacyTarget ? [legacyTarget.id] : [],
       };
     });
-  }, [connectedDisplays, sharedSettingsReady]);
+  }, [connectedDisplays, isMacOSRuntime, sharedSettingsReady]);
 
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
@@ -1543,13 +1559,13 @@ export function SettingsApp() {
           <section className="mb-5">
             <SectionTitle>纯享、屏保与壁纸</SectionTitle>
             <SettingsCard>
-              {isMacOSRuntime && (
+              {supportsDynamicWallpaper && (
                 <>
                   <SettingRow
                     icon={DesktopIcon}
                     title="动态壁纸"
                     description={wallpaperFailed
-                      ? "无法更新动态壁纸，请重试"
+                      ? wallpaperError || "无法更新动态壁纸，请重试"
                       : wallpaperStatus.running
                         ? `已在 ${wallpaperStatus.displayCount} 台显示器上运行`
                         : "在桌面图标下方显示当前流动画面"}

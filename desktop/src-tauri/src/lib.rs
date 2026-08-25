@@ -5,7 +5,8 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::sync::Mutex;
 #[cfg(target_os = "macos")]
-use std::time::{Duration, Instant};
+use std::time::Duration;
+use std::time::Instant;
 use tauri::{webview::PageLoadEvent, AppHandle, Manager, State};
 
 mod desktop_wallpaper;
@@ -23,6 +24,8 @@ mod macos_status_item;
 mod windows_audio;
 #[cfg(windows)]
 mod windows_media;
+#[cfg(windows)]
+mod windows_tray;
 
 #[derive(Clone, Copy)]
 enum LaunchMode {
@@ -53,7 +56,7 @@ fn launch_mode() -> LaunchMode {
 
 #[cfg(windows)]
 fn set_preview_parent(window: &tauri::WebviewWindow, parent: isize) -> tauri::Result<()> {
-    use windows::Win32::Foundation::{HWND, RECT};
+    use windows::Win32::Foundation::{GetLastError, SetLastError, HWND, RECT, WIN32_ERROR};
     use windows::Win32::UI::WindowsAndMessaging::{
         GetClientRect, GetWindowLongPtrW, SetParent, SetWindowLongPtrW, SetWindowPos, GWL_STYLE,
         SWP_FRAMECHANGED, SWP_NOACTIVATE, WS_CHILD, WS_POPUP,
@@ -68,7 +71,10 @@ fn set_preview_parent(window: &tauri::WebviewWindow, parent: isize) -> tauri::Re
             GWL_STYLE,
             ((style | WS_CHILD.0) & !WS_POPUP.0) as isize,
         );
-        SetParent(child, Some(parent)).map_err(|_| tauri::Error::InvalidWindowHandle)?;
+        SetLastError(WIN32_ERROR(0));
+        if SetParent(child, Some(parent)).is_err() && GetLastError().0 != 0 {
+            return Err(tauri::Error::InvalidWindowHandle);
+        }
         let mut bounds = RECT::default();
         GetClientRect(parent, &mut bounds).map_err(|_| tauri::Error::InvalidWindowHandle)?;
         SetWindowPos(
@@ -227,15 +233,19 @@ fn get_connected_displays(app: tauri::AppHandle) -> Result<Vec<ConnectedDisplay>
                 let is_primary = primary
                     .as_ref()
                     .is_some_and(|value| value.position() == position && value.size() == size);
-                ConnectedDisplay {
-                    id: format!(
+                let name = monitor
+                    .name()
+                    .cloned()
+                    .unwrap_or_else(|| format!("显示器 {}", index + 1));
+                let id = monitor.name().cloned().unwrap_or_else(|| {
+                    format!(
                         "{}:{}:{}:{}:{}",
                         position.x, position.y, size.width, size.height, index
-                    ),
-                    name: monitor
-                        .name()
-                        .cloned()
-                        .unwrap_or_else(|| format!("显示器 {}", index + 1)),
+                    )
+                });
+                ConnectedDisplay {
+                    id,
+                    name,
                     width: size.width,
                     height: size.height,
                     position_x: position.x as f64,
@@ -392,39 +402,48 @@ fn set_macos_runtime_enabled(enabled: bool) -> Result<serde_json::Value, String>
 }
 
 #[tauri::command]
-fn get_macos_wallpaper_runtime_status() -> Result<serde_json::Value, String> {
+fn get_macos_wallpaper_runtime_status(app: AppHandle) -> Result<serde_json::Value, String> {
     #[cfg(target_os = "macos")]
     {
-        let status = pearwall_wallpaper::wallpaper_status();
+        let status = pearwall_wallpaper::wallpaper_status(&app);
         return serde_json::to_value(status).map_err(|error| error.to_string());
     }
 
     #[cfg(not(target_os = "macos"))]
-    Err("当前平台不支持 macOS 动态壁纸".to_string())
+    {
+        let _ = app;
+        Err("当前平台不支持 macOS 动态壁纸".to_string())
+    }
 }
 
 #[tauri::command]
-fn start_macos_wallpaper_runtime() -> Result<serde_json::Value, String> {
+fn start_macos_wallpaper_runtime(app: AppHandle) -> Result<serde_json::Value, String> {
     #[cfg(target_os = "macos")]
     {
-        let status = pearwall_wallpaper::start_wallpaper()?;
+        let status = pearwall_wallpaper::start_wallpaper(&app)?;
         return serde_json::to_value(status).map_err(|error| error.to_string());
     }
 
     #[cfg(not(target_os = "macos"))]
-    Err("当前平台不支持 macOS 动态壁纸".to_string())
+    {
+        let _ = app;
+        Err("当前平台不支持 macOS 动态壁纸".to_string())
+    }
 }
 
 #[tauri::command]
-fn stop_macos_wallpaper_runtime() -> Result<serde_json::Value, String> {
+fn stop_macos_wallpaper_runtime(app: AppHandle) -> Result<serde_json::Value, String> {
     #[cfg(target_os = "macos")]
     {
-        let status = pearwall_wallpaper::stop_wallpaper()?;
+        let status = pearwall_wallpaper::stop_wallpaper(&app)?;
         return serde_json::to_value(status).map_err(|error| error.to_string());
     }
 
     #[cfg(not(target_os = "macos"))]
-    Err("当前平台不支持 macOS 动态壁纸".to_string())
+    {
+        let _ = app;
+        Err("当前平台不支持 macOS 动态壁纸".to_string())
+    }
 }
 
 #[tauri::command]
@@ -556,7 +575,7 @@ pub fn run() {
             }
         })
         .on_window_event(move |_window, _event| {
-            #[cfg(target_os = "macos")]
+            #[cfg(any(target_os = "macos", windows))]
             if matches!(mode, LaunchMode::App | LaunchMode::Configure) && _window.label() == "main"
             {
                 if let tauri::WindowEvent::CloseRequested { api, .. } = _event {
@@ -566,12 +585,22 @@ pub fn run() {
             }
         })
         .setup(move |app| {
+            #[cfg(windows)]
+            if matches!(
+                mode,
+                LaunchMode::App | LaunchMode::Configure | LaunchMode::Wallpaper
+            ) {
+                windows_tray::install(app.handle())?;
+            }
+
+            #[cfg(any(target_os = "macos", windows))]
+            if matches!(mode, LaunchMode::Wallpaper) {
+                pearwall_wallpaper::start_wallpaper(app.handle())?;
+                return Ok(());
+            }
+
             #[cfg(target_os = "macos")]
             {
-                if matches!(mode, LaunchMode::Wallpaper) {
-                    pearwall_wallpaper::start_wallpaper()?;
-                    return Ok(());
-                }
                 if matches!(mode, LaunchMode::App | LaunchMode::Configure) {
                     _setup_visibility.store(
                         cfg!(debug_assertions) || macos_status_item::application_is_active(),
@@ -582,11 +611,15 @@ pub fn run() {
                         .set_activation_policy(tauri::ActivationPolicy::Accessory)
                         .map_err(|error| error.to_string())?;
                     start_macos_background_runtime(audio_analyzer.clone(), macos_started_at)?;
-                    if dynamic_wallpaper_enabled(app.handle())? {
-                        if let Err(error) = pearwall_wallpaper::start_wallpaper() {
-                            eprintln!("恢复动态壁纸失败：{error}");
-                        }
-                    }
+                }
+            }
+
+            #[cfg(any(target_os = "macos", windows))]
+            if matches!(mode, LaunchMode::App | LaunchMode::Configure)
+                && dynamic_wallpaper_enabled(app.handle())?
+            {
+                if let Err(error) = pearwall_wallpaper::start_wallpaper(app.handle()) {
+                    eprintln!("恢复动态壁纸失败：{error}");
                 }
             }
 
