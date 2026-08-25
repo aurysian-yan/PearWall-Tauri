@@ -4,6 +4,8 @@ export type ArtworkFallback = 'DEFAULT' | 'CUSTOM' | 'DESKTOP';
 export type ScreenSaverDisplay = 'PRIMARY' | 'SECONDARY';
 
 export type Settings = {
+  dynamicWallpaperEnabled: boolean;
+  dynamicWallpaperDisplayIds: string[] | null;
   audioVisualization: boolean;
   audioIntensity: number;
   pauseFlow: boolean;

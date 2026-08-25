@@ -560,16 +560,22 @@ function DisplayArrangement({
 }
 
 function DisplaySelector({
+  title,
+  selectionLabel,
   displays,
   selectedIds,
   loading,
   failed,
+  showArrangement = true,
   onChange,
 }: {
+  title: string;
+  selectionLabel: string;
   displays: ConnectedDisplay[];
   selectedIds: string[];
   loading: boolean;
   failed: boolean;
+  showArrangement?: boolean;
   onChange: (id: string, enabled: boolean) => void;
 }) {
   const enabledDisplayCount = displays.filter((display) =>
@@ -586,7 +592,7 @@ function DisplaySelector({
           className="shrink-0 text-white/90"
         />
         <div className="min-w-0 flex-1">
-          <div className="text-[14px] font-semibold text-white">屏保显示器</div>
+          <div className="text-[14px] font-semibold text-white">{title}</div>
           <div className="mt-1 text-xs text-white/65">
             {loading
               ? "正在识别已连接的显示器"
@@ -597,14 +603,16 @@ function DisplaySelector({
         </div>
       </div>
 
-      <DisplayArrangement displays={displays} selectedIds={selectedIds} />
+      {showArrangement && (
+        <DisplayArrangement displays={displays} selectedIds={selectedIds} />
+      )}
 
       {displays.length > 0 && (
         <div className="mt-3 divide-y divide-white/10">
           {displays.map((display, index) => (
             <Checkbox
               key={display.id}
-              aria-label={`${displayName(display, index)}启用屏保`}
+              aria-label={`${displayName(display, index)}${selectionLabel}`}
               className="w-full"
               isSelected={selectedIds.includes(display.id)}
               onChange={(enabled) => onChange(display.id, enabled)}
@@ -975,14 +983,14 @@ export function SettingsApp() {
   const isTauriRuntime = isTauri();
   const isMacOSRuntime = isTauriRuntime
     && !document.documentElement.classList.contains("windows");
-  const usesSharedMacSettings = isMacOSRuntime;
+  const usesSharedSettings = isTauriRuntime;
   const [settings, setSettings] = useState<Settings>(loadSettings);
   const [connectedDisplays, setConnectedDisplays] = useState<ConnectedDisplay[]>([]);
   const [displayLoading, setDisplayLoading] = useState(isMacOSRuntime);
   const [displayDiscoveryFailed, setDisplayDiscoveryFailed] = useState(false);
   const [wallpaperStatus, setWallpaperStatus] = useState<WallpaperRuntimeStatus>({
     supported: isMacOSRuntime,
-    running: false,
+    running: settings.dynamicWallpaperEnabled,
     displayCount: 0,
   });
   const [wallpaperLoading, setWallpaperLoading] = useState(isMacOSRuntime);
@@ -993,7 +1001,7 @@ export function SettingsApp() {
       && shouldShowPermissionNotice(),
   );
   const [sharedSettingsReady, setSharedSettingsReady] = useState(
-    !usesSharedMacSettings,
+    !usesSharedSettings,
   );
   const [previewReady, setPreviewReady] = useState(false);
   const [contentVisible, setContentVisible] = useState(true);
@@ -1032,15 +1040,15 @@ export function SettingsApp() {
   useEffect(() => {
     saveSettings(settings);
     syncPreview();
-    if (!usesSharedMacSettings || !sharedSettingsReady) return;
+    if (!usesSharedSettings || !sharedSettingsReady) return;
     const json = JSON.stringify(settings);
     sharedSaveQueue.current = sharedSaveQueue.current
       .catch(() => undefined)
       .then(() => invoke("save_shared_settings", { settings: json }));
-  }, [settings, sharedSettingsReady, usesSharedMacSettings]);
+  }, [settings, sharedSettingsReady, usesSharedSettings]);
 
   useEffect(() => {
-    if (!usesSharedMacSettings) return;
+    if (!usesSharedSettings) return;
     let disposed = false;
     void invoke<string | null>("load_shared_settings")
       .then((json) => {
@@ -1053,7 +1061,7 @@ export function SettingsApp() {
     return () => {
       disposed = true;
     };
-  }, [usesSharedMacSettings]);
+  }, [usesSharedSettings]);
 
   useEffect(() => {
     if (!isMacOSRuntime) return;
@@ -1102,8 +1110,12 @@ export function SettingsApp() {
     };
 
     void refreshWallpaperStatus();
+    const timer = window.setInterval(() => {
+      void refreshWallpaperStatus();
+    }, 2000);
     return () => {
       disposed = true;
+      window.clearInterval(timer);
     };
   }, [isMacOSRuntime]);
 
@@ -1116,6 +1128,7 @@ export function SettingsApp() {
         `plugin:pearwall-wallpaper|${command}`,
       );
       setWallpaperStatus(status);
+      update("dynamicWallpaperEnabled", status.running);
     } catch {
       setWallpaperFailed(true);
     } finally {
@@ -1159,7 +1172,7 @@ export function SettingsApp() {
   }, []);
 
   useEffect(() => {
-    if (!usesSharedMacSettings || !previewReady) return;
+    if (!isMacOSRuntime || !previewReady) return;
     let disposed = false;
     let pending = false;
     let currentKey = "";
@@ -1197,7 +1210,7 @@ export function SettingsApp() {
       disposed = true;
       window.clearInterval(timer);
     };
-  }, [previewReady, usesSharedMacSettings]);
+  }, [isMacOSRuntime, previewReady]);
 
   useEffect(() => {
     if (!isTauriRuntime || !previewReady || !settings.audioVisualization) return;
@@ -1286,6 +1299,18 @@ export function SettingsApp() {
         ? Array.from(new Set([...selected, id]))
         : selected.filter((value) => value !== id);
       return { ...current, screenSaverDisplayIds };
+    });
+  };
+
+  const toggleDynamicWallpaperDisplay = (id: string, enabled: boolean) => {
+    setSettings((current) => {
+      const selected = current.dynamicWallpaperDisplayIds
+        ?? connectedDisplays.map((display) => display.id);
+      const dynamicWallpaperDisplayIds = enabled
+        ? Array.from(new Set([...selected, id]))
+        : selected.filter((value) => value !== id);
+      if (dynamicWallpaperDisplayIds.length === 0) return current;
+      return { ...current, dynamicWallpaperDisplayIds };
     });
   };
 
@@ -1536,6 +1561,17 @@ export function SettingsApp() {
                       disabled={wallpaperLoading}
                     />
                   </SettingRow>
+                  <DisplaySelector
+                    title="动态壁纸显示器"
+                    selectionLabel="启用动态壁纸"
+                    displays={connectedDisplays}
+                    selectedIds={settings.dynamicWallpaperDisplayIds
+                      ?? connectedDisplays.map((display) => display.id)}
+                    loading={displayLoading}
+                    failed={displayDiscoveryFailed}
+                    showArrangement={false}
+                    onChange={toggleDynamicWallpaperDisplay}
+                  />
                   <Separator className="mx-2 w-[calc(100%-1rem)] bg-white/15" />
                 </>
               )}
@@ -1554,6 +1590,8 @@ export function SettingsApp() {
                 <>
                   <Separator className="mx-2 w-[calc(100%-1rem)] bg-white/15" />
                   <DisplaySelector
+                    title="屏保显示器"
+                    selectionLabel="启用屏保"
                     displays={connectedDisplays}
                     selectedIds={settings.screenSaverDisplayIds ?? []}
                     loading={displayLoading}

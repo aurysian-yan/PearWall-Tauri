@@ -24,6 +24,7 @@ enum PearWallArtworkFallback: String {
 }
 
 struct PearWallSettings {
+    var dynamicWallpaperDisplayIds: [String]?
     var audioVisualization = true
     var audioIntensity = 1.0
     var pauseFlow = true
@@ -95,6 +96,9 @@ struct PearWallSettings {
         landscapePreset = Self.integer(object, key: "landscapePreset", fallback: landscapePreset)
         randomPreset = Self.boolean(object, key: "randomPreset", fallback: randomPreset)
         customArtwork = Self.string(object, key: "customArtwork", fallback: customArtwork)
+        if let values = object["dynamicWallpaperDisplayIds"] as? [String] {
+            dynamicWallpaperDisplayIds = values
+        }
         if let value = PearWallScreenSaverDisplay(
             rawValue: Self.string(object, key: "screenSaverDisplay", fallback: "PRIMARY")
         ) {

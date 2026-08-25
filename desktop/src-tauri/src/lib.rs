@@ -1,13 +1,12 @@
 use pearwall_core::SpectrumAnalyzer;
 use serde::{Deserialize, Serialize};
-#[cfg(target_os = "macos")]
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::sync::Mutex;
 #[cfg(target_os = "macos")]
 use std::time::{Duration, Instant};
-use tauri::{webview::PageLoadEvent, Manager, State};
+use tauri::{webview::PageLoadEvent, AppHandle, Manager, State};
 
 mod desktop_wallpaper;
 #[cfg(target_os = "macos")]
@@ -434,13 +433,21 @@ fn get_desktop_wallpaper() -> Result<String, String> {
 }
 
 #[cfg(target_os = "macos")]
-fn shared_settings_path() -> Result<PathBuf, String> {
+fn shared_settings_path(_app: &AppHandle) -> Result<PathBuf, String> {
     let home = std::env::var_os("HOME").ok_or_else(|| "无法定位用户目录".to_string())?;
     Ok(PathBuf::from(home)
         .join("Library")
         .join("Application Support")
         .join("PearWall")
         .join("settings.json"))
+}
+
+#[cfg(not(target_os = "macos"))]
+fn shared_settings_path(app: &AppHandle) -> Result<PathBuf, String> {
+    app.path()
+        .app_config_dir()
+        .map(|directory| directory.join("settings.json"))
+        .map_err(|error| format!("无法定位应用设置目录：{error}"))
 }
 
 fn validate_settings_json(settings: &str) -> Result<(), String> {
@@ -452,40 +459,54 @@ fn validate_settings_json(settings: &str) -> Result<(), String> {
     Ok(())
 }
 
-#[tauri::command]
-fn load_shared_settings() -> Result<Option<String>, String> {
-    #[cfg(target_os = "macos")]
-    {
-        let path = shared_settings_path()?;
-        if !path.exists() {
-            return Ok(None);
-        }
-        let settings = std::fs::read_to_string(path).map_err(|_| "无法读取屏保设置".to_string())?;
-        validate_settings_json(&settings)?;
-        return Ok(Some(settings));
+fn read_shared_settings(app: &AppHandle) -> Result<Option<String>, String> {
+    let path = shared_settings_path(app)?;
+    if !path.exists() {
+        return Ok(None);
     }
-
-    #[cfg(not(target_os = "macos"))]
-    Ok(None)
+    let settings = std::fs::read_to_string(path).map_err(|_| "无法读取应用设置".to_string())?;
+    validate_settings_json(&settings)?;
+    Ok(Some(settings))
 }
 
 #[tauri::command]
-fn save_shared_settings(settings: String) -> Result<(), String> {
+fn load_shared_settings(app: AppHandle) -> Result<Option<String>, String> {
+    read_shared_settings(&app)
+}
+
+#[tauri::command]
+fn save_shared_settings(app: AppHandle, settings: String) -> Result<(), String> {
     validate_settings_json(&settings)?;
 
-    #[cfg(target_os = "macos")]
+    let path = shared_settings_path(&app)?;
+    let directory = path
+        .parent()
+        .ok_or_else(|| "无法定位应用设置目录".to_string())?;
+    std::fs::create_dir_all(directory).map_err(|_| "无法创建应用设置目录".to_string())?;
+
+    #[cfg(windows)]
+    std::fs::write(path, settings).map_err(|_| "无法保存应用设置".to_string())?;
+
+    #[cfg(not(windows))]
     {
-        let path = shared_settings_path()?;
-        let directory = path
-            .parent()
-            .ok_or_else(|| "无法定位屏保设置目录".to_string())?;
-        std::fs::create_dir_all(directory).map_err(|_| "无法创建屏保设置目录".to_string())?;
         let temporary = directory.join(format!(".settings-{}.tmp", std::process::id()));
-        std::fs::write(&temporary, settings).map_err(|_| "无法保存屏保设置".to_string())?;
-        std::fs::rename(&temporary, path).map_err(|_| "无法更新屏保设置".to_string())?;
+        std::fs::write(&temporary, settings).map_err(|_| "无法保存应用设置".to_string())?;
+        std::fs::rename(&temporary, path).map_err(|_| "无法更新应用设置".to_string())?;
     }
 
     Ok(())
+}
+
+fn dynamic_wallpaper_enabled(app: &AppHandle) -> Result<bool, String> {
+    let Some(settings) = read_shared_settings(app)? else {
+        return Ok(false);
+    };
+    let value: serde_json::Value =
+        serde_json::from_str(&settings).map_err(|_| "设置数据格式无效".to_string())?;
+    Ok(value
+        .get("dynamicWallpaperEnabled")
+        .and_then(serde_json::Value::as_bool)
+        .unwrap_or(false))
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -561,6 +582,11 @@ pub fn run() {
                         .set_activation_policy(tauri::ActivationPolicy::Accessory)
                         .map_err(|error| error.to_string())?;
                     start_macos_background_runtime(audio_analyzer.clone(), macos_started_at)?;
+                    if dynamic_wallpaper_enabled(app.handle())? {
+                        if let Err(error) = pearwall_wallpaper::start_wallpaper() {
+                            eprintln!("恢复动态壁纸失败：{error}");
+                        }
+                    }
                 }
             }
 

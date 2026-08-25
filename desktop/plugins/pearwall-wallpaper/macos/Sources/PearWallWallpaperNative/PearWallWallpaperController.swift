@@ -80,7 +80,7 @@ final class PearWallWallpaperController {
 
     func reconcileDisplays() {
         guard running else { return }
-        let screens = NSScreen.screens
+        let screens = selectedScreens(from: NSScreen.screens)
         let activeIDs = Set(screens.compactMap(Self.displayID))
         for displayID in targets.keys where !activeIDs.contains(displayID) {
             guard let target = targets.removeValue(forKey: displayID) else { continue }
@@ -218,6 +218,17 @@ final class PearWallWallpaperController {
         settings = PearWallSettings(json: shared.json)
         for target in targets.values {
             target.session.updateSettings(settings)
+        }
+    }
+
+    private func selectedScreens(from screens: [NSScreen]) -> [NSScreen] {
+        guard let selectedIDs = settings.dynamicWallpaperDisplayIds else {
+            return screens
+        }
+        let selectedIDSet = Set(selectedIDs)
+        return screens.filter { screen in
+            guard let displayID = Self.displayID(screen) else { return false }
+            return selectedIDSet.contains(displayID)
         }
     }
 

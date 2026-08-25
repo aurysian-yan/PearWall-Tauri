@@ -14,6 +14,8 @@ type ScreenSaverSettingsWindow = Window & {
 export const settingsStorageKey = 'pearwall.settings';
 
 export const defaultSettings: Settings = {
+  dynamicWallpaperEnabled: false,
+  dynamicWallpaperDisplayIds: null,
   audioVisualization: true,
   audioIntensity: 1,
   pauseFlow: true,
@@ -54,6 +56,11 @@ function normalizedSettings(saved: Partial<Settings>): Settings {
       (value): value is string => typeof value === 'string',
     )
     : null;
+  const dynamicWallpaperDisplayIds = Array.isArray(saved.dynamicWallpaperDisplayIds)
+    ? saved.dynamicWallpaperDisplayIds.filter(
+      (value): value is string => typeof value === 'string',
+    )
+    : null;
   return {
     ...defaultSettings,
     ...saved,
@@ -62,6 +69,7 @@ function normalizedSettings(saved: Partial<Settings>): Settings {
       Math.max(0.5, Number(saved.audioIntensity) || defaultSettings.audioIntensity),
     ),
     artworkFallback,
+    dynamicWallpaperDisplayIds,
     screenSaverDisplay,
     screenSaverDisplayIds,
   } as Settings;
