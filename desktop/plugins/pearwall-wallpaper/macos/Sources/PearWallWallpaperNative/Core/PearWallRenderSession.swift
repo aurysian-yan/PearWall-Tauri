@@ -19,6 +19,8 @@ final class PearWallRenderSession {
     private var settings: PearWallSettings
     private var lastArtworkKey = ""
     private var missingArtworkSince: Date?
+    private var smoothedAudioPulse = 0.0
+    private var lastAudioPulseUptime: TimeInterval?
 
     init?(
         frame: NSRect,
@@ -67,7 +69,16 @@ final class PearWallRenderSession {
         let pulse = settings.audioVisualization && state.playbackPlaying
             ? snapshot?.pulse ?? 0
             : 0
-        renderer.audioPulse = Float(min(1, max(0, Double(pulse))))
+        let pulseDelta = min(
+            0.1,
+            max(0, now - (lastAudioPulseUptime ?? now - 1.0 / 60.0))
+        )
+        let targetPulse = min(1, max(0, Double(pulse)))
+        let response = targetPulse > smoothedAudioPulse ? 0.08 : 0.2
+        let amount = 1 - exp(-pulseDelta / response)
+        smoothedAudioPulse += (targetPulse - smoothedAudioPulse) * amount
+        lastAudioPulseUptime = now
+        renderer.audioPulse = Float(smoothedAudioPulse)
         view.draw()
     }
 

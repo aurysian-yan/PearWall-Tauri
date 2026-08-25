@@ -1,6 +1,8 @@
 (function () {
   const ARTWORK_TRANSITION_SECONDS = 0.5;
-  const IMAGE_PULSE_INTENSITY = 0.33;
+  const IMAGE_PULSE_INTENSITY = 0.08;
+  const AUDIO_PULSE_ATTACK_SECONDS = 0.08;
+  const AUDIO_PULSE_RELEASE_SECONDS = 0.2;
   const BLUR_DOWNSAMPLE = 4;
   const KAWASE_SIGMA_PER_OFFSET = 16;
   const PORTRAIT = 'portrait';
@@ -187,6 +189,8 @@
       this.mesh = null;
       this.targets = {};
       this.animationTime = 0;
+      this.smoothedAudioPulse = 0;
+      this.lastAudioPulseTimestamp = 0;
       this.artworkAspect = 1;
       this.currentArtwork = createTexture(this.gl, [0, 0, 0, 255]);
       this.previousArtwork = this.currentArtwork;
@@ -452,10 +456,22 @@
       if (!this.surfaceWidth || !this.surfaceHeight) return;
       this.ensureSize(this.surfaceWidth, this.surfaceHeight);
       const timestamp = performance.now() / 1000;
+      const pulseDelta = this.lastAudioPulseTimestamp
+        ? clamp(timestamp - this.lastAudioPulseTimestamp, 0, 0.1)
+        : 1 / 60;
+      const pulseResponse = pulse > this.smoothedAudioPulse
+        ? AUDIO_PULSE_ATTACK_SECONDS
+        : AUDIO_PULSE_RELEASE_SECONDS;
+      const pulseAmount = 1 - Math.exp(-pulseDelta / pulseResponse);
+      this.smoothedAudioPulse = lerp(this.smoothedAudioPulse, pulse, pulseAmount);
+      this.lastAudioPulseTimestamp = timestamp;
       const transitionMix = this.getTransitionMix(timestamp);
       const blurSigma = 24 * this.settings.blurMultiplier;
       this.drawBackdrop(
-        1 + IMAGE_PULSE_INTENSITY * this.settings.audioIntensity * pulse * pulse,
+        1 + IMAGE_PULSE_INTENSITY
+          * this.settings.audioIntensity
+          * this.smoothedAudioPulse
+          * this.smoothedAudioPulse,
         blurSigma,
         time,
         transitionMix,

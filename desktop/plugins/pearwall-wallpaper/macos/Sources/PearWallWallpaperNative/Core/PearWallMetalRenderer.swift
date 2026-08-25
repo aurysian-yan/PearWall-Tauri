@@ -452,7 +452,7 @@ final class PearWallMetalRenderer: NSObject, MTKViewDelegate {
     var animationTime: Float = 0
     var audioPulse: Float = 0
     private static let artworkTransitionDuration: TimeInterval = 0.5
-    private static let imagePulseIntensity: Float = 0.33
+    private static let imagePulseIntensity: Float = 0.08
     private static let blurDownsample = 4
     private static let kawaseSigmaPerOffset: Float = 16
     private static let maximumScreenSaverPixels = 1920 * 1080

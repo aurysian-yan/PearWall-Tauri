@@ -153,7 +153,7 @@
       && state.peakPulse - state.valleyPulse >= 0.08;
     if (peakFinished && state.peakPulse >= 0.15 && timestamp - state.lastLogAt >= 160) {
       state.count += 1;
-      const scale = 1 + 0.33 * settings.audioIntensity * state.peakPulse * state.peakPulse;
+      const scale = 1 + 0.08 * settings.audioIntensity * state.peakPulse * state.peakPulse;
       console.info(
         `[Pear Wall 音频] 鼓点 #${state.count} source=${source} pulse=${state.peakPulse.toFixed(3)} intensity=${settings.audioIntensity.toFixed(1)} scale=${scale.toFixed(3)}`,
       );
