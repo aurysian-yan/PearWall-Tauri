@@ -34,6 +34,12 @@ if (
 if (process.platform === 'darwin' && !environment.CARGO_BUILD_JOBS) {
   environment.CARGO_BUILD_JOBS = '1';
 }
+if (process.platform === 'darwin' && command === 'dev') {
+  environment.CARGO_TARGET_AARCH64_APPLE_DARWIN_RUNNER ??= resolve(
+    import.meta.dirname,
+    'run-macos-dev-app.sh',
+  );
+}
 if (
   process.platform === 'darwin'
   && (command === 'build' || command === 'dev')

@@ -45,7 +45,10 @@ CODESIGN_ARGS=(
   --options runtime
 )
 if [[ "${CODESIGN_IDENTITY}" == "-" ]]; then
-  CODESIGN_ARGS+=(--timestamp=none)
+  CODESIGN_ARGS+=(
+    --timestamp=none
+    --requirements '=designated => identifier "com.nevoit.pearwall.desktop"'
+  )
 else
   CODESIGN_ARGS+=(--timestamp)
 fi
