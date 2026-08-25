@@ -38,6 +38,9 @@ enum LaunchMode {
     Wallpaper,
 }
 
+#[cfg(windows)]
+static WINDOWS_WALLPAPER_DESIRED: AtomicBool = AtomicBool::new(false);
+
 fn launch_mode() -> LaunchMode {
     let mut args = std::env::args().skip(1);
     let Some(argument) = args.next() else {
@@ -546,19 +549,41 @@ fn set_dynamic_wallpaper_enabled_blocking(
     app: &AppHandle,
     enabled: bool,
 ) -> Result<pearwall_wallpaper::WallpaperStatus, String> {
+    #[cfg(windows)]
+    WINDOWS_WALLPAPER_DESIRED.store(enabled, Ordering::Release);
+
     if enabled {
-        let status = pearwall_wallpaper::start_wallpaper(app)?;
+        let status = match pearwall_wallpaper::start_wallpaper(app) {
+            Ok(status) => status,
+            Err(error) => {
+                #[cfg(windows)]
+                WINDOWS_WALLPAPER_DESIRED.store(false, Ordering::Release);
+                return Err(error);
+            }
+        };
         #[cfg(windows)]
         if let Err(error) = windows_autostart::sync(true) {
+            WINDOWS_WALLPAPER_DESIRED.store(false, Ordering::Release);
             let _ = pearwall_wallpaper::stop_wallpaper(app);
             return Err(error);
         }
         return Ok(status);
     }
 
-    let status = pearwall_wallpaper::stop_wallpaper(app)?;
+    let status = match pearwall_wallpaper::stop_wallpaper(app) {
+        Ok(status) => status,
+        Err(error) => {
+            #[cfg(windows)]
+            {
+                WINDOWS_WALLPAPER_DESIRED.store(true, Ordering::Release);
+                let _ = pearwall_wallpaper::start_wallpaper(app);
+            }
+            return Err(error);
+        }
+    };
     #[cfg(windows)]
     if let Err(error) = windows_autostart::sync(false) {
+        WINDOWS_WALLPAPER_DESIRED.store(true, Ordering::Release);
         return match pearwall_wallpaper::start_wallpaper(app) {
             Ok(_) => Err(error),
             Err(restore_error) => Err(format!("{error}；恢复动态壁纸失败：{restore_error}")),
@@ -579,7 +604,7 @@ fn restore_windows_dynamic_wallpaper(app: &AppHandle) {
             let mut last_error = initial_error;
             for _ in 0..60 {
                 std::thread::sleep(std::time::Duration::from_secs(1));
-                if !dynamic_wallpaper_enabled(&app).unwrap_or(false) {
+                if !WINDOWS_WALLPAPER_DESIRED.load(Ordering::Acquire) {
                     return;
                 }
                 match pearwall_wallpaper::start_wallpaper(&app) {
@@ -679,6 +704,7 @@ pub fn run() {
                 LaunchMode::App | LaunchMode::Configure | LaunchMode::Wallpaper
             ) {
                 let enabled = dynamic_wallpaper_enabled(app.handle())?;
+                WINDOWS_WALLPAPER_DESIRED.store(enabled, Ordering::Release);
                 if let Err(error) = windows_autostart::sync(enabled) {
                     eprintln!("同步 Windows 登录启动项失败：{error}");
                 }

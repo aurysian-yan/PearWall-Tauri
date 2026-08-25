@@ -10,6 +10,7 @@ use std::os::windows::ffi::OsStrExt;
 use std::os::windows::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::time::Duration;
 use tauri::AppHandle;
 use windows::core::PCWSTR;
 use windows::Win32::Storage::FileSystem::{MoveFileExW, MOVEFILE_DELAY_UNTIL_REBOOT};
@@ -26,6 +27,8 @@ const INSTALL_STATE_NAME: &str = "install-state.json";
 const UNINSTALL_REGISTRY_KEY: &str =
     r"HKLM\Software\Microsoft\Windows\CurrentVersion\Uninstall\Pear Wall";
 const DESKTOP_REGISTRY_KEY: &str = r"HKCU\Control Panel\Desktop";
+const AUTOSTART_REGISTRY_KEY: &str = r"HKCU\Software\Microsoft\Windows\CurrentVersion\Run";
+const AUTOSTART_VALUE_NAME: &str = "Pear Wall";
 const SCREEN_SAVER_SELECTED_EXIT_CODE: i32 = 42;
 const START_SHORTCUT_NAME: &str = "启动 Pear Wall 屏幕保护程序.lnk";
 const SETTINGS_SHORTCUT_NAME: &str = "Pear Wall 设置.lnk";
@@ -121,7 +124,10 @@ pub fn install(app: &AppHandle, options: InstallOptions) -> Result<(), String> {
     }
 
     let paths = InstallPaths::resolve();
-    emit_progress(app, 5, "正在准备安装目录…");
+    emit_progress(app, 5, "正在关闭 Pear Wall…");
+    stop_running_components()?;
+
+    emit_progress(app, 12, "正在准备安装目录…");
     fs::create_dir_all(&paths.install_dir).map_err(|error| path_error("创建安装目录", &error))?;
 
     emit_progress(app, 22, "正在安装 Pear Wall…");
@@ -156,7 +162,11 @@ pub fn install(app: &AppHandle, options: InstallOptions) -> Result<(), String> {
 
 pub fn uninstall(app: &AppHandle) -> Result<(), String> {
     let paths = InstallPaths::resolve();
-    emit_progress(app, 8, "正在检查安装内容…");
+    emit_progress(app, 8, "正在关闭 Pear Wall…");
+    stop_running_components()?;
+
+    emit_progress(app, 18, "正在清理登录启动项…");
+    remove_autostart()?;
 
     emit_progress(app, 28, "正在移除快捷方式…");
     remove_all_shortcuts(&paths)?;
@@ -227,13 +237,86 @@ fn replace_bytes(path: &Path, contents: &[u8]) -> io::Result<()> {
     let temporary = path.with_extension("pearwall-new");
     let _ = fs::remove_file(&temporary);
     fs::write(&temporary, contents)?;
-    if path.exists() {
-        if let Err(error) = fs::remove_file(path) {
-            let _ = fs::remove_file(&temporary);
-            return Err(error);
+
+    let mut last_error = None;
+    for attempt in 0..20 {
+        if path.exists() {
+            if let Err(error) = fs::remove_file(path) {
+                if !is_retryable_file_error(&error) || attempt == 19 {
+                    let _ = fs::remove_file(&temporary);
+                    return Err(error);
+                }
+                last_error = Some(error);
+                std::thread::sleep(Duration::from_millis(150));
+                continue;
+            }
+        }
+        match fs::rename(&temporary, path) {
+            Ok(()) => return Ok(()),
+            Err(error) if is_retryable_file_error(&error) && attempt < 19 => {
+                last_error = Some(error);
+                std::thread::sleep(Duration::from_millis(150));
+            }
+            Err(error) => {
+                let _ = fs::remove_file(&temporary);
+                return Err(error);
+            }
         }
     }
-    fs::rename(&temporary, path)
+
+    let _ = fs::remove_file(&temporary);
+    Err(last_error.unwrap_or_else(|| io::Error::other("无法替换安装文件")))
+}
+
+fn is_retryable_file_error(error: &io::Error) -> bool {
+    matches!(
+        error.kind(),
+        io::ErrorKind::PermissionDenied | io::ErrorKind::WouldBlock
+    )
+}
+
+fn stop_running_components() -> Result<(), String> {
+    for image_name in [MAIN_EXECUTABLE_NAME, SCREEN_SAVER_NAME] {
+        let output = Command::new("taskkill.exe")
+            .args(["/IM", image_name, "/T", "/F"])
+            .creation_flags(CREATE_NO_WINDOW)
+            .output()
+            .map_err(|error| format!("关闭 {image_name} 失败：{error}"))?;
+        if output.status.success() || output.status.code() == Some(128) {
+            continue;
+        }
+        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        let detail = if stderr.is_empty() { stdout } else { stderr };
+        return Err(if detail.is_empty() {
+            format!("关闭 {image_name} 失败")
+        } else {
+            format!("关闭 {image_name} 失败：{detail}")
+        });
+    }
+    Ok(())
+}
+
+fn remove_autostart() -> Result<(), String> {
+    let output = Command::new("reg.exe")
+        .args(["query", AUTOSTART_REGISTRY_KEY, "/v", AUTOSTART_VALUE_NAME])
+        .creation_flags(CREATE_NO_WINDOW)
+        .output()
+        .map_err(|error| format!("检查 Windows 登录启动项失败：{error}"))?;
+    if !output.status.success() {
+        return Ok(());
+    }
+    run_hidden(
+        "reg.exe",
+        [
+            "delete".to_string(),
+            AUTOSTART_REGISTRY_KEY.to_string(),
+            "/v".to_string(),
+            AUTOSTART_VALUE_NAME.to_string(),
+            "/f".to_string(),
+        ],
+        "删除 Windows 登录启动项",
+    )
 }
 
 fn install_uninstaller(paths: &InstallPaths) -> Result<(), String> {
