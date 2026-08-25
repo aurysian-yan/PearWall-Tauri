@@ -16,7 +16,7 @@ export const settingsStorageKey = 'pearwall.settings';
 export const defaultSettings: Settings = {
   dynamicWallpaperEnabled: false,
   dynamicWallpaperDisplayIds: null,
-  audioVisualization: true,
+  audioVisualization: false,
   audioIntensity: 1,
   pauseFlow: true,
   hideCursor: true,

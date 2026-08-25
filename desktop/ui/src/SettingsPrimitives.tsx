@@ -47,6 +47,7 @@ export function SettingRow({
   icon: Icon,
   avatar,
   title,
+  badge,
   description,
   children,
   className,
@@ -54,6 +55,7 @@ export function SettingRow({
   icon?: IconType;
   avatar?: string;
   title: string;
+  badge?: string;
   description?: string;
   children?: ReactNode;
   className?: string;
@@ -79,8 +81,19 @@ export function SettingRow({
         )
       )}
       <div className="min-w-0 flex-1">
-        <div className="text-[14px] font-semibold leading-tight text-white">
-          {title}
+        <div className="flex items-center gap-2 text-[14px] font-semibold leading-tight text-white">
+          <span>{title}</span>
+          {badge && (
+            <SmoothCorners
+              asChild
+              autoEffects={false}
+              corners={{ radius: 10, smoothing: 1 }}
+            >
+              <span className="shrink-0 bg-white/15 px-2 py-0.5 text-[10px] font-semibold text-white/70">
+                {badge}
+              </span>
+            </SmoothCorners>
+          )}
         </div>
         {description && (
           <div className="mt-1 text-xs leading-snug text-white/65">

@@ -7,7 +7,7 @@
   const settingsStorageKey = 'pearwall.settings';
   const artworkMissingConfirmationMs = 2500;
   const settings = {
-    audioVisualization: true,
+    audioVisualization: false,
     audioIntensity: 1,
     pauseFlow: true,
     hideCursor: true,

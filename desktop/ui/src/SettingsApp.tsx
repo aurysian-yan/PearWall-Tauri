@@ -65,7 +65,11 @@ import {
 import licenseDataJson from "./generated/openSourceLicenses.json";
 
 type SelectOption<T extends string | number> = { value: T; label: string };
-type DrawerPage = "advanced" | "licenses";
+type DrawerPage =
+  | "advanced"
+  | "dynamicWallpaperDisplays"
+  | "screenSaverDisplays"
+  | "licenses";
 type MediaArtwork = {
   key: string;
   data_url: string | null;
@@ -753,24 +757,40 @@ function DrawerPageContent({
   settings,
   update,
   isMacOSRuntime,
+  connectedDisplays,
+  displayLoading,
+  displayDiscoveryFailed,
+  onDynamicWallpaperDisplayChange,
+  onScreenSaverDisplayChange,
 }: {
   page: DrawerPage;
   settings: Settings;
   update: UpdateSetting;
   isMacOSRuntime: boolean;
+  connectedDisplays: ConnectedDisplay[];
+  displayLoading: boolean;
+  displayDiscoveryFailed: boolean;
+  onDynamicWallpaperDisplayChange: (id: string, enabled: boolean) => void;
+  onScreenSaverDisplayChange: (id: string, enabled: boolean) => void;
 }) {
   const titles: Record<DrawerPage, string> = {
     advanced: "高级设置",
+    dynamicWallpaperDisplays: "动态壁纸显示器",
+    screenSaverDisplays: "屏保显示器",
     licenses: "开源许可",
   };
   const descriptions: Record<DrawerPage, string> = {
     advanced: isMacOSRuntime
-      ? "为不同屏幕方向选择独立的流动方案，并调整屏保显示选项。"
-      : "为不同屏幕方向选择独立的流动方案，也可以让 Pear Wall 自动随机切换。",
+      ? "调整渲染质量、屏幕方向方案和屏保配置详情。"
+      : "调整渲染质量与屏幕方向方案，也可以让 Pear Wall 自动随机切换。",
+    dynamicWallpaperDisplays: "选择用于显示动态壁纸的显示器。",
+    screenSaverDisplays: "选择用于运行 macOS 屏幕保护程序的显示器。",
     licenses: "Pear Wall 能够顺利运行，离不开这些优秀的开源库。",
   };
   const icons: Record<DrawerPage, IconType> = {
     advanced: SlidersHorizontalIcon,
+    dynamicWallpaperDisplays: DesktopIcon,
+    screenSaverDisplays: MonitorIcon,
     licenses: FileTextIcon,
   };
   const [scrollTop, setScrollTop] = useState(0);
@@ -809,6 +829,15 @@ function DrawerPageContent({
           {page === "advanced" && (
             <div className="px-4 space-y-5">
               <DrawerCard>
+                <ChoiceTabs
+                  icon={GaugeIcon}
+                  label="渲染质量"
+                  value={settings.renderScale}
+                  options={renderScales}
+                  onChange={(value) => update("renderScale", value)}
+                  variant="drawer"
+                />
+                <Separator className="mx-2 w-[calc(100%-1rem)] bg-white/15" />
                 <ChoiceTabs
                   icon={DeviceMobileIcon}
                   label="竖屏方案"
@@ -856,6 +885,39 @@ function DrawerPageContent({
                     </SettingRow>
                   </>
                 )}
+              </DrawerCard>
+            </div>
+          )}
+
+          {page === "dynamicWallpaperDisplays" && (
+            <div className="px-4">
+              <DrawerCard>
+                <DisplaySelector
+                  title="动态壁纸显示器"
+                  selectionLabel="启用动态壁纸"
+                  displays={connectedDisplays}
+                  selectedIds={settings.dynamicWallpaperDisplayIds
+                    ?? connectedDisplays.map((display) => display.id)}
+                  loading={displayLoading}
+                  failed={displayDiscoveryFailed}
+                  onChange={onDynamicWallpaperDisplayChange}
+                />
+              </DrawerCard>
+            </div>
+          )}
+
+          {page === "screenSaverDisplays" && (
+            <div className="px-4">
+              <DrawerCard>
+                <DisplaySelector
+                  title="屏保显示器"
+                  selectionLabel="启用屏保"
+                  displays={connectedDisplays}
+                  selectedIds={settings.screenSaverDisplayIds ?? []}
+                  loading={displayLoading}
+                  failed={displayDiscoveryFailed}
+                  onChange={onScreenSaverDisplayChange}
+                />
               </DrawerCard>
             </div>
           )}
@@ -1577,17 +1639,24 @@ export function SettingsApp() {
                       disabled={wallpaperLoading}
                     />
                   </SettingRow>
-                  <DisplaySelector
-                    title="动态壁纸显示器"
-                    selectionLabel="启用动态壁纸"
-                    displays={connectedDisplays}
-                    selectedIds={settings.dynamicWallpaperDisplayIds
-                      ?? connectedDisplays.map((display) => display.id)}
-                    loading={displayLoading}
-                    failed={displayDiscoveryFailed}
-                    showArrangement={false}
-                    onChange={toggleDynamicWallpaperDisplay}
-                  />
+                  <Separator className="mx-2 w-[calc(100%-1rem)] bg-white/15" />
+                  <button
+                    type="button"
+                    className="block w-full text-left"
+                    onClick={() => setDrawerPage("dynamicWallpaperDisplays")}
+                  >
+                    <SettingRow
+                      icon={DesktopIcon}
+                      title="动态壁纸显示器"
+                      description="选择显示动态壁纸的显示器"
+                    >
+                      <CaretRightIcon
+                        aria-hidden
+                        size={18}
+                        className="text-white/55"
+                      />
+                    </SettingRow>
+                  </button>
                   <Separator className="mx-2 w-[calc(100%-1rem)] bg-white/15" />
                 </>
               )}
@@ -1605,15 +1674,23 @@ export function SettingsApp() {
               {isMacOSRuntime && (
                 <>
                   <Separator className="mx-2 w-[calc(100%-1rem)] bg-white/15" />
-                  <DisplaySelector
-                    title="屏保显示器"
-                    selectionLabel="启用屏保"
-                    displays={connectedDisplays}
-                    selectedIds={settings.screenSaverDisplayIds ?? []}
-                    loading={displayLoading}
-                    failed={displayDiscoveryFailed}
-                    onChange={toggleScreenSaverDisplay}
-                  />
+                  <button
+                    type="button"
+                    className="block w-full text-left"
+                    onClick={() => setDrawerPage("screenSaverDisplays")}
+                  >
+                    <SettingRow
+                      icon={MonitorIcon}
+                      title="屏保显示器"
+                      description="选择运行屏幕保护程序的显示器"
+                    >
+                      <CaretRightIcon
+                        aria-hidden
+                        size={18}
+                        className="text-white/55"
+                      />
+                    </SettingRow>
+                  </button>
                 </>
               )}
             </SettingsCard>
@@ -1625,6 +1702,7 @@ export function SettingsApp() {
               <SettingRow
                 icon={SpeakerHighIcon}
                 title="开启音频可视化"
+                badge="实验性"
                 description="画面会跟随正在播放的声音律动"
               >
                 <Toggle
@@ -1699,14 +1777,6 @@ export function SettingsApp() {
                 options={moruStyles}
                 onChange={(value) => update("moruStyle", value)}
               />
-              <Separator className="mx-2 w-[calc(100%-1rem)] bg-white/15" />
-              <ChoiceTabs
-                icon={GaugeIcon}
-                label="渲染质量"
-                value={settings.renderScale}
-                options={renderScales}
-                onChange={(value) => update("renderScale", value)}
-              />
             </SettingsCard>
           </section>
 
@@ -1721,8 +1791,8 @@ export function SettingsApp() {
                   icon={SlidersHorizontalIcon}
                   title="高级设置"
                   description={isMacOSRuntime
-                    ? "调整屏幕方向方案和屏保显示选项"
-                    : "调整屏幕方向方案和随机切换"}
+                    ? "调整渲染质量、屏幕方向方案和屏保选项"
+                    : "调整渲染质量、屏幕方向方案和随机切换"}
                 >
                   <CaretRightIcon
                     aria-hidden
@@ -1837,6 +1907,11 @@ export function SettingsApp() {
                 settings={settings}
                 update={update}
                 isMacOSRuntime={isMacOSRuntime}
+                connectedDisplays={connectedDisplays}
+                displayLoading={displayLoading}
+                displayDiscoveryFailed={displayDiscoveryFailed}
+                onDynamicWallpaperDisplayChange={toggleDynamicWallpaperDisplay}
+                onScreenSaverDisplayChange={toggleScreenSaverDisplay}
               />
             )}
           </Drawer.Content>
