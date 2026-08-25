@@ -17,7 +17,10 @@ mkdir -p \
   "${BUNDLE_PATH}/Contents/Resources/assets/moru"
 
 ARM64_BINARY="${TEMP_ROOT}/PearWallScreenSaver-arm64"
-SWIFT_SOURCES=("${DESKTOP_ROOT}/macos-saver/"*.swift)
+SWIFT_SOURCES=(
+  "${DESKTOP_ROOT}/plugins/pearwall-wallpaper/macos/Sources/PearWallWallpaperNative/Core/"*.swift
+  "${DESKTOP_ROOT}/macos-saver/"*.swift
+)
 
 xcrun swiftc \
   -emit-library \

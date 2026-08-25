@@ -84,6 +84,11 @@ type ConnectedDisplay = {
   isBuiltin: boolean;
   isPrimary: boolean;
 };
+type WallpaperRuntimeStatus = {
+  supported: boolean;
+  running: boolean;
+  displayCount: number;
+};
 type UpdateSetting = <Key extends keyof Settings>(
   key: Key,
   value: Settings[Key],
@@ -975,6 +980,13 @@ export function SettingsApp() {
   const [connectedDisplays, setConnectedDisplays] = useState<ConnectedDisplay[]>([]);
   const [displayLoading, setDisplayLoading] = useState(isMacOSRuntime);
   const [displayDiscoveryFailed, setDisplayDiscoveryFailed] = useState(false);
+  const [wallpaperStatus, setWallpaperStatus] = useState<WallpaperRuntimeStatus>({
+    supported: isMacOSRuntime,
+    running: false,
+    displayCount: 0,
+  });
+  const [wallpaperLoading, setWallpaperLoading] = useState(isMacOSRuntime);
+  const [wallpaperFailed, setWallpaperFailed] = useState(false);
   const [permissionNoticeOpen, setPermissionNoticeOpen] = useState(
     () => isMacOSRuntime
       && settings.audioVisualization
@@ -1071,6 +1083,47 @@ export function SettingsApp() {
   }, [isMacOSRuntime]);
 
   useEffect(() => {
+    if (!isMacOSRuntime) return;
+    let disposed = false;
+
+    const refreshWallpaperStatus = async () => {
+      try {
+        const status = await invoke<WallpaperRuntimeStatus>(
+          "plugin:pearwall-wallpaper|status",
+        );
+        if (disposed) return;
+        setWallpaperStatus(status);
+        setWallpaperFailed(false);
+      } catch {
+        if (!disposed) setWallpaperFailed(true);
+      } finally {
+        if (!disposed) setWallpaperLoading(false);
+      }
+    };
+
+    void refreshWallpaperStatus();
+    return () => {
+      disposed = true;
+    };
+  }, [isMacOSRuntime]);
+
+  const setWallpaperEnabled = async (enabled: boolean) => {
+    setWallpaperLoading(true);
+    setWallpaperFailed(false);
+    try {
+      const command = enabled ? "start" : "stop";
+      const status = await invoke<WallpaperRuntimeStatus>(
+        `plugin:pearwall-wallpaper|${command}`,
+      );
+      setWallpaperStatus(status);
+    } catch {
+      setWallpaperFailed(true);
+    } finally {
+      setWallpaperLoading(false);
+    }
+  };
+
+  useEffect(() => {
     if (!sharedSettingsReady || connectedDisplays.length === 0) return;
     setSettings((current) => {
       if (current.screenSaverDisplayIds !== null) return current;
@@ -1145,6 +1198,44 @@ export function SettingsApp() {
       window.clearInterval(timer);
     };
   }, [previewReady, usesSharedMacSettings]);
+
+  useEffect(() => {
+    if (!isTauriRuntime || !previewReady || !settings.audioVisualization) return;
+    let disposed = false;
+    let pending = false;
+
+    const sendPulse = (pulse: number) => {
+      previewRef.current?.contentWindow?.postMessage(
+        { type: "pearwall:audio-pulse", pulse },
+        window.location.protocol === "file:" ? "*" : window.location.origin,
+      );
+    };
+
+    const pollAudio = async () => {
+      if (disposed || pending) return;
+      pending = true;
+      try {
+        const pulse = await invoke<number>("get_audio_pulse", {
+          timestampSeconds: Date.now() / 1000,
+        });
+        if (!disposed) sendPulse(pulse);
+      } catch {
+        return;
+      } finally {
+        pending = false;
+      }
+    };
+
+    void pollAudio();
+    const timer = window.setInterval(() => {
+      void pollAudio();
+    }, 33);
+    return () => {
+      disposed = true;
+      window.clearInterval(timer);
+      sendPulse(0);
+    };
+  }, [isTauriRuntime, previewReady, settings.audioVisualization]);
 
   useEffect(() => {
     if (!isTauriRuntime) return;
@@ -1425,8 +1516,29 @@ export function SettingsApp() {
           </section>
 
           <section className="mb-5">
-            <SectionTitle>纯享与屏保</SectionTitle>
+            <SectionTitle>纯享、屏保与壁纸</SectionTitle>
             <SettingsCard>
+              {isMacOSRuntime && (
+                <>
+                  <SettingRow
+                    icon={DesktopIcon}
+                    title="动态壁纸"
+                    description={wallpaperFailed
+                      ? "无法更新动态壁纸，请重试"
+                      : wallpaperStatus.running
+                        ? `已在 ${wallpaperStatus.displayCount} 台显示器上运行`
+                        : "在桌面图标下方显示当前流动画面"}
+                  >
+                    <Toggle
+                      label="动态壁纸"
+                      value={wallpaperStatus.running}
+                      onChange={(value) => void setWallpaperEnabled(value)}
+                      disabled={wallpaperLoading}
+                    />
+                  </SettingRow>
+                  <Separator className="mx-2 w-[calc(100%-1rem)] bg-white/15" />
+                </>
+              )}
               <SettingRow
                 icon={CursorIcon}
                 title="隐藏鼠标指针"

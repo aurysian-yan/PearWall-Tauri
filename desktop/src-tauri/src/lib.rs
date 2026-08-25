@@ -20,8 +20,6 @@ mod macos_now_playing;
 mod macos_runtime_state;
 #[cfg(target_os = "macos")]
 mod macos_status_item;
-#[cfg(target_os = "macos")]
-mod macos_wallpaper;
 #[cfg(windows)]
 mod windows_audio;
 #[cfg(windows)]
@@ -398,7 +396,7 @@ fn set_macos_runtime_enabled(enabled: bool) -> Result<serde_json::Value, String>
 fn get_macos_wallpaper_runtime_status() -> Result<serde_json::Value, String> {
     #[cfg(target_os = "macos")]
     {
-        let status = macos_wallpaper::get_macos_wallpaper_runtime_status();
+        let status = pearwall_wallpaper::wallpaper_status();
         return serde_json::to_value(status).map_err(|error| error.to_string());
     }
 
@@ -410,7 +408,7 @@ fn get_macos_wallpaper_runtime_status() -> Result<serde_json::Value, String> {
 fn start_macos_wallpaper_runtime() -> Result<serde_json::Value, String> {
     #[cfg(target_os = "macos")]
     {
-        let status = macos_wallpaper::start_macos_wallpaper_runtime()?;
+        let status = pearwall_wallpaper::start_wallpaper()?;
         return serde_json::to_value(status).map_err(|error| error.to_string());
     }
 
@@ -422,7 +420,7 @@ fn start_macos_wallpaper_runtime() -> Result<serde_json::Value, String> {
 fn stop_macos_wallpaper_runtime() -> Result<serde_json::Value, String> {
     #[cfg(target_os = "macos")]
     {
-        let status = macos_wallpaper::stop_macos_wallpaper_runtime()?;
+        let status = pearwall_wallpaper::stop_wallpaper()?;
         return serde_json::to_value(status).map_err(|error| error.to_string());
     }
 
@@ -494,21 +492,6 @@ fn save_shared_settings(settings: String) -> Result<(), String> {
 pub fn run() {
     let mode = launch_mode();
     let show_main_window_on_launch = Arc::new(AtomicBool::new(true));
-    #[cfg(target_os = "macos")]
-    let wallpaper_listener = if matches!(mode, LaunchMode::Wallpaper) {
-        match macos_wallpaper::prepare_server() {
-            Ok(macos_wallpaper::ServerPreparation::AlreadyRunning) => return,
-            Ok(macos_wallpaper::ServerPreparation::Ready { listener, instance }) => {
-                Some((listener, instance))
-            }
-            Err(error) => {
-                eprintln!("启动动态壁纸运行时失败：{error}");
-                return;
-            }
-        }
-    } else {
-        None
-    };
     let audio_analyzer = Arc::new(Mutex::new(SpectrumAnalyzer::default()));
     #[cfg(windows)]
     windows_audio::start(audio_analyzer.clone());
@@ -519,6 +502,7 @@ pub fn run() {
     let _setup_visibility = show_main_window_on_launch.clone();
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .plugin(pearwall_wallpaper::init())
         .manage(audio_state)
         .manage(MediaArtworkState::default())
         .invoke_handler(tauri::generate_handler![
@@ -541,26 +525,6 @@ pub fn run() {
             if payload.event() != PageLoadEvent::Finished {
                 return;
             }
-            #[cfg(target_os = "macos")]
-            if matches!(mode, LaunchMode::Wallpaper)
-                && macos_wallpaper::is_wallpaper_window(webview.label())
-            {
-                if let Ok(Some(settings)) = load_shared_settings() {
-                    if let Ok(value) = serde_json::from_str::<serde_json::Value>(&settings) {
-                        let source = format!(
-                            "window.PearWallScreenSaverSettings={value};window.PearWallReloadSettings?.();"
-                        );
-                        let _ = webview.eval(source);
-                    }
-                }
-                if let Some(window) = webview
-                    .app_handle()
-                    .get_webview_window(webview.label())
-                {
-                    macos_wallpaper::show_window(&window);
-                }
-                return;
-            }
             if webview.label() != "main" {
                 return;
             }
@@ -572,8 +536,7 @@ pub fn run() {
         })
         .on_window_event(move |_window, _event| {
             #[cfg(target_os = "macos")]
-            if matches!(mode, LaunchMode::App | LaunchMode::Configure)
-                && _window.label() == "main"
+            if matches!(mode, LaunchMode::App | LaunchMode::Configure) && _window.label() == "main"
             {
                 if let tauri::WindowEvent::CloseRequested { api, .. } = _event {
                     api.prevent_close();
@@ -585,9 +548,7 @@ pub fn run() {
             #[cfg(target_os = "macos")]
             {
                 if matches!(mode, LaunchMode::Wallpaper) {
-                    let (listener, instance) = wallpaper_listener
-                        .ok_or_else(|| "动态壁纸控制通道不可用".to_string())?;
-                    macos_wallpaper::setup(app.handle(), listener, instance)?;
+                    pearwall_wallpaper::start_wallpaper()?;
                     return Ok(());
                 }
                 if matches!(mode, LaunchMode::App | LaunchMode::Configure) {

@@ -2485,6 +2485,7 @@ dependencies = [
  "objc2-app-kit",
  "objc2-core-graphics",
  "pearwall-core",
+ "pearwall-wallpaper",
  "serde",
  "serde_json",
  "tauri",
@@ -2492,6 +2493,16 @@ dependencies = [
  "tauri-plugin-opener",
  "windows",
  "windows-future",
+]
+
+[[package]]
+name = "pearwall-wallpaper"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "swift-rs",
+ "tauri",
+ "tauri-plugin",
 ]
 
 [[package]]

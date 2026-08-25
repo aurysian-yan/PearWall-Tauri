@@ -410,6 +410,10 @@
       applySettingsValues(event.data.settings);
       return;
     }
+    if (event.data.type === 'pearwall:audio-pulse') {
+      window.PearWallSetNativePulse(event.data.pulse);
+      return;
+    }
     if (event.data.type !== 'pearwall:media-artwork') return;
     const result = event.data.artwork;
     if (!result || typeof result !== 'object') return;

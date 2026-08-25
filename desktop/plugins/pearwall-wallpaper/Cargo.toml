@@ -1,0 +1,17 @@
+[package]
+name = "pearwall-wallpaper"
+version = "0.1.0"
+edition = "2021"
+links = "pearwall-wallpaper"
+
+[lib]
+name = "pearwall_wallpaper"
+crate-type = ["rlib"]
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+tauri = { version = "2", default-features = false }
+
+[build-dependencies]
+swift-rs = { version = "1.0.8", features = ["build"] }
+tauri-plugin = { version = "2", features = ["build"] }

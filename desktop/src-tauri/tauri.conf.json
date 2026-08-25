@@ -37,6 +37,11 @@
   "bundle": {
     "active": true,
     "targets": "all",
+    "resources": {
+      "../../wallpaper-engine/assets/default_artwork.svg": "assets/default_artwork.svg",
+      "../../wallpaper-engine/assets/moru": "assets/moru",
+      "../../wallpaper-engine/src/presets.js": "assets/presets.json"
+    },
     "macOS": {
       "minimumSystemVersion": "15.0",
       "infoPlist": "Info.macos.plist",

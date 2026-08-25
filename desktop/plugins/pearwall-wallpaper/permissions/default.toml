@@ -1,0 +1,10 @@
+"$schema" = "schemas/schema.json"
+
+[default]
+description = "Allows the Pear Wall settings window to control the desktop wallpaper runtime."
+permissions = [
+  "allow-start",
+  "allow-stop",
+  "allow-status",
+  "allow-reconcile",
+]

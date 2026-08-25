@@ -14,10 +14,22 @@ MEDIAREMOTE_SOURCE="${DESKTOP_ROOT}/src-tauri/resources/mediaremote/PearWallMedi
 MEDIAREMOTE_OUTPUT="${RESOURCE_ROOT}/mediaremote/PearWallMediaRemote.dylib"
 CODESIGN_IDENTITY="${PEARWALL_CODESIGN_IDENTITY:--}"
 
-mkdir -p "${CONTENTS_ROOT}/MacOS" "${RESOURCE_ROOT}/mediaremote"
+mkdir -p \
+  "${CONTENTS_ROOT}/MacOS" \
+  "${RESOURCE_ROOT}/assets/moru" \
+  "${RESOURCE_ROOT}/mediaremote"
 ditto "${SOURCE_BINARY}" "${APP_BINARY}"
 cp "${DESKTOP_ROOT}/src-tauri/Info.macos.plist" "${CONTENTS_ROOT}/Info.plist"
 cp "${MEDIAREMOTE_SOURCE}" "${MEDIAREMOTE_OUTPUT}"
+cp \
+  "${DESKTOP_ROOT}/../wallpaper-engine/assets/default_artwork.svg" \
+  "${RESOURCE_ROOT}/assets/default_artwork.svg"
+cp \
+  "${DESKTOP_ROOT}/../wallpaper-engine/src/presets.js" \
+  "${RESOURCE_ROOT}/assets/presets.json"
+cp -R \
+  "${DESKTOP_ROOT}/../wallpaper-engine/assets/moru/." \
+  "${RESOURCE_ROOT}/assets/moru/"
 
 plutil -insert CFBundleDevelopmentRegion -string zh_CN "${CONTENTS_ROOT}/Info.plist"
 plutil -insert CFBundleDisplayName -string 'Pear Wall' "${CONTENTS_ROOT}/Info.plist"

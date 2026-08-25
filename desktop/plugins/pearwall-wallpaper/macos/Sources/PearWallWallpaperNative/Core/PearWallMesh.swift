@@ -35,7 +35,25 @@ final class PearWallMeshLibrary {
             throw NSError(domain: "PearWallMesh", code: 1)
         }
         let data = try Data(contentsOf: url)
-        presets = try JSONDecoder().decode(PearWallPresetCollection.self, from: data)
+        let decodedData: Data
+        if let source = String(data: data, encoding: .utf8),
+           !source.trimmingCharacters(in: .whitespacesAndNewlines).hasPrefix("{") {
+            guard let separator = source.firstIndex(of: "=") else {
+                throw NSError(domain: "PearWallMesh", code: 5)
+            }
+            var json = String(source[source.index(after: separator)...])
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            if json.hasSuffix(";") {
+                json.removeLast()
+            }
+            guard let normalized = json.data(using: .utf8) else {
+                throw NSError(domain: "PearWallMesh", code: 6)
+            }
+            decodedData = normalized
+        } else {
+            decodedData = data
+        }
+        presets = try JSONDecoder().decode(PearWallPresetCollection.self, from: decodedData)
     }
 
     func makeGeometry(

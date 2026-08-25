@@ -1,216 +1,23 @@
 import AppKit
-import Darwin
 import Foundation
-import MetalKit
 import ScreenSaver
-
-func pearWallApplicationSupportDirectory() -> URL? {
-    guard let user = getpwuid(getuid()),
-          let homeDirectory = user.pointee.pw_dir else {
-        return nil
-    }
-    return URL(fileURLWithPath: String(cString: homeDirectory), isDirectory: true)
-        .appendingPathComponent("Library", isDirectory: true)
-        .appendingPathComponent("Application Support", isDirectory: true)
-        .appendingPathComponent("PearWall", isDirectory: true)
-}
-
-private enum PearWallScreenSaverDisplay: String {
-    case primary = "PRIMARY"
-    case secondary = "SECONDARY"
-}
-
-private enum PearWallArtworkFallback: String {
-    case defaultArtwork = "DEFAULT"
-    case custom = "CUSTOM"
-    case desktop = "DESKTOP"
-}
-
-private struct PearWallSettings {
-    var audioVisualization = true
-    var audioIntensity = 1.0
-    var pauseFlow = true
-    var hideCursor = true
-    var screenSaverDisplay = PearWallScreenSaverDisplay.primary
-    var screenSaverDisplayIds: [String]?
-    var showConfigurationDetails = true
-    var renderScale = 0.75
-    var blurEnabled = true
-    var blurMultiplier = 1.0
-    var scrimAlpha = 0.4
-    var flowSpeed = "NORMAL"
-    var moruStyle = "OFF"
-    var portraitPreset = 0
-    var landscapePreset = 0
-    var randomPreset = false
-    var artworkFallback = PearWallArtworkFallback.defaultArtwork
-    var customArtwork = ""
-
-    var flowSpeedMultiplier: Double {
-        switch flowSpeed.uppercased() {
-        case "SLOW":
-            return 0.5
-        case "FAST":
-            return 2
-        default:
-            return 1
-        }
-    }
-
-    var metalConfiguration: PearWallMetalConfiguration {
-        PearWallMetalConfiguration(
-            audioIntensity: audioIntensity,
-            renderScale: renderScale,
-            blurEnabled: blurEnabled,
-            blurMultiplier: blurMultiplier,
-            scrimAlpha: scrimAlpha,
-            portraitPreset: portraitPreset,
-            landscapePreset: landscapePreset,
-            randomPreset: randomPreset,
-            moruStyle: moruStyle
-        )
-    }
-
-    init(json: String = "{}") {
-        guard let data = json.data(using: .utf8),
-              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-            return
-        }
-        audioVisualization = Self.boolean(object, key: "audioVisualization", fallback: audioVisualization)
-        audioIntensity = min(
-            3,
-            max(0.5, Self.number(object, key: "audioIntensity", fallback: audioIntensity))
-        )
-        pauseFlow = Self.boolean(object, key: "pauseFlow", fallback: pauseFlow)
-        hideCursor = Self.boolean(object, key: "hideCursor", fallback: hideCursor)
-        showConfigurationDetails = Self.boolean(
-            object,
-            key: "showConfigurationDetails",
-            fallback: showConfigurationDetails
-        )
-        renderScale = Self.number(object, key: "renderScale", fallback: renderScale)
-        blurEnabled = Self.boolean(object, key: "blurEnabled", fallback: blurEnabled)
-        blurMultiplier = Self.number(object, key: "blurMultiplier", fallback: blurMultiplier)
-        scrimAlpha = Self.number(object, key: "scrimAlpha", fallback: scrimAlpha)
-        flowSpeed = Self.string(object, key: "flowSpeed", fallback: flowSpeed)
-        moruStyle = Self.string(object, key: "moruStyle", fallback: moruStyle)
-        portraitPreset = Self.integer(object, key: "portraitPreset", fallback: portraitPreset)
-        landscapePreset = Self.integer(object, key: "landscapePreset", fallback: landscapePreset)
-        randomPreset = Self.boolean(object, key: "randomPreset", fallback: randomPreset)
-        customArtwork = Self.string(object, key: "customArtwork", fallback: customArtwork)
-        if let value = PearWallScreenSaverDisplay(
-            rawValue: Self.string(object, key: "screenSaverDisplay", fallback: "PRIMARY")
-        ) {
-            screenSaverDisplay = value
-        }
-        if let values = object["screenSaverDisplayIds"] as? [String] {
-            screenSaverDisplayIds = values
-        }
-        if let value = PearWallArtworkFallback(
-            rawValue: Self.string(object, key: "artworkFallback", fallback: "DEFAULT")
-        ) {
-            artworkFallback = value
-        } else if !customArtwork.isEmpty {
-            artworkFallback = .custom
-        }
-    }
-
-    private static func boolean(
-        _ object: [String: Any],
-        key: String,
-        fallback: Bool
-    ) -> Bool {
-        (object[key] as? NSNumber)?.boolValue ?? fallback
-    }
-
-    private static func number(
-        _ object: [String: Any],
-        key: String,
-        fallback: Double
-    ) -> Double {
-        (object[key] as? NSNumber)?.doubleValue ?? fallback
-    }
-
-    private static func integer(
-        _ object: [String: Any],
-        key: String,
-        fallback: Int
-    ) -> Int {
-        (object[key] as? NSNumber)?.intValue ?? fallback
-    }
-
-    private static func string(
-        _ object: [String: Any],
-        key: String,
-        fallback: String
-    ) -> String {
-        object[key] as? String ?? fallback
-    }
-}
-
-private struct PearWallMediaArtwork {
-    let key: String
-    let source: String
-    let playing: Bool
-}
-
-private struct PearWallFileSignature: Equatable {
-    let modificationDate: Date
-    let size: UInt64
-    let fileNumber: UInt64
-}
-
-private enum PearWallMediaArtworkCache {
-    private static let maximumAgeMilliseconds: UInt64 = 10_000
-
-    static func current() -> PearWallMediaArtwork? {
-        guard let url = pearWallApplicationSupportDirectory()?
-            .appendingPathComponent("media-artwork.json"),
-              let data = try? Data(contentsOf: url),
-              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let key = object["key"] as? String,
-              !key.isEmpty,
-              let updatedAt = object["updated_at_milliseconds"] as? NSNumber else {
-            return nil
-        }
-        let now = UInt64(max(0, Date().timeIntervalSince1970 * 1_000))
-        let updatedAtMilliseconds = updatedAt.uint64Value
-        guard now >= updatedAtMilliseconds,
-              now - updatedAtMilliseconds <= maximumAgeMilliseconds else {
-            return nil
-        }
-        return PearWallMediaArtwork(
-            key: key,
-            source: object["data_url"] as? String ?? "",
-            playing: (object["playing"] as? NSNumber)?.boolValue ?? true,
-        )
-    }
-}
 
 @objc(PearWallScreenSaverView)
 final class PearWallScreenSaverView: ScreenSaverView {
     private static let settingsKey = "pearwall.settings"
-    private static let sharedSettingsFileName = "settings.json"
     private static let companionAppBundleIdentifier = "com.nevoit.pearwall.desktop"
-    private static let missingArtworkConfirmationInterval: TimeInterval = 2.5
-    private var metalView: MTKView?
-    private var metalRenderer: PearWallMetalRenderer?
+    private var renderSession: PearWallRenderSession?
+    private let renderState = PearWallRenderState()
     private var configurationDetailsLabel: NSTextField?
     private var configurationWindow: NSWindow?
     private var refreshTimer: Timer?
     private var screenParametersObserver: NSObjectProtocol?
     private var settings = PearWallSettings()
     private var lastSettingsSignature: PearWallFileSignature?
-    private var lastArtworkKey = ""
-    private var missingArtworkSince: Date?
     private var previewMode = false
     private var renderingActive = false
     private var renderTargetActive = false
     private var cursorHidden = false
-    private var playbackPlaying = true
-    private var animationTime: TimeInterval = 0
-    private var lastFrameUptime: TimeInterval?
-    private let runtimeStateReader = PearWallRuntimeStateReader()
     private lazy var screenSaverDefaults = ScreenSaverDefaults(
         forModuleWithName: "com.nevoit.pearwall.screensaver",
     )
@@ -269,7 +76,7 @@ final class PearWallScreenSaverView: ScreenSaverView {
     override func startAnimation() {
         super.startAnimation()
         renderingActive = true
-        lastFrameUptime = ProcessInfo.processInfo.systemUptime
+        renderState.lastFrameUptime = ProcessInfo.processInfo.systemUptime
         startRefreshTimer()
         refreshSharedSettings()
         reconcileRenderTarget()
@@ -279,25 +86,13 @@ final class PearWallScreenSaverView: ScreenSaverView {
     override func animateOneFrame() {
         super.animateOneFrame()
         guard renderingActive, renderTargetActive else { return }
-        let now = ProcessInfo.processInfo.systemUptime
-        let delta = min(0.1, max(0, now - (lastFrameUptime ?? now)))
-        lastFrameUptime = now
-        if !settings.pauseFlow || playbackPlaying {
-            animationTime += delta * settings.flowSpeedMultiplier
-        }
-        let snapshot = runtimeStateReader.currentSnapshot()
-        metalRenderer?.animationTime = Float(animationTime)
-        let pulse = settings.audioVisualization && playbackPlaying
-            ? snapshot?.pulse ?? 0
-            : 0
-        metalRenderer?.audioPulse = Float(min(1, max(0, Double(pulse))))
-        metalView?.draw()
+        renderSession?.drawFrame()
     }
 
     override func stopAnimation() {
         renderingActive = false
         renderTargetActive = false
-        lastFrameUptime = nil
+        renderState.lastFrameUptime = nil
         refreshTimer?.invalidate()
         refreshTimer = nil
         restoreCursorVisibility()
@@ -305,44 +100,32 @@ final class PearWallScreenSaverView: ScreenSaverView {
     }
 
     private func createMetalViewIfNeeded() {
-        guard metalView == nil,
-              let device = MTLCreateSystemDefaultDevice() else {
+        guard renderSession == nil,
+              let session = PearWallRenderSession(
+                  frame: bounds,
+                  settings: settings,
+                  state: renderState,
+                  resourceBundle: Bundle(for: PearWallScreenSaverView.self)
+              ) else {
             return
         }
-        let view = MTKView(frame: bounds, device: device)
-        view.autoresizingMask = [.width, .height]
-        view.colorPixelFormat = .bgra8Unorm
-        view.framebufferOnly = true
-        view.isPaused = true
-        view.enableSetNeedsDisplay = false
-        view.clearColor = MTLClearColorMake(0, 0, 0, 1)
-        guard let renderer = try? PearWallMetalRenderer(view: view) else {
-            return
-        }
-        renderer.setConfiguration(settings.metalConfiguration)
         if let configurationDetailsLabel {
-            addSubview(view, positioned: .below, relativeTo: configurationDetailsLabel)
+            addSubview(session.view, positioned: .below, relativeTo: configurationDetailsLabel)
         } else {
-            addSubview(view)
+            addSubview(session.view)
         }
-        metalView = view
-        metalRenderer = renderer
-        lastArtworkKey = ""
-        missingArtworkSince = nil
+        renderSession = session
     }
 
     private func destroyMetalView() {
-        metalView?.removeFromSuperview()
-        metalView = nil
-        metalRenderer = nil
-        lastArtworkKey = ""
-        missingArtworkSince = nil
+        renderSession?.view.removeFromSuperview()
+        renderSession = nil
     }
 
     private func reconcileRenderTarget() {
         let shouldRender = previewMode || isCurrentScreenSelected()
         configurationDetailsLabel?.isHidden = !shouldRender || !settings.showConfigurationDetails
-        guard shouldRender != renderTargetActive || (shouldRender && metalView == nil) else {
+        guard shouldRender != renderTargetActive || (shouldRender && renderSession == nil) else {
             return
         }
         renderTargetActive = shouldRender
@@ -401,122 +184,42 @@ final class PearWallScreenSaverView: ScreenSaverView {
         refreshTimer = timer
     }
 
-    private static var sharedSettingsURL: URL? {
-        pearWallApplicationSupportDirectory()?
-            .appendingPathComponent(sharedSettingsFileName)
-    }
-
     private func loadSettingsJSON() -> String {
-        if let url = Self.sharedSettingsURL,
-           let data = try? Data(contentsOf: url),
-           let json = String(data: data, encoding: .utf8),
-           Self.isSettingsJSON(json) {
-            lastSettingsSignature = Self.fileSignature(for: url)
-            return json
+        if let shared = PearWallSettingsStore.readShared() {
+            lastSettingsSignature = shared.signature
+            return shared.json
         }
         if let legacy = screenSaverDefaults?.string(forKey: Self.settingsKey),
-           Self.isSettingsJSON(legacy) {
+           PearWallSettingsStore.isSettingsJSON(legacy) {
             return legacy
         }
         return "{}"
     }
 
     private func refreshSharedSettings() {
-        guard let url = Self.sharedSettingsURL,
-              let signature = Self.fileSignature(for: url),
+        guard let url = PearWallSettingsStore.sharedURL,
+              let signature = PearWallSettingsStore.fileSignature(for: url),
               signature != lastSettingsSignature else {
             return
         }
         guard let data = try? Data(contentsOf: url),
               let json = String(data: data, encoding: .utf8),
-              Self.isSettingsJSON(json) else {
+              PearWallSettingsStore.isSettingsJSON(json) else {
             return
         }
         lastSettingsSignature = signature
         settings = PearWallSettings(json: json)
-        metalRenderer?.setConfiguration(settings.metalConfiguration)
+        renderSession?.updateSettings(settings)
         reconcileRenderTarget()
         applyCursorVisibility()
         updateConfigurationDetails()
         refreshArtwork()
     }
 
-    private static func fileSignature(for url: URL) -> PearWallFileSignature? {
-        let attributes = try? FileManager.default.attributesOfItem(atPath: url.path)
-        guard let modificationDate = attributes?[.modificationDate] as? Date else {
-            return nil
-        }
-        return PearWallFileSignature(
-            modificationDate: modificationDate,
-            size: (attributes?[.size] as? NSNumber)?.uint64Value ?? 0,
-            fileNumber: (attributes?[.systemFileNumber] as? NSNumber)?.uint64Value ?? 0
-        )
-    }
-
-    private static func isSettingsJSON(_ value: String) -> Bool {
-        guard let data = value.data(using: .utf8),
-              let object = try? JSONSerialization.jsonObject(with: data) else {
-            return false
-        }
-        return object is [String: Any]
-    }
-
     private func refreshArtwork() {
-        guard renderTargetActive, let metalRenderer else { return }
+        guard renderTargetActive, let renderSession else { return }
         defer { updateConfigurationDetails() }
-        if let artwork = PearWallMediaArtworkCache.current() {
-            playbackPlaying = artwork.playing
-            if !artwork.source.isEmpty,
-               applyArtwork(source: artwork.source, key: "media:\(artwork.key)", to: metalRenderer) {
-                missingArtworkSince = nil
-                return
-            }
-        } else {
-            playbackPlaying = true
-        }
-        if lastArtworkKey.hasPrefix("media:") {
-            if !playbackPlaying {
-                missingArtworkSince = nil
-                return
-            }
-            let now = Date()
-            if let missingArtworkSince {
-                if now.timeIntervalSince(missingArtworkSince)
-                    < Self.missingArtworkConfirmationInterval {
-                    return
-                }
-            } else {
-                missingArtworkSince = now
-                return
-            }
-        }
-        missingArtworkSince = nil
-        switch settings.artworkFallback {
-        case .custom where !settings.customArtwork.isEmpty:
-            if applyArtwork(
-                source: settings.customArtwork,
-                key: "custom:\(settings.customArtwork.hashValue)",
-                to: metalRenderer
-            ) {
-                return
-            }
-        case .desktop:
-            if let screen = window?.screen ?? NSScreen.screens.first,
-               let url = NSWorkspace.shared.desktopImageURL(for: screen),
-               applyArtwork(source: url.absoluteString, key: "desktop:\(url.path)", to: metalRenderer) {
-                return
-            }
-        default:
-            break
-        }
-        guard let url = Bundle(for: type(of: self)).url(
-            forResource: "default_artwork",
-            withExtension: "svg",
-            subdirectory: "assets"
-        ) else {
-            return
-        }
-        _ = applyArtwork(source: url.absoluteString, key: "default", to: metalRenderer)
+        renderSession.refreshArtwork(screen: window?.screen)
     }
 
     private func configureConfigurationDetailsLabel() {
@@ -585,49 +288,11 @@ final class PearWallScreenSaverView: ScreenSaverView {
         渲染比例：\(Int((settings.renderScale * 100).rounded()))%
         模糊：\(blur)
         遮罩：\(Int((settings.scrimAlpha * 100).rounded()))%
-        流动：\(speed) · \(playbackPlaying ? "运行中" : "已暂停")
+        流动：\(speed) · \(renderState.playbackPlaying ? "运行中" : "已暂停")
         音频响应：\(settings.audioVisualization ? String(format: "开启 · %.1f×", settings.audioIntensity) : "关闭")
         光栅玻璃：\(moruStyle)
         """
         configurationDetailsLabel?.invalidateIntrinsicContentSize()
-    }
-
-    private func applyArtwork(
-        source: String,
-        key: String,
-        to renderer: PearWallMetalRenderer
-    ) -> Bool {
-        if key == lastArtworkKey {
-            return true
-        }
-        guard let image = Self.image(from: source), renderer.setArtwork(image) else {
-            return false
-        }
-        lastArtworkKey = key
-        return true
-    }
-
-    private static func image(from source: String) -> NSImage? {
-        if source.hasPrefix("data:") {
-            guard let separator = source.firstIndex(of: ",") else { return nil }
-            let metadata = source[..<separator]
-            let payload = String(source[source.index(after: separator)...])
-            let data: Data?
-            if metadata.contains(";base64") {
-                data = Data(base64Encoded: payload, options: .ignoreUnknownCharacters)
-            } else {
-                data = payload.removingPercentEncoding?.data(using: .utf8)
-            }
-            return data.flatMap(NSImage.init(data:))
-        }
-        if let url = URL(string: source), url.isFileURL {
-            return NSImage(contentsOf: url)
-        }
-        if let data = Data(base64Encoded: source, options: .ignoreUnknownCharacters),
-           let image = NSImage(data: data) {
-            return image
-        }
-        return NSImage(contentsOfFile: source)
     }
 
     private func applyCursorVisibility() {
