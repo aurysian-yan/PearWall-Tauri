@@ -127,7 +127,9 @@ fn reconcile_windows<R: Runtime>(app: &AppHandle<R>) -> Result<WallpaperStatus, 
             Some(window) => window,
             None => create_window(app, &label, &display)?,
         };
-        attach_to_desktop(&window, desktop_host, &display)?;
+        if !is_attached_to_desktop(&window, desktop_host, &display) {
+            attach_to_desktop(&window, desktop_host, &display)?;
+        }
     }
     Ok(status(app))
 }
@@ -248,11 +250,46 @@ fn create_window<R: Runtime>(
                 return;
             }
             if let Ok(desktop_host) = desktop_wallpaper_host() {
-                let _ = attach_to_desktop(&window, desktop_host, &loaded_display);
+                if !is_attached_to_desktop(&window, desktop_host, &loaded_display) {
+                    let _ = attach_to_desktop(&window, desktop_host, &loaded_display);
+                }
             }
         })
         .build()
         .map_err(|error| format!("无法创建 Windows WebGL 动态壁纸窗口：{error}"))
+}
+
+fn is_attached_to_desktop<R: Runtime>(
+    window: &WebviewWindow<R>,
+    desktop_host: DesktopHost,
+    display: &DisplayTarget,
+) -> bool {
+    unsafe {
+        let Ok(child) = window.hwnd() else {
+            return false;
+        };
+        if !IsChild(desktop_host.parent, child).as_bool()
+            || !IsWindowVisible(desktop_host.parent).as_bool()
+            || !IsWindowVisible(child).as_bool()
+        {
+            return false;
+        }
+        if desktop_host.raised
+            && GetWindowLongPtrW(child, GWL_EXSTYLE) as u32 & WS_EX_LAYERED.0 == 0
+        {
+            return false;
+        }
+        let mut bounds = RECT::default();
+        if GetWindowRect(child, &mut bounds).is_err()
+            || bounds.left != display.position_x
+            || bounds.top != display.position_y
+            || bounds.right - bounds.left != display.width as i32
+            || bounds.bottom - bounds.top != display.height as i32
+        {
+            return false;
+        }
+        !desktop_host.raised || verify_raised_z_order(desktop_host, child).is_ok()
+    }
 }
 
 fn attach_to_desktop<R: Runtime>(
@@ -382,6 +419,10 @@ fn desktop_wallpaper_host() -> Result<DesktopHost, String> {
         let raised =
             GetWindowLongPtrW(progman, GWL_EXSTYLE) as u32 & WS_EX_NOREDIRECTIONBITMAP.0 != 0;
 
+        if let Some(host) = existing_desktop_wallpaper_host(progman, raised)? {
+            return Ok(host);
+        }
+
         for (wparam, lparam) in [(0xD, 0x1), (0xD, 0x0), (0x0, 0x0)] {
             let mut message_result = 0_usize;
             SendMessageTimeoutW(
@@ -395,29 +436,8 @@ fn desktop_wallpaper_host() -> Result<DesktopHost, String> {
             );
             std::thread::sleep(std::time::Duration::from_millis(50));
 
-            if raised {
-                let shell_view =
-                    FindWindowExW(Some(progman), None, w!("SHELLDLL_DefView"), PCWSTR::null()).ok();
-                let background =
-                    FindWindowExW(Some(progman), None, w!("WorkerW"), PCWSTR::null()).ok();
-                if let Some(shell_view) = shell_view {
-                    return Ok(DesktopHost {
-                        parent: progman,
-                        insert_after: shell_view,
-                        background,
-                        raised: true,
-                    });
-                }
-            }
-
-            let search = search_desktop_hosts()?;
-            if let Some(parent) = search.wallpaper_host {
-                return Ok(DesktopHost {
-                    parent,
-                    insert_after: HWND_BOTTOM,
-                    background: None,
-                    raised: false,
-                });
+            if let Some(host) = existing_desktop_wallpaper_host(progman, raised)? {
+                return Ok(host);
             }
         }
 
@@ -439,6 +459,37 @@ fn desktop_wallpaper_host() -> Result<DesktopHost, String> {
             background: None,
             raised: false,
         })
+    }
+}
+
+fn existing_desktop_wallpaper_host(
+    progman: HWND,
+    raised: bool,
+) -> Result<Option<DesktopHost>, String> {
+    unsafe {
+        if raised {
+            let shell_view =
+                FindWindowExW(Some(progman), None, w!("SHELLDLL_DefView"), PCWSTR::null()).ok();
+            let background = FindWindowExW(Some(progman), None, w!("WorkerW"), PCWSTR::null()).ok();
+            return Ok(match (shell_view, background) {
+                (Some(shell_view), Some(background)) => Some(DesktopHost {
+                    parent: progman,
+                    insert_after: shell_view,
+                    background: Some(background),
+                    raised: true,
+                }),
+                _ => None,
+            });
+        }
+
+        Ok(search_desktop_hosts()?
+            .wallpaper_host
+            .map(|parent| DesktopHost {
+                parent,
+                insert_after: HWND_BOTTOM,
+                background: None,
+                raised: false,
+            }))
     }
 }
 

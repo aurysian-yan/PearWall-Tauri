@@ -1134,9 +1134,9 @@ export function SettingsApp() {
     setWallpaperFailed(false);
     setWallpaperError("");
     try {
-      const command = enabled ? "start" : "stop";
       const status = await invoke<WallpaperRuntimeStatus>(
-        `plugin:pearwall-wallpaper|${command}`,
+        "set_dynamic_wallpaper_enabled",
+        { enabled },
       );
       setWallpaperStatus(status);
       update("dynamicWallpaperEnabled", status.running);

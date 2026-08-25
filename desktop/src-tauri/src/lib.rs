@@ -23,6 +23,8 @@ mod macos_status_item;
 #[cfg(windows)]
 mod windows_audio;
 #[cfg(windows)]
+mod windows_autostart;
+#[cfg(windows)]
 mod windows_media;
 #[cfg(windows)]
 mod windows_tray;
@@ -528,6 +530,70 @@ fn dynamic_wallpaper_enabled(app: &AppHandle) -> Result<bool, String> {
         .unwrap_or(false))
 }
 
+#[tauri::command]
+async fn set_dynamic_wallpaper_enabled(
+    app: AppHandle,
+    enabled: bool,
+) -> Result<pearwall_wallpaper::WallpaperStatus, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        set_dynamic_wallpaper_enabled_blocking(&app, enabled)
+    })
+    .await
+    .map_err(|error| format!("更新动态壁纸状态失败：{error}"))?
+}
+
+fn set_dynamic_wallpaper_enabled_blocking(
+    app: &AppHandle,
+    enabled: bool,
+) -> Result<pearwall_wallpaper::WallpaperStatus, String> {
+    if enabled {
+        let status = pearwall_wallpaper::start_wallpaper(app)?;
+        #[cfg(windows)]
+        if let Err(error) = windows_autostart::sync(true) {
+            let _ = pearwall_wallpaper::stop_wallpaper(app);
+            return Err(error);
+        }
+        return Ok(status);
+    }
+
+    let status = pearwall_wallpaper::stop_wallpaper(app)?;
+    #[cfg(windows)]
+    if let Err(error) = windows_autostart::sync(false) {
+        return match pearwall_wallpaper::start_wallpaper(app) {
+            Ok(_) => Err(error),
+            Err(restore_error) => Err(format!("{error}；恢复动态壁纸失败：{restore_error}")),
+        };
+    }
+    Ok(status)
+}
+
+#[cfg(windows)]
+fn restore_windows_dynamic_wallpaper(app: &AppHandle) {
+    let Err(initial_error) = pearwall_wallpaper::start_wallpaper(app) else {
+        return;
+    };
+    let app = app.clone();
+    let result = std::thread::Builder::new()
+        .name("pearwall-windows-startup".to_string())
+        .spawn(move || {
+            let mut last_error = initial_error;
+            for _ in 0..60 {
+                std::thread::sleep(std::time::Duration::from_secs(1));
+                if !dynamic_wallpaper_enabled(&app).unwrap_or(false) {
+                    return;
+                }
+                match pearwall_wallpaper::start_wallpaper(&app) {
+                    Ok(_) => return,
+                    Err(error) => last_error = error,
+                }
+            }
+            eprintln!("登录后恢复 Windows 动态壁纸失败：{last_error}");
+        });
+    if let Err(error) = result {
+        eprintln!("无法启动 Windows 动态壁纸恢复线程：{error}");
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let mode = launch_mode();
@@ -540,7 +606,28 @@ pub fn run() {
     let macos_started_at = audio_state.started_at;
     let page_load_visibility = show_main_window_on_launch.clone();
     let _setup_visibility = show_main_window_on_launch.clone();
-    let app = tauri::Builder::default()
+    #[cfg(windows)]
+    let mut builder = tauri::Builder::default();
+    #[cfg(not(windows))]
+    let builder = tauri::Builder::default();
+    #[cfg(windows)]
+    if matches!(
+        mode,
+        LaunchMode::App | LaunchMode::Configure | LaunchMode::Wallpaper
+    ) {
+        builder = builder.plugin(tauri_plugin_single_instance::init(
+            |app, arguments, _cwd| {
+                if arguments
+                    .iter()
+                    .any(|argument| argument.eq_ignore_ascii_case("--wallpaper"))
+                {
+                    return;
+                }
+                windows_tray::show_main_window(app);
+            },
+        ));
+    }
+    let app = builder
         .plugin(tauri_plugin_opener::init())
         .plugin(pearwall_wallpaper::init())
         .manage(audio_state)
@@ -560,6 +647,7 @@ pub fn run() {
             get_macos_wallpaper_runtime_status,
             start_macos_wallpaper_runtime,
             stop_macos_wallpaper_runtime,
+            set_dynamic_wallpaper_enabled,
         ])
         .on_page_load(move |webview, payload| {
             if payload.event() != PageLoadEvent::Finished {
@@ -590,10 +678,31 @@ pub fn run() {
                 mode,
                 LaunchMode::App | LaunchMode::Configure | LaunchMode::Wallpaper
             ) {
+                let enabled = dynamic_wallpaper_enabled(app.handle())?;
+                if let Err(error) = windows_autostart::sync(enabled) {
+                    eprintln!("同步 Windows 登录启动项失败：{error}");
+                }
+                if matches!(mode, LaunchMode::Wallpaper) && !enabled {
+                    app.handle().exit(0);
+                    return Ok(());
+                }
+            }
+
+            #[cfg(windows)]
+            if matches!(
+                mode,
+                LaunchMode::App | LaunchMode::Configure | LaunchMode::Wallpaper
+            ) {
                 windows_tray::install(app.handle())?;
             }
 
-            #[cfg(any(target_os = "macos", windows))]
+            #[cfg(windows)]
+            if matches!(mode, LaunchMode::Wallpaper) {
+                restore_windows_dynamic_wallpaper(app.handle());
+                return Ok(());
+            }
+
+            #[cfg(target_os = "macos")]
             if matches!(mode, LaunchMode::Wallpaper) {
                 pearwall_wallpaper::start_wallpaper(app.handle())?;
                 return Ok(());
@@ -614,7 +723,14 @@ pub fn run() {
                 }
             }
 
-            #[cfg(any(target_os = "macos", windows))]
+            #[cfg(windows)]
+            if matches!(mode, LaunchMode::App | LaunchMode::Configure)
+                && dynamic_wallpaper_enabled(app.handle())?
+            {
+                restore_windows_dynamic_wallpaper(app.handle());
+            }
+
+            #[cfg(target_os = "macos")]
             if matches!(mode, LaunchMode::App | LaunchMode::Configure)
                 && dynamic_wallpaper_enabled(app.handle())?
             {

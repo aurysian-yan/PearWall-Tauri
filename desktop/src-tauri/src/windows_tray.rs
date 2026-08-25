@@ -26,10 +26,7 @@ pub fn install(app: &AppHandle) -> Result<(), String> {
         .show_menu_on_left_click(false)
         .on_menu_event(|app, event| match event.id().as_ref() {
             OPEN_ITEM_ID => show_main_window(app),
-            QUIT_ITEM_ID => {
-                let _ = pearwall_wallpaper::stop_wallpaper(app);
-                app.exit(0);
-            }
+            QUIT_ITEM_ID => app.exit(0),
             _ => {}
         })
         .on_tray_icon_event(|tray, event| match event {
@@ -49,7 +46,7 @@ pub fn install(app: &AppHandle) -> Result<(), String> {
         .map_err(|error| format!("无法创建 Windows 托盘图标：{error}"))
 }
 
-fn show_main_window(app: &AppHandle) {
+pub fn show_main_window(app: &AppHandle) {
     if let Some(window) = app.get_webview_window("main") {
         let _ = window.unminimize();
         let _ = window.show();
