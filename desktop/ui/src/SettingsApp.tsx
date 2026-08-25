@@ -1,4 +1,12 @@
-import { Button, Checkbox, Modal, Separator, Slider, Tabs } from "@heroui/react";
+import {
+  Button,
+  Checkbox,
+  Modal,
+  NumberField,
+  Separator,
+  Slider,
+  Tabs,
+} from "@heroui/react";
 import { SmoothCorners } from "@lisse/react";
 import { OverlayScrollbarsComponent } from "overlayscrollbars-react";
 import BlurEffect from "react-progressive-blur";
@@ -14,7 +22,9 @@ import {
   CursorIcon,
   DesktopIcon,
   DeviceMobileIcon,
+  DownloadSimpleIcon,
   FileTextIcon,
+  FrameCornersIcon,
   GithubLogoIcon,
   GaugeIcon,
   HouseIcon,
@@ -34,6 +44,7 @@ import {
   DropIcon,
 } from "@phosphor-icons/react";
 import {
+  useCallback,
   useEffect,
   useRef,
   useState,
@@ -69,11 +80,15 @@ type DrawerPage =
   | "advanced"
   | "dynamicWallpaperDisplays"
   | "screenSaverDisplays"
+  | "exportImage"
   | "licenses";
 type MediaArtwork = {
   key: string;
   data_url: string | null;
   playing: boolean;
+  title: string;
+  artist: string;
+  album: string;
 };
 type ConnectedDisplay = {
   id: string;
@@ -92,6 +107,27 @@ type WallpaperRuntimeStatus = {
   supported: boolean;
   running: boolean;
   displayCount: number;
+};
+type ExportResolution = "1920x1080" | "2560x1440" | "3840x2160" | "custom";
+type WatermarkBackground = "WHITE" | "BLACK" | "BLUR_WHITE" | "BLUR_BLACK";
+type ExportImageOptions = {
+  width: number;
+  height: number;
+  distortionPreset: number;
+  distortionStrength: number;
+  distortionProgress: number;
+  blurMultiplier: number;
+  scrimAlpha: number;
+  watermark: boolean;
+  watermarkBackground: WatermarkBackground;
+  watermarkLogoPath?: string;
+  songTitle?: string;
+  songArtist?: string;
+  songAlbum?: string;
+  songArtwork?: string;
+};
+type PearWallPreviewWindow = Window & {
+  PearWallExportImage?: (options: ExportImageOptions) => string;
 };
 type UpdateSetting = <Key extends keyof Settings>(
   key: Key,
@@ -116,6 +152,24 @@ const renderScales: SelectOption<number>[] = [
   { value: 0.75, label: "均衡" },
   { value: 1, label: "清晰" },
 ];
+
+const exportResolutions: SelectOption<ExportResolution>[] = [
+  { value: "1920x1080", label: "1080p" },
+  { value: "2560x1440", label: "2K" },
+  { value: "3840x2160", label: "4K" },
+  { value: "custom", label: "自定义" },
+];
+
+const watermarkBackgrounds: SelectOption<WatermarkBackground>[] = [
+  { value: "WHITE", label: "白色" },
+  { value: "BLACK", label: "黑色" },
+  { value: "BLUR_WHITE", label: "白色模糊" },
+  { value: "BLUR_BLACK", label: "黑色模糊" },
+];
+
+function exportWatermarkHeight(width: number, height: number) {
+  return Math.max(24, Math.round(Math.min(width * 0.11, height * 0.18)));
+}
 
 const portraitPresets: SelectOption<number>[] = [
   { value: 0, label: "方案 1" },
@@ -752,6 +806,314 @@ function DrawerHero({
   );
 }
 
+function ExportImageDrawer({
+  settings,
+  onPreview,
+  onExport,
+}: {
+  settings: Settings;
+  onPreview: (options: ExportImageOptions) => string;
+  onExport: (options: ExportImageOptions) => Promise<string>;
+}) {
+  const [resolution, setResolution] = useState<ExportResolution>("2560x1440");
+  const [width, setWidth] = useState(2560);
+  const [height, setHeight] = useState(1440);
+  const [distortionPreset, setDistortionPreset] = useState(
+    settings.landscapePreset,
+  );
+  const [distortionStrength, setDistortionStrength] = useState(1);
+  const [distortionProgress, setDistortionProgress] = useState(0.5);
+  const [blurMultiplier, setBlurMultiplier] = useState(settings.blurMultiplier);
+  const [scrimAlpha, setScrimAlpha] = useState(settings.scrimAlpha);
+  const [watermark, setWatermark] = useState(false);
+  const [watermarkBackground, setWatermarkBackground] =
+    useState<WatermarkBackground>("WHITE");
+  const [previewUrl, setPreviewUrl] = useState("");
+  const [previewPending, setPreviewPending] = useState(true);
+  const [previewFailed, setPreviewFailed] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [resultMessage, setResultMessage] = useState("");
+  const [errorMessage, setErrorMessage] = useState("");
+  const portrait = height >= width;
+  const presetOptions = portrait ? portraitPresets : landscapePresets;
+  const selectedPreset = Math.min(
+    distortionPreset,
+    presetOptions.length - 1,
+  );
+  const watermarkHeight = watermark
+    ? exportWatermarkHeight(width, height)
+    : 0;
+
+  useEffect(() => {
+    let disposed = false;
+    setPreviewPending(true);
+    const timer = window.setTimeout(() => {
+      try {
+        const scale = Math.min(1, 720 / Math.max(width, height));
+        const nextPreviewUrl = onPreview({
+          width: Math.max(64, Math.round(width * scale)),
+          height: Math.max(64, Math.round(height * scale)),
+          distortionPreset: selectedPreset,
+          distortionStrength,
+          distortionProgress,
+          blurMultiplier,
+          scrimAlpha,
+          watermark,
+          watermarkBackground,
+        });
+        if (disposed) return;
+        setPreviewUrl(nextPreviewUrl);
+        setPreviewFailed(false);
+      } catch {
+        if (disposed) return;
+        setPreviewFailed(true);
+      } finally {
+        if (!disposed) setPreviewPending(false);
+      }
+    }, 120);
+    return () => {
+      disposed = true;
+      window.clearTimeout(timer);
+    };
+  }, [
+    blurMultiplier,
+    distortionProgress,
+    distortionStrength,
+    height,
+    onPreview,
+    scrimAlpha,
+    selectedPreset,
+    watermark,
+    watermarkBackground,
+    width,
+  ]);
+
+  const selectResolution = (value: ExportResolution) => {
+    setResolution(value);
+    if (value === "custom") return;
+    const [nextWidth, nextHeight] = value.split("x").map(Number);
+    setWidth(nextWidth);
+    setHeight(nextHeight);
+    setDistortionPreset((current) => Math.min(current, 4));
+  };
+
+  const changeWidth = (value: number) => {
+    if (!Number.isFinite(value)) return;
+    setResolution("custom");
+    setWidth(Math.round(value));
+  };
+
+  const changeHeight = (value: number) => {
+    if (!Number.isFinite(value)) return;
+    setResolution("custom");
+    setHeight(Math.round(value));
+  };
+
+  const exportImage = async () => {
+    setExporting(true);
+    setResultMessage("");
+    setErrorMessage("");
+    try {
+      const result = await onExport({
+        width: Math.max(320, Math.min(4096, width)),
+        height: Math.max(320, Math.min(4096, height)),
+        distortionPreset: selectedPreset,
+        distortionStrength,
+        distortionProgress,
+        blurMultiplier,
+        scrimAlpha,
+        watermark,
+        watermarkBackground,
+      });
+      setResultMessage(result);
+    } catch (error) {
+      setErrorMessage(String(error));
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  return (
+    <div className="space-y-5 px-4">
+      <DrawerCard>
+        <div className="px-4 py-4">
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <p className="text-sm font-semibold text-white">效果预览</p>
+            <p className="text-xs text-white/45">
+              {width} × {height + watermarkHeight}
+            </p>
+          </div>
+          <div
+            className="relative flex w-full items-center justify-center overflow-hidden bg-black/35"
+            style={{ aspectRatio: `${width} / ${height + watermarkHeight}` }}
+          >
+            {previewUrl && (
+              <img
+                src={previewUrl}
+                alt="导出效果预览"
+                className={`h-full w-full object-contain transition-opacity ${previewPending ? "opacity-60" : "opacity-100"}`}
+              />
+            )}
+            {!previewUrl && (
+              <p className="px-4 text-center text-xs text-white/55">
+                {previewFailed ? "暂时无法生成效果预览" : "正在生成效果预览…"}
+              </p>
+            )}
+            {previewUrl && previewPending && (
+              <p className="absolute bottom-3 right-3 text-xs text-white/65">
+                正在更新预览…
+              </p>
+            )}
+          </div>
+        </div>
+      </DrawerCard>
+
+      <DrawerCard>
+        <ChoiceTabs
+          icon={MagicWandIcon}
+          label="封面扭曲方案"
+          value={selectedPreset}
+          options={presetOptions}
+          onChange={setDistortionPreset}
+          variant="drawer"
+        />
+        <Separator className="mx-2 w-[calc(100%-1rem)] bg-white/15" />
+        <RangeSetting
+          icon={FrameCornersIcon}
+          label="扭曲强度"
+          value={distortionStrength}
+          minValue={0}
+          maxValue={1.5}
+          step={0.05}
+          onChange={setDistortionStrength}
+        />
+        <Separator className="mx-2 w-[calc(100%-1rem)] bg-white/15" />
+        <RangeSetting
+          icon={PlayIcon}
+          label="扭曲位置"
+          value={distortionProgress}
+          minValue={0}
+          maxValue={1}
+          step={0.01}
+          onChange={setDistortionProgress}
+        />
+        <Separator className="mx-2 w-[calc(100%-1rem)] bg-white/15" />
+        <RangeSetting
+          icon={DropIcon}
+          label="导出模糊强度"
+          value={blurMultiplier}
+          minValue={0}
+          maxValue={2}
+          step={0.05}
+          onChange={setBlurMultiplier}
+        />
+        <Separator className="mx-2 w-[calc(100%-1rem)] bg-white/15" />
+        <RangeSetting
+          icon={CircleHalfIcon}
+          label="导出画面遮罩"
+          value={scrimAlpha}
+          minValue={0}
+          maxValue={0.8}
+          step={0.05}
+          onChange={setScrimAlpha}
+        />
+      </DrawerCard>
+
+      <DrawerCard>
+        <ChoiceTabs
+          icon={CornersOutIcon}
+          label="导出分辨率"
+          value={resolution}
+          options={exportResolutions}
+          onChange={selectResolution}
+          variant="drawer"
+        />
+        <Separator className="mx-2 w-[calc(100%-1rem)] bg-white/15" />
+        <div className="grid grid-cols-2 gap-3 px-4 py-4">
+          <div className="min-w-0">
+            <div className="mb-2 text-xs font-medium text-white/65">宽度</div>
+            <NumberField
+              aria-label="导出宽度"
+              value={width}
+              minValue={320}
+              maxValue={4096}
+              step={1}
+              onChange={changeWidth}
+              fullWidth
+            >
+              <NumberField.Group className="!w-full !grid-cols-1 !bg-white/8">
+                <NumberField.Input className="!w-full min-w-0 text-white" />
+              </NumberField.Group>
+            </NumberField>
+          </div>
+          <div className="min-w-0">
+            <div className="mb-2 text-xs font-medium text-white/65">高度</div>
+            <NumberField
+              aria-label="导出高度"
+              value={height}
+              minValue={320}
+              maxValue={4096}
+              step={1}
+              onChange={changeHeight}
+              fullWidth
+            >
+              <NumberField.Group className="!w-full !grid-cols-1 !bg-white/8">
+                <NumberField.Input className="!w-full min-w-0 text-white" />
+              </NumberField.Group>
+            </NumberField>
+          </div>
+          <p className="col-span-2 text-xs text-white/45">
+            单边范围为 320–4096 像素，图片最大为 1200 万像素
+          </p>
+        </div>
+        <Separator className="mx-2 w-[calc(100%-1rem)] bg-white/15" />
+        <SettingRow
+          icon={ImageIcon}
+          title="添加歌曲水印"
+          description="在画面下方追加 Logo 与歌曲信息"
+        >
+          <Toggle
+            label="添加歌曲水印"
+            value={watermark}
+            onChange={setWatermark}
+          />
+        </SettingRow>
+        {watermark && (
+          <>
+            <Separator className="mx-2 w-[calc(100%-1rem)] bg-white/15" />
+            <ChoiceTabs
+              icon={CircleHalfIcon}
+              label="水印背景"
+              value={watermarkBackground}
+              options={watermarkBackgrounds}
+              onChange={setWatermarkBackground}
+              variant="drawer"
+            />
+          </>
+        )}
+      </DrawerCard>
+
+      <Button
+        fullWidth
+        size="lg"
+        isDisabled={exporting}
+        onPress={() => void exportImage()}
+        className="bg-white font-semibold text-neutral-900"
+      >
+        <DownloadSimpleIcon aria-hidden size={20} />
+        {exporting ? "正在导出…" : "导出 PNG 图片"}
+      </Button>
+      {(resultMessage || errorMessage) && (
+        <p
+          className={`break-all px-2 text-center text-xs ${errorMessage ? "text-red-300" : "text-white/65"}`}
+        >
+          {errorMessage || resultMessage}
+        </p>
+      )}
+    </div>
+  );
+}
+
 function DrawerPageContent({
   page,
   settings,
@@ -762,6 +1124,8 @@ function DrawerPageContent({
   displayDiscoveryFailed,
   onDynamicWallpaperDisplayChange,
   onScreenSaverDisplayChange,
+  onPreviewImage,
+  onExportImage,
 }: {
   page: DrawerPage;
   settings: Settings;
@@ -772,11 +1136,14 @@ function DrawerPageContent({
   displayDiscoveryFailed: boolean;
   onDynamicWallpaperDisplayChange: (id: string, enabled: boolean) => void;
   onScreenSaverDisplayChange: (id: string, enabled: boolean) => void;
+  onPreviewImage: (options: ExportImageOptions) => string;
+  onExportImage: (options: ExportImageOptions) => Promise<string>;
 }) {
   const titles: Record<DrawerPage, string> = {
     advanced: "高级设置",
     dynamicWallpaperDisplays: "动态壁纸显示器",
     screenSaverDisplays: "屏保显示器",
+    exportImage: "导出图片",
     licenses: "开源许可",
   };
   const descriptions: Record<DrawerPage, string> = {
@@ -785,12 +1152,14 @@ function DrawerPageContent({
       : "调整渲染质量与屏幕方向方案，也可以让 Pear Wall 自动随机切换。",
     dynamicWallpaperDisplays: "选择用于显示动态壁纸的显示器。",
     screenSaverDisplays: "选择用于运行 macOS 屏幕保护程序的显示器。",
+    exportImage: "调整当前封面的画面参数，并导出指定分辨率的 PNG 图片。",
     licenses: "Pear Wall 能够顺利运行，离不开这些优秀的开源库。",
   };
   const icons: Record<DrawerPage, IconType> = {
     advanced: SlidersHorizontalIcon,
     dynamicWallpaperDisplays: DesktopIcon,
     screenSaverDisplays: MonitorIcon,
+    exportImage: DownloadSimpleIcon,
     licenses: FileTextIcon,
   };
   const [scrollTop, setScrollTop] = useState(0);
@@ -920,6 +1289,14 @@ function DrawerPageContent({
                 />
               </DrawerCard>
             </div>
+          )}
+
+          {page === "exportImage" && (
+            <ExportImageDrawer
+              settings={settings}
+              onPreview={onPreviewImage}
+              onExport={onExportImage}
+            />
           )}
 
           {page === "licenses" && (
@@ -1069,6 +1446,7 @@ export function SettingsApp() {
     !usesSharedSettings,
   );
   const [previewReady, setPreviewReady] = useState(false);
+  const [mediaArtwork, setMediaArtwork] = useState<MediaArtwork | null>(null);
   const [contentVisible, setContentVisible] = useState(true);
   const [pureMode, setPureMode] = useState(false);
   const [drawerPage, setDrawerPage] = useState<DrawerPage | null>(null);
@@ -1250,7 +1628,7 @@ export function SettingsApp() {
   }, []);
 
   useEffect(() => {
-    if (!isMacOSRuntime || !previewReady) return;
+    if (!isTauriRuntime || !previewReady) return;
     let disposed = false;
     let pending = false;
     let currentKey = "";
@@ -1269,6 +1647,15 @@ export function SettingsApp() {
           ? artwork
           : { ...artwork, data_url: cached.data_url };
         mediaArtworkCache.current = nextArtwork;
+        setMediaArtwork((current) => {
+          if (
+            current?.key === nextArtwork.key
+            && current.title === nextArtwork.title
+            && current.artist === nextArtwork.artist
+            && current.album === nextArtwork.album
+          ) return current;
+          return nextArtwork;
+        });
         previewRef.current?.contentWindow?.postMessage(
           { type: "pearwall:media-artwork", artwork: nextArtwork },
           window.location.protocol === "file:" ? "*" : window.location.origin,
@@ -1288,7 +1675,7 @@ export function SettingsApp() {
       disposed = true;
       window.clearInterval(timer);
     };
-  }, [isMacOSRuntime, previewReady]);
+  }, [isTauriRuntime, previewReady]);
 
   useEffect(() => {
     if (!isTauriRuntime || !previewReady || !settings.audioVisualization) return;
@@ -1390,6 +1777,44 @@ export function SettingsApp() {
       if (dynamicWallpaperDisplayIds.length === 0) return current;
       return { ...current, dynamicWallpaperDisplayIds };
     });
+  };
+
+  const renderCurrentImage = useCallback((options: ExportImageOptions) => {
+    const previewWindow = previewRef.current?.contentWindow as
+      | PearWallPreviewWindow
+      | null;
+    const exportImage = previewWindow?.PearWallExportImage;
+    if (!exportImage) {
+      throw new Error("实时画面尚未准备好，请稍后重试");
+    }
+    const logoPath = document
+      .querySelector<SVGPathElement>('svg[aria-label="Pear Wall"] path')
+      ?.getAttribute("d");
+    const dataUrl = exportImage({
+      ...options,
+      watermarkLogoPath: logoPath ?? undefined,
+      songTitle: mediaArtwork?.title,
+      songArtist: mediaArtwork?.artist,
+      songAlbum: mediaArtwork?.album,
+      songArtwork: mediaArtwork?.data_url ?? undefined,
+    });
+    if (!dataUrl.startsWith("data:image/png;base64,")) {
+      throw new Error("无法生成 PNG 图片");
+    }
+    return dataUrl;
+  }, [mediaArtwork]);
+
+  const exportCurrentImage = async (options: ExportImageOptions) => {
+    const dataUrl = renderCurrentImage(options);
+    if (isTauriRuntime) {
+      const path = await invoke<string>("save_exported_image", { dataUrl });
+      return `图片已保存至 ${path}`;
+    }
+    const link = document.createElement("a");
+    link.href = dataUrl;
+    link.download = `Pear-Wall-${options.width}x${options.height}.png`;
+    link.click();
+    return "图片已开始下载";
   };
 
   return (
@@ -1801,6 +2226,24 @@ export function SettingsApp() {
                   />
                 </SettingRow>
               </button>
+              <Separator className="mx-2 w-[calc(100%-1rem)] bg-white/15" />
+              <button
+                type="button"
+                className="block w-full text-left"
+                onClick={() => setDrawerPage("exportImage")}
+              >
+                <SettingRow
+                  icon={DownloadSimpleIcon}
+                  title="导出图片"
+                  description="自定义画面参数并导出 PNG 图片"
+                >
+                  <CaretRightIcon
+                    aria-hidden
+                    size={18}
+                    className="text-white/55"
+                  />
+                </SettingRow>
+              </button>
             </SettingsCard>
           </section>
           <section className="mb-5">
@@ -1809,7 +2252,7 @@ export function SettingsApp() {
               <SettingRow
                 avatar={tintLogo}
                 title="Pear Wall"
-                description="版本 0.1.1"
+                description="版本 0.1.2"
               />
               <Separator className="ml-12 mr-2 w-[calc(100%-3.5rem)] bg-white/15" />
               <ExternalSettingRow
@@ -1912,6 +2355,8 @@ export function SettingsApp() {
                 displayDiscoveryFailed={displayDiscoveryFailed}
                 onDynamicWallpaperDisplayChange={toggleDynamicWallpaperDisplay}
                 onScreenSaverDisplayChange={toggleScreenSaverDisplay}
+                onPreviewImage={renderCurrentImage}
+                onExportImage={exportCurrentImage}
               />
             )}
           </Drawer.Content>

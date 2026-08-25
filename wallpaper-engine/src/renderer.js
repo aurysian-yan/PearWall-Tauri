@@ -178,6 +178,7 @@
         portraitPreset: 0,
         landscapePreset: 0,
         randomPreset: false,
+        distortionStrength: 1,
       };
       this.surfaceWidth = 0;
       this.surfaceHeight = 0;
@@ -185,6 +186,7 @@
       this.outputHeight = 0;
       this.orientation = PORTRAIT;
       this.meshPresetIndex = -1;
+      this.meshDistortionStrength = -1;
       this.randomPresetIndex = -1;
       this.mesh = null;
       this.targets = {};
@@ -290,13 +292,21 @@
         this.randomPresetIndex = Math.floor(Math.random() * PRESET_COUNTS[nextOrientation]);
       }
       if (this.settings.randomPreset) nextPreset = this.randomPresetIndex;
-      if (!this.mesh || this.orientation !== nextOrientation || this.meshPresetIndex !== nextPreset) {
+      const distortionStrength = clamp(Number(this.settings.distortionStrength) || 0, 0, 1.5);
+      if (
+        !this.mesh
+        || this.orientation !== nextOrientation
+        || this.meshPresetIndex !== nextPreset
+        || this.meshDistortionStrength !== distortionStrength
+      ) {
         if (this.mesh) this.mesh.destroy();
         this.orientation = nextOrientation;
         this.meshPresetIndex = nextPreset;
+        this.meshDistortionStrength = distortionStrength;
         this.mesh = new window.PearWallMesh.MeshGeometry(this.gl, window.PearWallMesh.createMesh(
           nextOrientation === PORTRAIT,
           nextPreset,
+          distortionStrength,
         ));
       }
       const outputWidth = Math.max(1, Math.round(width * this.settings.renderScale));
@@ -478,6 +488,47 @@
         this.targets.lyrics,
       );
       this.renderMaterial(this.targets.lyrics.texture, this.targets.lyrics.texture, 1, time);
+    }
+
+    exportPixels(options) {
+      const width = Math.round(options.width);
+      const height = Math.round(options.height);
+      const previousCanvasWidth = this.canvas.width;
+      const previousCanvasHeight = this.canvas.height;
+      const previousSurfaceWidth = this.surfaceWidth;
+      const previousSurfaceHeight = this.surfaceHeight;
+      const previousSettings = this.settings;
+      const previousPulse = this.smoothedAudioPulse;
+      const previousPulseTimestamp = this.lastAudioPulseTimestamp;
+
+      try {
+        this.canvas.width = width;
+        this.canvas.height = height;
+        this.settings = {
+          ...previousSettings,
+          ...options.settings,
+          renderScale: 1,
+          randomPreset: false,
+        };
+        this.smoothedAudioPulse = 0;
+        this.lastAudioPulseTimestamp = 0;
+        this.ensureSize(width, height);
+        this.render(options.time, 0);
+        this.gl.finish();
+        const pixels = new Uint8Array(width * height * 4);
+        this.gl.readPixels(0, 0, width, height, this.gl.RGBA, this.gl.UNSIGNED_BYTE, pixels);
+        if (this.gl.getError() !== this.gl.NO_ERROR) {
+          throw new Error('无法读取 WebGL 导出画面');
+        }
+        return pixels;
+      } finally {
+        this.canvas.width = previousCanvasWidth;
+        this.canvas.height = previousCanvasHeight;
+        this.settings = previousSettings;
+        this.smoothedAudioPulse = previousPulse;
+        this.lastAudioPulseTimestamp = previousPulseTimestamp;
+        this.ensureSize(previousSurfaceWidth, previousSurfaceHeight);
+      }
     }
 
     resize() {

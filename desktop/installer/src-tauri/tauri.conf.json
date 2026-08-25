@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Pear Wall Installer",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "identifier": "com.nevoit.pearwall.installer",
   "build": {
     "beforeBuildCommand": "pnpm --dir .. build:installer-frontend",

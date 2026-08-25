@@ -42,6 +42,8 @@
   let nativeAudioPulse = Number.NaN;
   const nativeFrameDriver = Boolean(window.PearWallNativeFrameDriver);
   let nativeArtworkKey = '';
+  let watermarkArtworkSource = '';
+  let watermarkArtworkImage = null;
   let mediaArtworkAvailable = false;
   let mediaArtworkMissing = false;
   let mediaArtworkFallbackTimer = 0;
@@ -233,12 +235,25 @@
     mediaArtworkFallbackTimer = 0;
   }
 
+  function cacheWatermarkArtwork(source) {
+    if (!source || source === watermarkArtworkSource) return;
+    watermarkArtworkSource = source;
+    watermarkArtworkImage = null;
+    const image = new Image();
+    if (/^https?:/i.test(source)) image.crossOrigin = 'anonymous';
+    image.onload = () => {
+      if (watermarkArtworkSource === source) watermarkArtworkImage = image;
+    };
+    image.src = source;
+  }
+
   function useMediaArtwork(dataUrl) {
     const source = artworkSource(dataUrl);
     if (!source) return false;
     mediaArtworkMissing = false;
     clearMediaArtworkFallbackTimer();
     mediaArtworkAvailable = true;
+    cacheWatermarkArtwork(source);
     renderer.setArtworkSource(source);
     return true;
   }
@@ -381,6 +396,245 @@
     applyArtworkFallback();
   }
 
+  function watermarkHeight(width, height) {
+    return Math.max(24, Math.round(Math.min(width * 0.11, height * 0.18)));
+  }
+
+  function fittedText(context, value, maxWidth) {
+    const text = String(value || '').trim();
+    if (!text || context.measureText(text).width <= maxWidth) return text;
+    const characters = Array.from(text);
+    while (characters.length > 1) {
+      characters.pop();
+      const candidate = `${characters.join('')}…`;
+      if (context.measureText(candidate).width <= maxWidth) return candidate;
+    }
+    return '…';
+  }
+
+  function drawWatermarkBackground(context, photo, width, height, stripHeight, style) {
+    if (style === 'BLACK' || style === 'WHITE') {
+      context.fillStyle = style === 'BLACK' ? '#000000' : '#ffffff';
+      context.fillRect(0, height, width, stripHeight);
+      return;
+    }
+    const sourceHeight = Math.min(height, Math.max(1, stripHeight * 2));
+    const sampleScale = 16;
+    const sample = document.createElement('canvas');
+    sample.width = Math.max(1, Math.round(width / sampleScale));
+    sample.height = Math.max(1, Math.round(stripHeight / sampleScale));
+    const sampleContext = sample.getContext('2d');
+    if (!sampleContext) {
+      context.drawImage(photo, 0, height - sourceHeight, width, sourceHeight, 0, height, width, stripHeight);
+      return;
+    }
+    sampleContext.imageSmoothingEnabled = true;
+    sampleContext.imageSmoothingQuality = 'high';
+    sampleContext.drawImage(
+      photo,
+      0,
+      height - sourceHeight,
+      width,
+      sourceHeight,
+      0,
+      0,
+      sample.width,
+      sample.height,
+    );
+    context.save();
+    context.imageSmoothingEnabled = true;
+    context.imageSmoothingQuality = 'high';
+    context.drawImage(
+      sample,
+      0,
+      0,
+      sample.width,
+      sample.height,
+      0,
+      height,
+      width,
+      stripHeight,
+    );
+    context.restore();
+    context.fillStyle = style === 'BLUR_WHITE'
+      ? 'rgba(255, 255, 255, 0.55)'
+      : 'rgba(0, 0, 0, 0.55)';
+    context.fillRect(0, height, width, stripHeight);
+  }
+
+  function drawCircularArtwork(context, artwork, fallback, x, y, size) {
+    const source = artwork && artwork.complete && artwork.naturalWidth > 0
+      ? artwork
+      : fallback;
+    const sourceWidth = source.naturalWidth || source.width;
+    const sourceHeight = source.naturalHeight || source.height;
+    const sourceSize = Math.min(sourceWidth, sourceHeight);
+    const sourceX = (sourceWidth - sourceSize) / 2;
+    const sourceY = (sourceHeight - sourceSize) / 2;
+    context.save();
+    context.beginPath();
+    context.arc(x + size / 2, y + size / 2, size / 2, 0, Math.PI * 2);
+    context.clip();
+    context.drawImage(
+      source,
+      sourceX,
+      sourceY,
+      sourceSize,
+      sourceSize,
+      x,
+      y,
+      size,
+      size,
+    );
+    context.restore();
+  }
+
+  function drawWatermarkContent(context, photo, options, width, height, stripHeight, style) {
+    const lightBackground = style === 'WHITE' || style === 'BLUR_WHITE';
+    const foreground = lightBackground ? '#111111' : '#ffffff';
+    const secondary = lightBackground ? 'rgba(17, 17, 17, 0.58)' : 'rgba(255, 255, 255, 0.62)';
+    const dividerColor = lightBackground ? 'rgba(17, 17, 17, 0.16)' : 'rgba(255, 255, 255, 0.22)';
+    const columnWidth = width / 3;
+    const centerY = height + stripHeight / 2;
+    const logoHeight = stripHeight * 0.31;
+    const logoWidth = logoHeight * 64 / 19;
+    const logoX = 28;
+    const logoY = centerY - logoHeight / 2;
+    const logoPath = String(options.watermarkLogoPath || '');
+    let logoDrawn = false;
+    context.save();
+    context.fillStyle = foreground;
+    if (logoPath && typeof Path2D === 'function') {
+      try {
+        const path = new Path2D(logoPath);
+        context.translate(logoX, logoY);
+        context.scale(logoWidth / 64, logoHeight / 19);
+        context.fill(path);
+        logoDrawn = true;
+      } catch (_) {}
+    }
+    context.restore();
+    if (!logoDrawn) {
+      context.save();
+      context.fillStyle = foreground;
+      context.font = `italic 600 ${Math.max(12, Math.round(logoHeight))}px sans-serif`;
+      context.textAlign = 'center';
+      context.textBaseline = 'middle';
+      context.fillText('Pear Wall', columnWidth / 2, centerY);
+      context.restore();
+    }
+
+    const artworkSource = String(options.songArtwork || '');
+    if (artworkSource) cacheWatermarkArtwork(artworkSource);
+    const dividerX = columnWidth * 2;
+    const artworkSize = stripHeight * 0.40;
+    const contentGap = Math.max(4, Math.round(stripHeight * 0.15));
+    const artworkX = dividerX - contentGap - artworkSize;
+    const artworkY = centerY - artworkSize / 2;
+    drawCircularArtwork(
+      context,
+      artworkSource === watermarkArtworkSource ? watermarkArtworkImage : null,
+      photo,
+      artworkX,
+      artworkY,
+      artworkSize,
+    );
+    context.save();
+    context.strokeStyle = dividerColor;
+    context.lineWidth = Math.max(1, width * 0.0006);
+    context.beginPath();
+    context.moveTo(dividerX, centerY - stripHeight * 0.15);
+    context.lineTo(dividerX, centerY + stripHeight * 0.15);
+    context.stroke();
+    context.restore();
+
+    const title = String(options.songTitle || '').trim() || '暂无歌曲信息';
+    const details = [options.songArtist, options.songAlbum]
+      .map((value) => String(value || '').trim())
+      .filter(Boolean)
+      .join(' · ') || 'Pear Wall';
+    const textX = dividerX + contentGap;
+    const textRightPadding = Math.max(contentGap, Math.round(width * 0.035));
+    const maxTextWidth = width - textX - textRightPadding;
+    const titleSize = Math.max(11, Math.round(stripHeight * 0.17));
+    const detailSize = Math.max(10, Math.round(stripHeight * 0.145));
+    context.save();
+    context.textAlign = 'left';
+    context.textBaseline = 'middle';
+    context.fillStyle = foreground;
+    context.font = `600 ${titleSize}px sans-serif`;
+    context.fillText(
+      fittedText(context, title, maxTextWidth),
+      textX,
+      centerY - stripHeight * 0.105,
+    );
+    context.fillStyle = secondary;
+    context.font = `400 ${detailSize}px sans-serif`;
+    context.fillText(
+      fittedText(context, details, maxTextWidth),
+      textX,
+      centerY + stripHeight * 0.14,
+    );
+    context.restore();
+  }
+
+  function exportImage(options) {
+    const width = Math.max(64, Math.min(4096, Math.round(Number(options.width) || 1920)));
+    const height = Math.max(64, Math.min(4096, Math.round(Number(options.height) || 1080)));
+    const stripHeight = options.watermark ? watermarkHeight(width, height) : 0;
+    const outputHeight = height + stripHeight;
+    if (width * outputHeight > 12_000_000) {
+      throw new Error('导出图片不能超过 1200 万像素');
+    }
+    const portrait = height >= width;
+    const blurMultiplier = Math.max(0, Math.min(2, Number(options.blurMultiplier) || 0));
+    const exportBlurScale = Math.max(width, height) / 720;
+    const preset = Math.round(Math.max(
+      0,
+      Math.min(portrait ? 3 : 4, Number(options.distortionPreset) || 0),
+    ));
+    const distortionProgress = Math.max(0, Math.min(1, Number(options.distortionProgress) || 0));
+    const pixels = renderer.exportPixels({
+      width,
+      height,
+      time: 2.5 - distortionProgress * 5,
+      settings: {
+        distortionStrength: Math.max(0, Math.min(1.5, Number(options.distortionStrength) || 0)),
+        blurEnabled: blurMultiplier > 0,
+        blurMultiplier: blurMultiplier * exportBlurScale,
+        scrimAlpha: Math.max(0, Math.min(0.8, Number(options.scrimAlpha) || 0)),
+        portraitPreset: portrait ? preset : settings.portraitPreset,
+        landscapePreset: portrait ? settings.landscapePreset : preset,
+      },
+    });
+    const photo = document.createElement('canvas');
+    photo.width = width;
+    photo.height = height;
+    const photoContext = photo.getContext('2d');
+    if (!photoContext) throw new Error('无法创建图片导出画布');
+    const image = photoContext.createImageData(width, height);
+    const rowBytes = width * 4;
+    for (let row = 0; row < height; row += 1) {
+      const sourceOffset = (height - row - 1) * rowBytes;
+      image.data.set(pixels.subarray(sourceOffset, sourceOffset + rowBytes), row * rowBytes);
+    }
+    photoContext.putImageData(image, 0, 0);
+    const output = document.createElement('canvas');
+    output.width = width;
+    output.height = outputHeight;
+    const context = output.getContext('2d');
+    if (!context) throw new Error('无法创建图片导出画布');
+    context.drawImage(photo, 0, 0);
+    if (options.watermark) {
+      const style = ['BLACK', 'WHITE', 'BLUR_WHITE', 'BLUR_BLACK'].includes(options.watermarkBackground)
+        ? options.watermarkBackground
+        : 'WHITE';
+      drawWatermarkBackground(context, photo, width, height, stripHeight, style);
+      drawWatermarkContent(context, photo, options, width, height, stripHeight, style);
+    }
+    return output.toDataURL('image/png');
+  }
+
   function playbackState(event) {
     if (!event) return '';
     const value = event.state ?? event.playbackState ?? event.status ?? event;
@@ -426,6 +680,7 @@
   window.PearWallReloadSettings = () => {
     applySettingsValues(savedSettings());
   };
+  window.PearWallExportImage = exportImage;
 
   window.addEventListener('storage', (event) => {
     if (event.key !== settingsStorageKey) return;

@@ -148,6 +148,9 @@ fn write_shared_cache(media: &MediaArtwork) {
         "key": &media.key,
         "data_url": &media.data_url,
         "playing": media.playing,
+        "title": &media.title,
+        "artist": &media.artist,
+        "album": &media.album,
         "updated_at_milliseconds": SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap_or_default()

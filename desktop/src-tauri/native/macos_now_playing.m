@@ -72,7 +72,14 @@ static void PearWallLoadMediaRemote(void) {
 
 static NSDictionary *PearWallMediaArtwork(NSDictionary *info) {
     if (![info isKindOfClass:NSDictionary.class]) {
-        return @{ @"key": @"", @"data_url": NSNull.null, @"playing": @NO };
+        return @{
+            @"key": @"",
+            @"data_url": NSNull.null,
+            @"playing": @NO,
+            @"title": @"",
+            @"artist": @"",
+            @"album": @""
+        };
     }
     NSString *title = PearWallStringValue(info[@"kMRMediaRemoteNowPlayingInfoTitle"]);
     NSString *artist = PearWallStringValue(info[@"kMRMediaRemoteNowPlayingInfoArtist"]);
@@ -108,7 +115,14 @@ static NSDictionary *PearWallMediaArtwork(NSDictionary *info) {
         ];
     }
     BOOL playing = playbackRate == nil ? info.count > 0 : playbackRate.doubleValue > 0;
-    return @{ @"key": key, @"data_url": dataURL, @"playing": @(playing) };
+    return @{
+        @"key": key,
+        @"data_url": dataURL,
+        @"playing": @(playing),
+        @"title": title,
+        @"artist": artist,
+        @"album": album
+    };
 }
 
 char *pearwall_copy_now_playing_json(void) {

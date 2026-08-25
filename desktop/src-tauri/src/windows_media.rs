@@ -134,7 +134,13 @@ fn read_current_media(
         .and_then(|thumbnail| read_thumbnail(&thumbnail).ok());
     let key = format!(
         "{}\u{1e}{}",
-        [source, title, artist, album].join("\u{1f}"),
+        [
+            source.as_str(),
+            title.as_str(),
+            artist.as_str(),
+            album.as_str(),
+        ]
+        .join("\u{1f}"),
         data_url.is_some()
     );
 
@@ -142,6 +148,9 @@ fn read_current_media(
         key,
         data_url,
         playing,
+        title,
+        artist,
+        album,
     })
 }
 

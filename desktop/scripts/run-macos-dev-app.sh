@@ -38,8 +38,8 @@ plutil -insert CFBundleIdentifier -string com.nevoit.pearwall.desktop "${CONTENT
 plutil -insert CFBundleInfoDictionaryVersion -string '6.0' "${CONTENTS_ROOT}/Info.plist"
 plutil -insert CFBundleName -string 'Pear Wall' "${CONTENTS_ROOT}/Info.plist"
 plutil -insert CFBundlePackageType -string APPL "${CONTENTS_ROOT}/Info.plist"
-plutil -insert CFBundleShortVersionString -string '0.1.1' "${CONTENTS_ROOT}/Info.plist"
-plutil -insert CFBundleVersion -string '0.1.1' "${CONTENTS_ROOT}/Info.plist"
+plutil -insert CFBundleShortVersionString -string '0.1.2' "${CONTENTS_ROOT}/Info.plist"
+plutil -insert CFBundleVersion -string '0.1.2' "${CONTENTS_ROOT}/Info.plist"
 plutil -insert LSMinimumSystemVersion -string '15.0' "${CONTENTS_ROOT}/Info.plist"
 
 CODESIGN_ARGS=(

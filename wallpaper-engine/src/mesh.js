@@ -110,7 +110,7 @@
     return result;
   }
 
-  function createMesh(isPortrait, presetIndex) {
+  function createMesh(isPortrait, presetIndex, distortionStrength = 1) {
     const size = isPortrait ? 6 : 9;
     const presets = isPortrait ? window.PearWallPresets.portrait : window.PearWallPresets.landscape;
     const preset = presets[Math.max(0, Math.min(presetIndex, presets.length - 1))];
@@ -131,10 +131,10 @@
         const u = column / (columns - 1);
         const fromPoint = from[row][column];
         const toPoint = to[row][column];
-        vertices[vertexOffset++] = fromPoint[0] * 2 - 1;
-        vertices[vertexOffset++] = fromPoint[1] * 2 - 1;
-        vertices[vertexOffset++] = toPoint[0] * 2 - 1;
-        vertices[vertexOffset++] = toPoint[1] * 2 - 1;
+        vertices[vertexOffset++] = (u + (fromPoint[0] - u) * distortionStrength) * 2 - 1;
+        vertices[vertexOffset++] = (v + (fromPoint[1] - v) * distortionStrength) * 2 - 1;
+        vertices[vertexOffset++] = (u + (toPoint[0] - u) * distortionStrength) * 2 - 1;
+        vertices[vertexOffset++] = (v + (toPoint[1] - v) * distortionStrength) * 2 - 1;
         vertices[vertexOffset++] = u;
         vertices[vertexOffset++] = v;
       }

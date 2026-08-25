@@ -1,3 +1,5 @@
+use base64::engine::general_purpose::STANDARD;
+use base64::Engine;
 use pearwall_core::SpectrumAnalyzer;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
@@ -7,6 +9,7 @@ use std::sync::Mutex;
 #[cfg(target_os = "macos")]
 use std::time::Duration;
 use std::time::Instant;
+use std::time::{SystemTime, UNIX_EPOCH};
 use tauri::{webview::PageLoadEvent, AppHandle, Manager, State};
 
 mod desktop_wallpaper;
@@ -141,10 +144,14 @@ impl AudioState {
 }
 
 #[derive(Clone, Default, Deserialize, Serialize)]
+#[serde(default)]
 struct MediaArtwork {
     key: String,
     data_url: Option<String>,
     playing: bool,
+    title: String,
+    artist: String,
+    album: String,
 }
 
 #[derive(Clone, Serialize)]
@@ -456,6 +463,39 @@ fn get_desktop_wallpaper() -> Result<String, String> {
     desktop_wallpaper::data_url()
 }
 
+#[tauri::command]
+fn save_exported_image(app: AppHandle, data_url: String) -> Result<String, String> {
+    let encoded = data_url
+        .strip_prefix("data:image/png;base64,")
+        .ok_or_else(|| "导出图片格式无效".to_string())?;
+    let data = STANDARD
+        .decode(encoded)
+        .map_err(|_| "无法解析导出图片".to_string())?;
+    if data.len() > 64 * 1024 * 1024 || !data.starts_with(&[137, 80, 78, 71, 13, 10, 26, 10]) {
+        return Err("导出图片数据无效".to_string());
+    }
+
+    let directory = app
+        .path()
+        .picture_dir()
+        .map_err(|error| format!("无法定位图片目录：{error}"))?
+        .join("Pear Wall");
+    std::fs::create_dir_all(&directory).map_err(|_| "无法创建图片导出目录".to_string())?;
+    let timestamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_err(|_| "无法生成图片文件名".to_string())?
+        .as_secs();
+    let mut path = directory.join(format!("Pear-Wall-{timestamp}.png"));
+    for suffix in 1..1000 {
+        if !path.exists() {
+            break;
+        }
+        path = directory.join(format!("Pear-Wall-{timestamp}-{suffix}.png"));
+    }
+    std::fs::write(&path, data).map_err(|_| "无法保存导出图片".to_string())?;
+    Ok(path.display().to_string())
+}
+
 #[cfg(target_os = "macos")]
 fn shared_settings_path(_app: &AppHandle) -> Result<PathBuf, String> {
     let home = std::env::var_os("HOME").ok_or_else(|| "无法定位用户目录".to_string())?;
@@ -664,6 +704,7 @@ pub fn run() {
             get_media_artwork,
             get_connected_displays,
             get_desktop_wallpaper,
+            save_exported_image,
             is_screen_saver_mode,
             load_shared_settings,
             save_shared_settings,

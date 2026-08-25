@@ -2468,14 +2468,14 @@ dependencies = [
 
 [[package]]
 name = "pearwall-core"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "biquad",
 ]
 
 [[package]]
 name = "pearwall-desktop"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "base64 0.22.1",
  "cc",
