@@ -61,107 +61,8 @@ jobs:
           echo "tag=${tag}" >> "$GITHUB_OUTPUT"
           echo "should_release=${should_release}" >> "$GITHUB_OUTPUT"
 
-  windows:
-    name: Build Windows
-    needs: prepare
-    if: needs.prepare.outputs.should_release == 'true'
-    runs-on: windows-latest
-    env:
-      VERSION: ${{ needs.prepare.outputs.version }}
-      WINDOWS_CERTIFICATE_BASE64: ${{ secrets.WINDOWS_CERTIFICATE_BASE64 }}
-      WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@v7
-
-      - name: Set up pnpm
-        uses: pnpm/action-setup@v6
-        with:
-          version: 10.33.0
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v7
-        with:
-          node-version: 22
-          cache: pnpm
-          cache-dependency-path: desktop/pnpm-lock.yaml
-
-      - name: Set up Rust
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: x86_64-pc-windows-msvc
-
-      - name: Restore Rust cache
-        uses: actions/cache@v6
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            desktop/src-tauri/target
-            desktop/installer/src-tauri/target
-          key: ${{ runner.os }}-cargo-${{ hashFiles('desktop/src-tauri/Cargo.lock', 'desktop/installer/src-tauri/Cargo.lock') }}
-          restore-keys: ${{ runner.os }}-cargo-
-
-      - name: Install dependencies
-        run: pnpm --dir desktop install --frozen-lockfile
-
-      - name: Build Windows runtime
-        shell: bash
-        run: |
-          pnpm --dir desktop build:frontend
-          pnpm --dir desktop tauri build --target x86_64-pc-windows-msvc --config '{"build":{"beforeBuildCommand":""}}' --no-bundle
-
-      - name: Sign Windows runtime
-        if: env.WINDOWS_CERTIFICATE_BASE64 != ''
-        shell: pwsh
-        run: |
-          $pfxPath = Join-Path $env:RUNNER_TEMP "pearwall-windows.pfx"
-          [IO.File]::WriteAllBytes(
-            $pfxPath,
-            [Convert]::FromBase64String($env:WINDOWS_CERTIFICATE_BASE64)
-          )
-          $signTool = Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin\*\x64\signtool.exe" |
-            Sort-Object LastWriteTime -Descending |
-            Select-Object -First 1
-          if (-not $signTool) { throw "未找到 signtool.exe" }
-          & $signTool.FullName sign /f $pfxPath /p $env:WINDOWS_CERTIFICATE_PASSWORD /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 "desktop\src-tauri\target\x86_64-pc-windows-msvc\release\pearwall-desktop.exe"
-          if ($LASTEXITCODE -ne 0) { throw "Windows 主程序签名失败" }
-
-      - name: Build Windows installer
-        shell: pwsh
-        run: |
-          $env:PEARWALL_PAYLOAD_PATH = Join-Path $PWD "desktop\src-tauri\target\x86_64-pc-windows-msvc\release\pearwall-desktop.exe"
-          $env:PEARWALL_SKIP_RUNTIME_BUILD = "1"
-          $env:TAURI_TARGET = "x86_64-pc-windows-msvc"
-          pnpm --dir desktop build:windows-installer
-          if ($LASTEXITCODE -ne 0) { throw "Windows 安装程序构建失败" }
-
-      - name: Sign Windows packages
-        if: env.WINDOWS_CERTIFICATE_BASE64 != ''
-        shell: pwsh
-        run: |
-          $pfxPath = Join-Path $env:RUNNER_TEMP "pearwall-windows.pfx"
-          $signTool = Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin\*\x64\signtool.exe" |
-            Sort-Object LastWriteTime -Descending |
-            Select-Object -First 1
-          $files = Get-ChildItem "desktop\build\release\windows" -File |
-            Where-Object { $_.Extension -in ".exe", ".scr" }
-          foreach ($file in $files) {
-            & $signTool.FullName sign /f $pfxPath /p $env:WINDOWS_CERTIFICATE_PASSWORD /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 $file.FullName
-            if ($LASTEXITCODE -ne 0) { throw "签名失败：$($file.Name)" }
-          }
-
-      - name: Upload Windows packages
-        uses: actions/upload-artifact@v7
-        with:
-          name: pearwall-windows-${{ needs.prepare.outputs.version }}
-          path: |
-            desktop/build/release/windows/*.exe
-            desktop/build/release/windows/*.scr
-          if-no-files-found: error
-
-  macos:
-    name: Build macOS
+  build:
+    name: Build Windows and macOS
     needs: prepare
     if: needs.prepare.outputs.should_release == 'true'
     runs-on: macos-15
@@ -191,21 +92,29 @@ jobs:
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: aarch64-apple-darwin
+          targets: aarch64-apple-darwin,x86_64-pc-windows-msvc
 
-      - name: Restore Rust cache
+      - name: Restore Rust and cross-compiler cache
         uses: actions/cache@v6
         with:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
+            ~/.cargo/bin/cargo-xwin
+            ~/Library/Caches/cargo-xwin
             desktop/src-tauri/target
-          key: ${{ runner.os }}-cargo-${{ hashFiles('desktop/src-tauri/Cargo.lock') }}
-          restore-keys: ${{ runner.os }}-cargo-
+            desktop/installer/src-tauri/target
+          key: ${{ runner.os }}-${{ runner.arch }}-cargo-xwin-0.22.0-${{ hashFiles('desktop/src-tauri/Cargo.lock', 'desktop/installer/src-tauri/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-${{ runner.arch }}-cargo-xwin-0.22.0-
 
       - name: Install build dependencies
+        shell: bash
         run: |
-          brew install create-dmg
+          brew install llvm create-dmg
+          if ! command -v cargo-xwin >/dev/null 2>&1; then
+            cargo install --locked cargo-xwin --version 0.22.0
+          fi
           pnpm --dir desktop install --frozen-lockfile
 
       - name: Import Apple signing certificate
@@ -228,9 +137,9 @@ jobs:
           fi
           echo "PEARWALL_CODESIGN_IDENTITY=${signing_identity}" >> "$GITHUB_ENV"
 
-      - name: Warn about unsigned macOS package
+      - name: Warn about unsigned packages
         if: env.APPLE_CERTIFICATE_BASE64 == ''
-        run: echo "::warning::未配置 Apple 签名证书，将生成 ad hoc 签名的 macOS 包。"
+        run: echo "::warning::未配置 Apple 签名证书，将生成 ad hoc 签名的 macOS 包和未签名的 Windows 包。"
 
       - name: Check notarization credentials
         if: env.APPLE_CERTIFICATE_BASE64 != '' && (env.APPLE_ID == '' || env.APPLE_APP_SPECIFIC_PASSWORD == '' || env.APPLE_TEAM_ID == '')
@@ -238,8 +147,11 @@ jobs:
           echo "::error::配置 Apple 证书后还必须配置 APPLE_ID、APPLE_APP_SPECIFIC_PASSWORD 和 APPLE_TEAM_ID。"
           exit 1
 
-      - name: Build macOS packages
-        run: pnpm --dir desktop build:dmg
+      - name: Check unified build environment
+        run: pnpm --dir desktop build:screen-savers:check
+
+      - name: Build Windows and macOS packages
+        run: pnpm --dir desktop build:screen-savers
 
       - name: Sign and notarize disk image
         if: env.APPLE_CERTIFICATE_BASE64 != '' && env.APPLE_ID != '' && env.APPLE_APP_SPECIFIC_PASSWORD != '' && env.APPLE_TEAM_ID != ''
@@ -258,11 +170,13 @@ jobs:
           ditto -c -k --sequesterRsrc --keepParent "$output/Pear Wall.app" "$output/Pear-Wall-${VERSION}-macOS-arm64.app.zip"
           ditto -c -k --sequesterRsrc --keepParent "$output/Pear Wall.saver" "$output/Pear-Wall-${VERSION}-macOS-arm64.saver.zip"
 
-      - name: Upload macOS packages
+      - name: Upload release packages
         uses: actions/upload-artifact@v7
         with:
-          name: pearwall-macos-${{ needs.prepare.outputs.version }}
+          name: pearwall-release-${{ needs.prepare.outputs.version }}
           path: |
+            desktop/build/release/windows/*.exe
+            desktop/build/release/windows/*.scr
             desktop/build/release/macos/*.dmg
             desktop/build/release/macos/*.zip
           if-no-files-found: error
@@ -271,8 +185,7 @@ jobs:
     name: Publish GitHub release
     needs:
       - prepare
-      - windows
-      - macos
+      - build
     if: needs.prepare.outputs.should_release == 'true'
     runs-on: ubuntu-latest
     env:
@@ -283,9 +196,8 @@ jobs:
       - name: Download packages
         uses: actions/download-artifact@v8
         with:
-          pattern: pearwall-*-${{ needs.prepare.outputs.version }}
+          name: pearwall-release-${{ needs.prepare.outputs.version }}
           path: release
-          merge-multiple: true
 
       - name: Generate checksums
         shell: bash

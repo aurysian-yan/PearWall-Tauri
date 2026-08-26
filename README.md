@@ -143,9 +143,9 @@ pnpm --dir desktop version:check
 pnpm --dir desktop version:set -- 0.1.3
 ```
 
-提交到 `main` 后，GitHub Actions 会比较 `desktop/package.json` 的版本号。版本发生变化时，工作流会构建 Windows 安装程序、Windows 屏保、macOS App、macOS 屏保和 DMG，并创建对应的 GitHub Release。
+提交到 `main` 后，GitHub Actions 会比较 `desktop/package.json` 的版本号。版本发生变化时，工作流会在 macOS ARM64 runner 上统一构建 Windows 安装程序、Windows 屏保、macOS App、macOS 屏保和 DMG，并创建对应的 GitHub Release。
 
-Windows 代码签名可配置 `WINDOWS_CERTIFICATE_BASE64` 和 `WINDOWS_CERTIFICATE_PASSWORD`。macOS Developer ID 签名与公证可配置 `APPLE_CERTIFICATE_BASE64`、`APPLE_CERTIFICATE_PASSWORD`、`APPLE_ID`、`APPLE_APP_SPECIFIC_PASSWORD` 和 `APPLE_TEAM_ID`。未配置签名凭据时仍会生成测试包。
+macOS Developer ID 签名与公证可配置 `APPLE_CERTIFICATE_BASE64`、`APPLE_CERTIFICATE_PASSWORD`、`APPLE_ID`、`APPLE_APP_SPECIFIC_PASSWORD` 和 `APPLE_TEAM_ID`。未配置签名凭据时，会生成 ad hoc 签名的 macOS 包和未签名的 Windows 包。
 
 ## 官网
 
