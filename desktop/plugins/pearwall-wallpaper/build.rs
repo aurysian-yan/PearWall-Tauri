@@ -5,9 +5,7 @@ fn main() {
         return;
     }
 
-    swift_rs::SwiftLinker::new("15.0")
-        .with_package("PearWallWallpaperNative", "macos")
-        .link();
+    link_swift_package();
 
     for framework in [
         "AppKit",
@@ -21,4 +19,16 @@ fn main() {
     }
     println!("cargo:rerun-if-changed=macos/Package.swift");
     println!("cargo:rerun-if-changed=macos/Sources");
+}
+
+#[cfg(feature = "macos-native")]
+fn link_swift_package() {
+    swift_rs::SwiftLinker::new("15.0")
+        .with_package("PearWallWallpaperNative", "macos")
+        .link();
+}
+
+#[cfg(not(feature = "macos-native"))]
+fn link_swift_package() {
+    panic!("macOS 构建必须启用 macos-native feature");
 }

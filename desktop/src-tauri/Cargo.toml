@@ -17,7 +17,7 @@ tauri-build = { version = "2", features = [] }
 [dependencies]
 base64 = "0.22"
 pearwall-core = { package = "pearwall-core", path = "../../native/pearwall-core" }
-pearwall-wallpaper = { path = "../plugins/pearwall-wallpaper" }
+pearwall-wallpaper = { path = "../plugins/pearwall-wallpaper", default-features = false }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tauri = { version = "2", features = ["tray-icon"] }
@@ -34,6 +34,7 @@ memmap2 = "0.9"
 objc2 = "0.6"
 objc2-app-kit = { version = "0.3", default-features = false, features = ["NSScreen", "NSWindow", "NSWorkspace"] }
 objc2-core-graphics = { version = "0.3", default-features = false, features = ["CGDirectDisplay", "CGDisplayConfiguration", "CGError", "CGWindowLevel", "libc"] }
+pearwall-wallpaper = { path = "../plugins/pearwall-wallpaper", features = ["macos-native"] }
 
 [profile.release]
 strip = false
