@@ -11,7 +11,6 @@ Pear Wall 是一个跨平台动态壁纸项目。本仓库维护桌面端、Wall
 │   ├── scripts/            # 前端、macOS 屏保和 Windows 屏保构建脚本
 │   └── src-tauri/          # Tauri Rust 宿主
 ├── wallpaper-engine/       # Wallpaper Engine 项目与共享 WebGL 渲染器
-├── website/                # 官网（Astro + React，复用安装器视觉语言）
 ├── native/pearwall-core/   # 跨平台 Rust 音频分析核心
 └── LICENSE                 # GPL-3.0 许可证
 ```
@@ -137,16 +136,20 @@ pnpm --dir desktop run build:windows-installer
 
 将 `wallpaper-engine/` 导入 Wallpaper Engine 编辑器即可预览和发布。项目参数配置位于 `wallpaper-engine/project.json`，渲染器和着色器分别位于 `wallpaper-engine/src/` 与 `wallpaper-engine/shaders/`。
 
-## 官网
-
-`website/` 是基于 Astro + React 的静态官网，视觉语言与 Windows 安装器一致：动态壁纸背景、毛玻璃面板与圆润按钮。`website/public/wallpaper/` 是 `wallpaper-engine/` 的静态副本，作为页面实时背景。
+## 版本与发布
 
 ```bash
-pnpm --dir website dev      # 本地预览
-pnpm --dir website build    # 输出到 website/dist/
+pnpm --dir desktop version:check
+pnpm --dir desktop version:set -- 0.1.3
 ```
 
-下载地址与版本号集中在 `website/src/site.ts`，发布时替换为真实产物链接即可。
+提交到 `main` 后，GitHub Actions 会比较 `desktop/package.json` 的版本号。版本发生变化时，工作流会构建 Windows 安装程序、Windows 屏保、macOS App、macOS 屏保和 DMG，并创建对应的 GitHub Release。
+
+Windows 代码签名可配置 `WINDOWS_CERTIFICATE_BASE64` 和 `WINDOWS_CERTIFICATE_PASSWORD`。macOS Developer ID 签名与公证可配置 `APPLE_CERTIFICATE_BASE64`、`APPLE_CERTIFICATE_PASSWORD`、`APPLE_ID`、`APPLE_APP_SPECIFIC_PASSWORD` 和 `APPLE_TEAM_ID`。未配置签名凭据时仍会生成测试包。
+
+## 官网
+
+官网已拆分到 [PearWall-Website](https://github.com/aurysian-yan/PearWall-Website)。
 
 ## 许可证
 

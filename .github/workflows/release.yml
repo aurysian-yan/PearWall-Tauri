@@ -1,0 +1,278 @@
+name: Release desktop
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: pearwall-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    name: Check version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      tag: ${{ steps.version.outputs.tag }}
+      should_release: ${{ steps.version.outputs.should_release }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Detect version change
+        id: version
+        shell: bash
+        env:
+          BEFORE_SHA: ${{ github.event.before }}
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          version="$(node desktop/scripts/version.mjs --check)"
+          tag="v${version}"
+          should_release=false
+
+          if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
+            should_release=true
+          elif git cat-file -e "${BEFORE_SHA}:desktop/package.json" 2>/dev/null; then
+            previous_version="$(git show "${BEFORE_SHA}:desktop/package.json" | node -e 'let input="";process.stdin.on("data",chunk=>input+=chunk);process.stdin.on("end",()=>process.stdout.write(JSON.parse(input).version))')"
+            if [[ "$previous_version" != "$version" ]]; then
+              should_release=true
+            fi
+          fi
+
+          if [[ "$should_release" == "true" ]] && git ls-remote --exit-code --tags origin "refs/tags/${tag}" >/dev/null 2>&1; then
+            echo "::error::${tag} 已存在，请更新版本号后再发布。"
+            exit 1
+          fi
+
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+          echo "tag=${tag}" >> "$GITHUB_OUTPUT"
+          echo "should_release=${should_release}" >> "$GITHUB_OUTPUT"
+
+  windows:
+    name: Build Windows
+    needs: prepare
+    if: needs.prepare.outputs.should_release == 'true'
+    runs-on: windows-latest
+    env:
+      VERSION: ${{ needs.prepare.outputs.version }}
+      WINDOWS_CERTIFICATE_BASE64: ${{ secrets.WINDOWS_CERTIFICATE_BASE64 }}
+      WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: desktop/pnpm-lock.yaml
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+
+      - name: Install dependencies
+        run: pnpm --dir desktop install --frozen-lockfile
+
+      - name: Build Windows runtime
+        shell: bash
+        run: |
+          pnpm --dir desktop build:frontend
+          pnpm --dir desktop tauri build --target x86_64-pc-windows-msvc --config '{"build":{"beforeBuildCommand":""}}' --no-bundle
+
+      - name: Sign Windows runtime
+        if: env.WINDOWS_CERTIFICATE_BASE64 != ''
+        shell: pwsh
+        run: |
+          $pfxPath = Join-Path $env:RUNNER_TEMP "pearwall-windows.pfx"
+          [IO.File]::WriteAllBytes(
+            $pfxPath,
+            [Convert]::FromBase64String($env:WINDOWS_CERTIFICATE_BASE64)
+          )
+          $signTool = Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin\*\x64\signtool.exe" |
+            Sort-Object LastWriteTime -Descending |
+            Select-Object -First 1
+          if (-not $signTool) { throw "未找到 signtool.exe" }
+          & $signTool.FullName sign /f $pfxPath /p $env:WINDOWS_CERTIFICATE_PASSWORD /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 "desktop\src-tauri\target\x86_64-pc-windows-msvc\release\pearwall-desktop.exe"
+          if ($LASTEXITCODE -ne 0) { throw "Windows 主程序签名失败" }
+
+      - name: Build Windows installer
+        shell: pwsh
+        run: |
+          $env:PEARWALL_PAYLOAD_PATH = Join-Path $PWD "desktop\src-tauri\target\x86_64-pc-windows-msvc\release\pearwall-desktop.exe"
+          $env:PEARWALL_SKIP_RUNTIME_BUILD = "1"
+          $env:TAURI_TARGET = "x86_64-pc-windows-msvc"
+          pnpm --dir desktop build:windows-installer
+          if ($LASTEXITCODE -ne 0) { throw "Windows 安装程序构建失败" }
+
+      - name: Sign Windows packages
+        if: env.WINDOWS_CERTIFICATE_BASE64 != ''
+        shell: pwsh
+        run: |
+          $pfxPath = Join-Path $env:RUNNER_TEMP "pearwall-windows.pfx"
+          $signTool = Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin\*\x64\signtool.exe" |
+            Sort-Object LastWriteTime -Descending |
+            Select-Object -First 1
+          $files = Get-ChildItem "desktop\build\release\windows" -File |
+            Where-Object { $_.Extension -in ".exe", ".scr" }
+          foreach ($file in $files) {
+            & $signTool.FullName sign /f $pfxPath /p $env:WINDOWS_CERTIFICATE_PASSWORD /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 $file.FullName
+            if ($LASTEXITCODE -ne 0) { throw "签名失败：$($file.Name)" }
+          }
+
+      - name: Upload Windows packages
+        uses: actions/upload-artifact@v4
+        with:
+          name: pearwall-windows-${{ needs.prepare.outputs.version }}
+          path: |
+            desktop/build/release/windows/*.exe
+            desktop/build/release/windows/*.scr
+          if-no-files-found: error
+
+  macos:
+    name: Build macOS
+    needs: prepare
+    if: needs.prepare.outputs.should_release == 'true'
+    runs-on: macos-15
+    env:
+      VERSION: ${{ needs.prepare.outputs.version }}
+      APPLE_CERTIFICATE_BASE64: ${{ secrets.APPLE_CERTIFICATE_BASE64 }}
+      APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+      APPLE_ID: ${{ secrets.APPLE_ID }}
+      APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: desktop/pnpm-lock.yaml
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin
+
+      - name: Install build dependencies
+        run: |
+          brew install create-dmg
+          pnpm --dir desktop install --frozen-lockfile
+
+      - name: Import Apple signing certificate
+        if: env.APPLE_CERTIFICATE_BASE64 != ''
+        shell: bash
+        run: |
+          certificate_path="$RUNNER_TEMP/pearwall-apple.p12"
+          keychain_path="$RUNNER_TEMP/pearwall-signing.keychain-db"
+          printf '%s' "$APPLE_CERTIFICATE_BASE64" | base64 -D > "$certificate_path"
+          security create-keychain -p actions "$keychain_path"
+          security set-keychain-settings -lut 21600 "$keychain_path"
+          security unlock-keychain -p actions "$keychain_path"
+          security import "$certificate_path" -P "$APPLE_CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k "$keychain_path"
+          security set-key-partition-list -S apple-tool:,apple: -k actions "$keychain_path"
+          security list-keychain -d user -s "$keychain_path"
+          signing_identity="$(security find-identity -v -p codesigning "$keychain_path" | awk -F '"' '/Developer ID Application/{print $2; exit}')"
+          if [[ -z "$signing_identity" ]]; then
+            echo "::error::证书中没有 Developer ID Application 身份。"
+            exit 1
+          fi
+          echo "PEARWALL_CODESIGN_IDENTITY=${signing_identity}" >> "$GITHUB_ENV"
+
+      - name: Warn about unsigned macOS package
+        if: env.APPLE_CERTIFICATE_BASE64 == ''
+        run: echo "::warning::未配置 Apple 签名证书，将生成 ad hoc 签名的 macOS 包。"
+
+      - name: Check notarization credentials
+        if: env.APPLE_CERTIFICATE_BASE64 != '' && (env.APPLE_ID == '' || env.APPLE_APP_SPECIFIC_PASSWORD == '' || env.APPLE_TEAM_ID == '')
+        run: |
+          echo "::error::配置 Apple 证书后还必须配置 APPLE_ID、APPLE_APP_SPECIFIC_PASSWORD 和 APPLE_TEAM_ID。"
+          exit 1
+
+      - name: Build macOS packages
+        run: pnpm --dir desktop build:dmg
+
+      - name: Sign and notarize disk image
+        if: env.APPLE_CERTIFICATE_BASE64 != '' && env.APPLE_ID != '' && env.APPLE_APP_SPECIFIC_PASSWORD != '' && env.APPLE_TEAM_ID != ''
+        shell: bash
+        run: |
+          dmg_path="desktop/build/release/macos/Pear-Wall-Screen-Saver-${VERSION}.dmg"
+          codesign --force --sign "$PEARWALL_CODESIGN_IDENTITY" --timestamp "$dmg_path"
+          xcrun notarytool submit "$dmg_path" --apple-id "$APPLE_ID" --password "$APPLE_APP_SPECIFIC_PASSWORD" --team-id "$APPLE_TEAM_ID" --wait
+          xcrun stapler staple "$dmg_path"
+          xcrun stapler validate "$dmg_path"
+
+      - name: Package standalone macOS bundles
+        shell: bash
+        run: |
+          output="desktop/build/release/macos"
+          ditto -c -k --sequesterRsrc --keepParent "$output/Pear Wall.app" "$output/Pear-Wall-${VERSION}-macOS-arm64.app.zip"
+          ditto -c -k --sequesterRsrc --keepParent "$output/Pear Wall.saver" "$output/Pear-Wall-${VERSION}-macOS-arm64.saver.zip"
+
+      - name: Upload macOS packages
+        uses: actions/upload-artifact@v4
+        with:
+          name: pearwall-macos-${{ needs.prepare.outputs.version }}
+          path: |
+            desktop/build/release/macos/*.dmg
+            desktop/build/release/macos/*.zip
+          if-no-files-found: error
+
+  release:
+    name: Publish GitHub release
+    needs:
+      - prepare
+      - windows
+      - macos
+    if: needs.prepare.outputs.should_release == 'true'
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TAG: ${{ needs.prepare.outputs.tag }}
+      VERSION: ${{ needs.prepare.outputs.version }}
+    steps:
+      - name: Download packages
+        uses: actions/download-artifact@v4
+        with:
+          pattern: pearwall-*-${{ needs.prepare.outputs.version }}
+          path: release
+          merge-multiple: true
+
+      - name: Generate checksums
+        shell: bash
+        run: |
+          cd release
+          find . -maxdepth 1 -type f ! -name SHA256SUMS.txt -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS.txt
+
+      - name: Create release
+        shell: bash
+        run: |
+          gh release create "$TAG" release/* --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "Pear Wall ${TAG}" --generate-notes
