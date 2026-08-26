@@ -17,6 +17,7 @@ function runJson(command, args) {
     cwd: desktopRoot,
     encoding: "utf8",
     maxBuffer: 128 * 1024 * 1024,
+    shell: process.platform === "win32",
     stdio: ["ignore", "pipe", "inherit"],
   });
   return JSON.parse(output);

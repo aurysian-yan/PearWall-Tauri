@@ -150,14 +150,18 @@ final class PearWallMeshLibrary {
     ) -> [[SIMD2<Float>]] {
         let rows = source.count
         let columns = source[0].count
-        let facePoints = (0..<(rows - 1)).map { row in
-            (0..<(columns - 1)).map { column in
-                (
-                    source[row][column]
-                        + source[row][column + 1]
-                        + source[row + 1][column]
-                        + source[row + 1][column + 1]
-                ) / 4
+        var facePoints = Array(
+            repeating: Array(
+                repeating: SIMD2<Float>.zero,
+                count: columns - 1
+            ),
+            count: rows - 1
+        )
+        for row in 0..<(rows - 1) {
+            for column in 0..<(columns - 1) {
+                let top = source[row][column] + source[row][column + 1]
+                let bottom = source[row + 1][column] + source[row + 1][column + 1]
+                facePoints[row][column] = (top + bottom) / 4
             }
         }
         var result = Array(
@@ -189,18 +193,16 @@ final class PearWallMeshLibrary {
                             + source[row + 1][column]
                     ) / 8
                 } else {
-                    let faceAverage = (
-                        facePoints[row - 1][column - 1]
-                            + facePoints[row - 1][column]
-                            + facePoints[row][column - 1]
-                            + facePoints[row][column]
-                    ) / 4
-                    let edgeAverage = (
-                        (point + source[row - 1][column]) / 2
-                            + (point + source[row + 1][column]) / 2
-                            + (point + source[row][column - 1]) / 2
-                            + (point + source[row][column + 1]) / 2
-                    ) / 4
+                    let upperFaces = facePoints[row - 1][column - 1]
+                        + facePoints[row - 1][column]
+                    let lowerFaces = facePoints[row][column - 1]
+                        + facePoints[row][column]
+                    let faceAverage = (upperFaces + lowerFaces) / 4
+                    let verticalEdges = (point + source[row - 1][column]) / 2
+                        + (point + source[row + 1][column]) / 2
+                    let horizontalEdges = (point + source[row][column - 1]) / 2
+                        + (point + source[row][column + 1]) / 2
+                    let edgeAverage = (verticalEdges + horizontalEdges) / 4
                     value = (faceAverage + edgeAverage * 2 + point) / 4
                 }
                 result[row * 2][column * 2] = value
@@ -211,14 +213,15 @@ final class PearWallMeshLibrary {
             for column in 0..<(columns - 1) {
                 let first = source[row][column]
                 let second = source[row][column + 1]
-                result[row * 2][column * 2 + 1] = row == 0 || row == rows - 1
-                    ? (first + second) / 2
-                    : (
-                        first
-                            + second
-                            + facePoints[row - 1][column]
-                            + facePoints[row][column]
-                    ) / 4
+                let value: SIMD2<Float>
+                if row == 0 || row == rows - 1 {
+                    value = (first + second) / 2
+                } else {
+                    let points = first + second
+                    let faces = facePoints[row - 1][column] + facePoints[row][column]
+                    value = (points + faces) / 4
+                }
+                result[row * 2][column * 2 + 1] = value
             }
         }
 
@@ -226,14 +229,15 @@ final class PearWallMeshLibrary {
             for column in 0..<columns {
                 let first = source[row][column]
                 let second = source[row + 1][column]
-                result[row * 2 + 1][column * 2] = column == 0 || column == columns - 1
-                    ? (first + second) / 2
-                    : (
-                        first
-                            + second
-                            + facePoints[row][column - 1]
-                            + facePoints[row][column]
-                    ) / 4
+                let value: SIMD2<Float>
+                if column == 0 || column == columns - 1 {
+                    value = (first + second) / 2
+                } else {
+                    let points = first + second
+                    let faces = facePoints[row][column - 1] + facePoints[row][column]
+                    value = (points + faces) / 4
+                }
+                result[row * 2 + 1][column * 2] = value
             }
         }
 
