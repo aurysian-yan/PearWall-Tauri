@@ -203,9 +203,10 @@ jobs:
         shell: bash
         run: |
           cd release
-          find . -maxdepth 1 -type f ! -name SHA256SUMS.txt -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS.txt
+          find . -type f ! -name SHA256SUMS.txt -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS.txt
 
       - name: Create release
         shell: bash
         run: |
-          gh release create "$TAG" release/* --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "Pear Wall ${TAG}" --generate-notes
+          mapfile -d '' assets < <(find release -type f -print0 | sort -z)
+          gh release create "$TAG" "${assets[@]}" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "Pear Wall ${TAG}" --generate-notes
