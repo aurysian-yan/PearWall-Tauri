@@ -91,6 +91,17 @@ jobs:
         with:
           targets: x86_64-pc-windows-msvc
 
+      - name: Restore Rust cache
+        uses: actions/cache@v6
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            desktop/src-tauri/target
+            desktop/installer/src-tauri/target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('desktop/src-tauri/Cargo.lock', 'desktop/installer/src-tauri/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-
+
       - name: Install dependencies
         run: pnpm --dir desktop install --frozen-lockfile
 
@@ -181,6 +192,16 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: aarch64-apple-darwin
+
+      - name: Restore Rust cache
+        uses: actions/cache@v6
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            desktop/src-tauri/target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('desktop/src-tauri/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-
 
       - name: Install build dependencies
         run: |

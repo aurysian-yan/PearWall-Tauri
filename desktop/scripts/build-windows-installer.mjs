@@ -48,6 +48,7 @@ function run(command, args, options = {}) {
     cwd: options.cwd ?? desktopRoot,
     env: options.env ?? process.env,
     encoding: 'utf8',
+    shell: process.platform === 'win32' && command === 'pnpm',
     stdio: 'inherit',
   });
   if (result.error) throw result.error;
