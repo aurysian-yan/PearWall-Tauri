@@ -15,20 +15,13 @@ SRC="${SAVER_BUNDLE_PATH:-${OUTPUT}/Pear Wall.saver}"
 SAVER_BUNDLE_NAME="$(basename "${SRC}")"
 APP_SRC="${APP_BUNDLE_PATH:-${OUTPUT}/Pear Wall.app}"
 APP_BUNDLE_NAME="$(basename "${APP_SRC}")"
-FRONTEND_READY=0
 
 if [[ "${PEARWALL_SKIP_SAVER_BUILD:-0}" != "1" ]]; then
   OUTPUT_ROOT="${OUTPUT}" zsh "${SCRIPT_DIR}/build-macos-saver.sh"
-  FRONTEND_READY=1
 fi
 
 if [[ "${PEARWALL_SKIP_APP_BUILD:-0}" != "1" ]]; then
-  if [[ "${FRONTEND_READY}" == "1" ]]; then
-    OUTPUT_ROOT="${OUTPUT}" PEARWALL_SKIP_FRONTEND_BUILD=1 \
-      zsh "${SCRIPT_DIR}/build-macos-app.sh"
-  else
-    OUTPUT_ROOT="${OUTPUT}" zsh "${SCRIPT_DIR}/build-macos-app.sh"
-  fi
+  OUTPUT_ROOT="${OUTPUT}" zsh "${SCRIPT_DIR}/build-macos-app.sh"
 fi
 
 if ! command -v create-dmg >/dev/null 2>&1; then
