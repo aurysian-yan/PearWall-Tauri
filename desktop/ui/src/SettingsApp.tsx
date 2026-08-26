@@ -1119,6 +1119,7 @@ function DrawerPageContent({
   settings,
   update,
   isMacOSRuntime,
+  supportsScreenSaverDisplays,
   connectedDisplays,
   displayLoading,
   displayDiscoveryFailed,
@@ -1131,6 +1132,7 @@ function DrawerPageContent({
   settings: Settings;
   update: UpdateSetting;
   isMacOSRuntime: boolean;
+  supportsScreenSaverDisplays: boolean;
   connectedDisplays: ConnectedDisplay[];
   displayLoading: boolean;
   displayDiscoveryFailed: boolean;
@@ -1151,7 +1153,7 @@ function DrawerPageContent({
       ? "调整渲染质量、屏幕方向方案和屏保配置详情。"
       : "调整渲染质量与屏幕方向方案，也可以让 Pear Wall 自动随机切换。",
     dynamicWallpaperDisplays: "选择用于显示动态壁纸的显示器。",
-    screenSaverDisplays: "选择用于运行 macOS 屏幕保护程序的显示器。",
+    screenSaverDisplays: "选择用于显示动态屏保画面的显示器，未启用的显示器将保持纯黑。",
     exportImage: "调整当前封面的画面参数，并导出指定分辨率的 PNG 图片。",
     licenses: "Pear Wall 能够顺利运行，离不开这些优秀的开源库。",
   };
@@ -1280,7 +1282,7 @@ function DrawerPageContent({
               <DrawerCard>
                 <DisplaySelector
                   title="屏保显示器"
-                  selectionLabel="启用屏保"
+                  selectionLabel="显示动态画面"
                   displays={connectedDisplays}
                   selectedIds={settings.screenSaverDisplayIds ?? []}
                   loading={displayLoading}
@@ -1424,6 +1426,7 @@ export function SettingsApp() {
     && document.documentElement.classList.contains("windows");
   const isMacOSRuntime = isTauriRuntime && !isWindowsRuntime;
   const supportsDynamicWallpaper = isMacOSRuntime || isWindowsRuntime;
+  const supportsScreenSaverDisplays = isMacOSRuntime || isWindowsRuntime;
   const usesSharedSettings = isTauriRuntime;
   const [settings, setSettings] = useState<Settings>(loadSettings);
   const [connectedDisplays, setConnectedDisplays] = useState<ConnectedDisplay[]>([]);
@@ -1590,7 +1593,7 @@ export function SettingsApp() {
 
   useEffect(() => {
     if (
-      !isMacOSRuntime
+      !supportsScreenSaverDisplays
       || !sharedSettingsReady
       || connectedDisplays.length === 0
     ) return;
@@ -1605,7 +1608,7 @@ export function SettingsApp() {
         screenSaverDisplayIds: legacyTarget ? [legacyTarget.id] : [],
       };
     });
-  }, [connectedDisplays, isMacOSRuntime, sharedSettingsReady]);
+  }, [connectedDisplays, sharedSettingsReady, supportsScreenSaverDisplays]);
 
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
@@ -2096,7 +2099,7 @@ export function SettingsApp() {
                   onChange={(value) => update("hideCursor", value)}
                 />
               </SettingRow>
-              {isMacOSRuntime && (
+              {supportsScreenSaverDisplays && (
                 <>
                   <Separator className="mx-2 w-[calc(100%-1rem)] bg-white/15" />
                   <button
@@ -2107,7 +2110,7 @@ export function SettingsApp() {
                     <SettingRow
                       icon={MonitorIcon}
                       title="屏保显示器"
-                      description="选择运行屏幕保护程序的显示器"
+                      description="选择显示动态屏保画面的显示器"
                     >
                       <CaretRightIcon
                         aria-hidden
@@ -2350,6 +2353,7 @@ export function SettingsApp() {
                 settings={settings}
                 update={update}
                 isMacOSRuntime={isMacOSRuntime}
+                supportsScreenSaverDisplays={supportsScreenSaverDisplays}
                 connectedDisplays={connectedDisplays}
                 displayLoading={displayLoading}
                 displayDiscoveryFailed={displayDiscoveryFailed}

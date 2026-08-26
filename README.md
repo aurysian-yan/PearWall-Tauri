@@ -11,6 +11,7 @@ Pear Wall 是一个跨平台动态壁纸项目。本仓库维护桌面端、Wall
 │   ├── scripts/            # 前端、macOS 屏保和 Windows 屏保构建脚本
 │   └── src-tauri/          # Tauri Rust 宿主
 ├── wallpaper-engine/       # Wallpaper Engine 项目与共享 WebGL 渲染器
+├── website/                # 官网（Astro + React，复用安装器视觉语言）
 ├── native/pearwall-core/   # 跨平台 Rust 音频分析核心
 └── LICENSE                 # GPL-3.0 许可证
 ```
@@ -102,10 +103,11 @@ UNSPLASH_SECRET_KEY=your_secret_key
 
 安装器前端只会读取带 `VITE_` 前缀的访问密钥。应用 ID 和秘密密钥仅保存在本地，不会进入前端安装包。未配置访问密钥或请求失败时，安装器会使用内置动态背景。
 
-如需手动安装 `.scr`，可在管理员终端中复制到系统目录：
+如需手动安装 `.scr`，可在管理员终端中将 `.scr` 和运行程序一起复制到系统目录：
 
 ```powershell
 Copy-Item .\PearWall.scr "$env:WINDIR\System32\PearWall.scr"
+Copy-Item .\PearWall.exe "$env:WINDIR\System32\PearWall.exe"
 ```
 
 单独构建 macOS App、`.saver` 或 DMG：
@@ -134,6 +136,17 @@ pnpm --dir desktop run build:windows-installer
 ## Wallpaper Engine
 
 将 `wallpaper-engine/` 导入 Wallpaper Engine 编辑器即可预览和发布。项目参数配置位于 `wallpaper-engine/project.json`，渲染器和着色器分别位于 `wallpaper-engine/src/` 与 `wallpaper-engine/shaders/`。
+
+## 官网
+
+`website/` 是基于 Astro + React 的静态官网，视觉语言与 Windows 安装器一致：动态壁纸背景、毛玻璃面板与圆润按钮。`website/public/wallpaper/` 是 `wallpaper-engine/` 的静态副本，作为页面实时背景。
+
+```bash
+pnpm --dir website dev      # 本地预览
+pnpm --dir website build    # 输出到 website/dist/
+```
+
+下载地址与版本号集中在 `website/src/site.ts`，发布时替换为真实产物链接即可。
 
 ## 许可证
 

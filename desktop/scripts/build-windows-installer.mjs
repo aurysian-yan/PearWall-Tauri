@@ -103,6 +103,8 @@ run(process.execPath, [resolve(desktopRoot, 'scripts', 'tauri-runner.mjs'), ...i
 
 await access(installerBinary);
 await mkdir(outputRoot, { recursive: true });
+await cp(runtimeBinary, resolve(outputRoot, 'PearWall.scr'), { force: true });
+await cp(runtimeBinary, resolve(outputRoot, 'PearWall.exe'), { force: true });
 const output = resolve(
   outputRoot,
   `Pear-Wall-Screen-Saver-${installerConfig.version}-setup.exe`,

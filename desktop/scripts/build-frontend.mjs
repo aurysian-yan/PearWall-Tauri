@@ -11,6 +11,10 @@ const outputRoot = resolve(desktopRoot, 'dist');
 await rm(outputRoot, { recursive: true, force: true });
 await mkdir(outputRoot, { recursive: true });
 await cp(resolve(sourceRoot, 'index.html'), resolve(outputRoot, 'index.html'));
+await cp(
+  resolve(sourceRoot, 'screensaver-black.html'),
+  resolve(outputRoot, 'screensaver-black.html'),
+);
 await cp(resolve(sourceRoot, 'src'), resolve(outputRoot, 'src'), { recursive: true });
 await cp(resolve(sourceRoot, 'assets'), resolve(outputRoot, 'assets'), { recursive: true });
 await cp(settingsRoot, outputRoot, { recursive: true });

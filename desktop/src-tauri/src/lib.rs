@@ -30,6 +30,8 @@ mod windows_autostart;
 #[cfg(windows)]
 mod windows_media;
 #[cfg(windows)]
+mod windows_screen_saver;
+#[cfg(windows)]
 mod windows_tray;
 
 #[derive(Clone, Copy)]
@@ -170,6 +172,18 @@ struct ConnectedDisplay {
     is_primary: bool,
 }
 
+#[cfg(not(target_os = "macos"))]
+fn monitor_identifier(monitor: &tauri::Monitor, index: usize) -> String {
+    monitor.name().cloned().unwrap_or_else(|| {
+        let position = monitor.position();
+        let size = monitor.size();
+        format!(
+            "{}:{}:{}:{}:{}",
+            position.x, position.y, size.width, size.height, index
+        )
+    })
+}
+
 #[tauri::command]
 fn get_connected_displays(app: tauri::AppHandle) -> Result<Vec<ConnectedDisplay>, String> {
     #[cfg(target_os = "macos")]
@@ -249,12 +263,7 @@ fn get_connected_displays(app: tauri::AppHandle) -> Result<Vec<ConnectedDisplay>
                     .name()
                     .cloned()
                     .unwrap_or_else(|| format!("显示器 {}", index + 1));
-                let id = monitor.name().cloned().unwrap_or_else(|| {
-                    format!(
-                        "{}:{}:{}:{}:{}",
-                        position.x, position.y, size.width, size.height, index
-                    )
-                });
+                let id = monitor_identifier(monitor, index);
                 ConnectedDisplay {
                     id,
                     name,
@@ -358,6 +367,13 @@ fn get_media_artwork(
 #[tauri::command]
 fn is_screen_saver_mode() -> bool {
     matches!(launch_mode(), LaunchMode::ScreenSaver)
+}
+
+#[tauri::command]
+fn exit_screen_saver(app: AppHandle) {
+    if matches!(launch_mode(), LaunchMode::ScreenSaver) {
+        app.exit(0);
+    }
 }
 
 fn page_matches_launch_mode(mode: LaunchMode, path: &str) -> bool {
@@ -706,6 +722,7 @@ pub fn run() {
             get_desktop_wallpaper,
             save_exported_image,
             is_screen_saver_mode,
+            exit_screen_saver,
             load_shared_settings,
             save_shared_settings,
             get_macos_runtime_status,
@@ -811,10 +828,18 @@ pub fn run() {
             };
             match mode {
                 LaunchMode::ScreenSaver => {
-                    let _ = window.set_decorations(false);
-                    let _ = window.set_always_on_top(true);
-                    let _ = window.set_fullscreen(true);
-                    let _ = window.eval("window.location.replace('index.html')");
+                    #[cfg(windows)]
+                    {
+                        windows_screen_saver::start(app.handle())?;
+                        window.destroy()?;
+                    }
+                    #[cfg(not(windows))]
+                    {
+                        let _ = window.set_decorations(false);
+                        let _ = window.set_always_on_top(true);
+                        let _ = window.set_fullscreen(true);
+                        let _ = window.eval("window.location.replace('index.html')");
+                    }
                 }
                 LaunchMode::Configure | LaunchMode::App => {
                     #[cfg(windows)]

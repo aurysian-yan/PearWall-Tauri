@@ -5,8 +5,8 @@ const desktopRoot = resolve(import.meta.dirname, '..');
 const target = process.env.TAURI_TARGET || 'x86_64-pc-windows-msvc';
 const candidates = [
   process.env.TAURI_BINARY,
-  resolve(desktopRoot, 'src-tauri', 'target', 'release', 'pearwall-desktop.exe'),
   resolve(desktopRoot, 'src-tauri', 'target', target, 'release', 'pearwall-desktop.exe'),
+  resolve(desktopRoot, 'src-tauri', 'target', 'release', 'pearwall-desktop.exe'),
 ].filter(Boolean);
 
 let source;
@@ -28,4 +28,5 @@ const outputRoot = process.env.OUTPUT_ROOT
 await mkdir(outputRoot, { recursive: true });
 const output = resolve(outputRoot, 'PearWall.scr');
 await cp(source, output, { force: true });
+await cp(source, resolve(outputRoot, 'PearWall.exe'), { force: true });
 console.log(output);

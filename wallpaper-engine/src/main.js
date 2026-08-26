@@ -173,11 +173,34 @@
       screenSaverMode = Boolean(enabled);
       applyCursorVisibility();
       if (!enabled) return;
-      const exit = () => tauriWindowApi.getCurrentWindow().close().catch(() => {});
-      window.addEventListener('mousemove', exit, { once: true });
-      window.addEventListener('mousedown', exit, { once: true });
-      window.addEventListener('keydown', exit, { once: true });
-      window.addEventListener('touchstart', exit, { once: true });
+      const startedAt = performance.now();
+      const gracePeriod = 700;
+      const mouseDistance = 6;
+      let initialPointer = null;
+      let exiting = false;
+      const exit = () => {
+        if (exiting || performance.now() - startedAt < gracePeriod) return;
+        exiting = true;
+        tauriInvoke('exit_screen_saver').catch(() => (
+          tauriWindowApi.getCurrentWindow().close().catch(() => {
+            exiting = false;
+          })
+        ));
+      };
+      window.addEventListener('mousemove', (event) => {
+        const pointer = { x: event.screenX, y: event.screenY };
+        if (!initialPointer || performance.now() - startedAt < gracePeriod) {
+          initialPointer = pointer;
+          return;
+        }
+        if (
+          Math.abs(pointer.x - initialPointer.x) >= mouseDistance
+          || Math.abs(pointer.y - initialPointer.y) >= mouseDistance
+        ) exit();
+      });
+      window.addEventListener('mousedown', exit);
+      window.addEventListener('keydown', exit);
+      window.addEventListener('touchstart', exit);
     }).catch(() => {});
   }
 
