@@ -3,6 +3,26 @@ export type MoruStyle = 'OFF' | 'NARROW' | 'WIDE' | 'SMOOTH';
 export type ArtworkFallback = 'DEFAULT' | 'CUSTOM' | 'DESKTOP';
 export type ScreenSaverDisplay = 'PRIMARY' | 'SECONDARY';
 export type PerformanceMode = 'MANUAL' | 'AUTO';
+export type ExportResolution = '1920x1080' | '2560x1440' | '3840x2160' | 'custom';
+export type ExportAspectRatio = '16:9' | '16:10' | '4:3' | '1:1' | '9:16' | 'custom';
+export type WatermarkBackground = 'WHITE' | 'BLACK' | 'BLUR_WHITE' | 'BLUR_BLACK';
+
+export type ExportSettings = {
+  resolution: ExportResolution;
+  aspectRatio: ExportAspectRatio;
+  width: number;
+  height: number;
+  distortionPreset: number;
+  distortionStrength: number;
+  distortionProgress: number;
+  blurMultiplier: number;
+  scrimAlpha: number;
+  watermark: boolean;
+  watermarkBackground: WatermarkBackground;
+  previewScale: number;
+  askForLocation: boolean;
+  defaultDirectory: string;
+};
 
 export type Settings = {
   dynamicWallpaperEnabled: boolean;

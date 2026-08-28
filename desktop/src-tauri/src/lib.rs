@@ -530,8 +530,27 @@ fn get_desktop_wallpaper() -> Result<String, String> {
     desktop_wallpaper::data_url()
 }
 
+fn default_export_directory(app: &AppHandle) -> Result<PathBuf, String> {
+    let directory = app
+        .path()
+        .picture_dir()
+        .map_err(|error| format!("无法定位图片目录：{error}"))?
+        .join("Pear Wall");
+    std::fs::create_dir_all(&directory).map_err(|_| "无法创建图片导出目录".to_string())?;
+    Ok(directory)
+}
+
 #[tauri::command]
-fn save_exported_image(app: AppHandle, data_url: String) -> Result<String, String> {
+fn get_default_export_directory(app: AppHandle) -> Result<String, String> {
+    Ok(default_export_directory(&app)?.display().to_string())
+}
+
+#[tauri::command]
+fn save_exported_image(
+    app: AppHandle,
+    data_url: String,
+    path: Option<String>,
+) -> Result<String, String> {
     let encoded = data_url
         .strip_prefix("data:image/png;base64,")
         .ok_or_else(|| "导出图片格式无效".to_string())?;
@@ -542,22 +561,35 @@ fn save_exported_image(app: AppHandle, data_url: String) -> Result<String, Strin
         return Err("导出图片数据无效".to_string());
     }
 
-    let directory = app
-        .path()
-        .picture_dir()
-        .map_err(|error| format!("无法定位图片目录：{error}"))?
-        .join("Pear Wall");
-    std::fs::create_dir_all(&directory).map_err(|_| "无法创建图片导出目录".to_string())?;
-    let timestamp = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map_err(|_| "无法生成图片文件名".to_string())?
-        .as_secs();
-    let mut path = directory.join(format!("Pear-Wall-{timestamp}.png"));
-    for suffix in 1..1000 {
-        if !path.exists() {
-            break;
+    let mut path = if let Some(path) = path.filter(|value| !value.is_empty()) {
+        PathBuf::from(path)
+    } else {
+        let directory = default_export_directory(&app)?;
+        let timestamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map_err(|_| "无法生成图片文件名".to_string())?
+            .as_secs();
+        let mut path = directory.join(format!("Pear-Wall-{timestamp}.png"));
+        for suffix in 1..1000 {
+            if !path.exists() {
+                break;
+            }
+            path = directory.join(format!("Pear-Wall-{timestamp}-{suffix}.png"));
         }
-        path = directory.join(format!("Pear-Wall-{timestamp}-{suffix}.png"));
+        path
+    };
+    if !path
+        .extension()
+        .and_then(|extension| extension.to_str())
+        .is_some_and(|extension| extension.eq_ignore_ascii_case("png"))
+    {
+        path.set_extension("png");
+    }
+    if let Some(parent) = path.parent() {
+        if !parent.as_os_str().is_empty() {
+            std::fs::create_dir_all(parent)
+                .map_err(|_| "无法创建图片导出目录".to_string())?;
+        }
     }
     std::fs::write(&path, data).map_err(|_| "无法保存导出图片".to_string())?;
     Ok(path.display().to_string())
@@ -761,6 +793,7 @@ pub fn run() {
     }
     let app = builder
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_dialog::init())
         .plugin(pearwall_wallpaper::init())
         .manage(audio_state)
         .manage(MediaArtworkState::default())
@@ -772,6 +805,7 @@ pub fn run() {
             get_connected_displays,
             get_power_status,
             get_desktop_wallpaper,
+            get_default_export_directory,
             save_exported_image,
             is_screen_saver_mode,
             exit_screen_saver,

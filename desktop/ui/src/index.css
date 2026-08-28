@@ -92,6 +92,33 @@
     );
 }
 
+.export-image-scrollbar[data-overlayscrollbars] {
+    --scroll-area-inset: 6rem;
+}
+
+.export-image-scrollbar[data-overlayscrollbars] .os-scrollbar-vertical {
+    top: var(--scroll-area-inset);
+    right: 0.5rem;
+    bottom: var(--scroll-area-inset);
+}
+
+.export-image-scrollbar[data-overlayscrollbars] [data-overlayscrollbars-viewport] {
+    -webkit-mask-image: linear-gradient(
+        to bottom,
+        transparent 10px,
+        black calc(var(--scroll-area-inset) + 16px),
+        black calc(100% - var(--scroll-area-inset) - 16px),
+        transparent calc(100% - var(--scroll-area-inset))
+    );
+    mask-image: linear-gradient(
+        to bottom,
+        transparent 10px,
+        black calc(var(--scroll-area-inset) + 16px),
+        black calc(100% - var(--scroll-area-inset) - 16px),
+        transparent calc(100% - var(--scroll-area-inset))
+    );
+}
+
 .drawer-content {
     border-radius: 32px 32px 0 0;
     /*corner-shape: superellipse(1.5);*/

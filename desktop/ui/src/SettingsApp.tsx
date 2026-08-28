@@ -11,6 +11,7 @@ import { SmoothCorners } from "@lisse/react";
 import { OverlayScrollbarsComponent } from "overlayscrollbars-react";
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { open as openDialog, save as saveFile } from "@tauri-apps/plugin-dialog";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { Drawer } from "vaul";
 import {
@@ -19,6 +20,7 @@ import {
   BatteryMediumIcon,
   CheckIcon,
   CornersOutIcon,
+  CopyIcon,
   CursorIcon,
   DesktopIcon,
   DeviceMobileIcon,
@@ -26,6 +28,7 @@ import {
   DownloadSimpleIcon,
   FileTextIcon,
   FrameCornersIcon,
+  FolderOpenIcon,
   GithubLogoIcon,
   GaugeIcon,
   HouseIcon,
@@ -53,15 +56,21 @@ import {
 } from "react";
 import {
   defaultSettings,
+  loadExportSettings,
   loadSettings,
+  saveExportSettings,
   saveSettings,
   settingsFromJSON,
   wallpaperSettings,
 } from "./settings";
 import type {
+  ExportAspectRatio,
+  ExportResolution,
+  ExportSettings,
   FlowSpeed,
   MoruStyle,
   Settings,
+  WatermarkBackground,
 } from "./types";
 import { DynamicDrawerHandle } from "./DynamicDrawerHandle";
 import { PearWallLogo } from "./PearWallLogo";
@@ -126,9 +135,6 @@ type BatteryNavigator = Navigator & {
   deviceMemory?: number;
   getBattery?: () => Promise<BatteryManagerLike>;
 };
-type ExportResolution = "1920x1080" | "2560x1440" | "3840x2160" | "custom";
-type ExportAspectRatio = "16:9" | "16:10" | "4:3" | "1:1" | "9:16" | "custom";
-type WatermarkBackground = "WHITE" | "BLACK" | "BLUR_WHITE" | "BLUR_BLACK";
 type ExportImageOptions = {
   width: number;
   height: number;
@@ -1105,37 +1111,53 @@ function ExportImagePreview({
 }
 
 function ExportImagePage({
-  settings,
   onPreview,
   onExport,
+  onCopy,
+  onChooseDefaultDirectory,
+  isTauriRuntime,
   onBack,
 }: {
-  settings: Settings;
   onPreview: (options: ExportImageOptions) => string;
-  onExport: (options: ExportImageOptions) => Promise<string>;
+  onExport: (
+    options: ExportImageOptions,
+    destination: Pick<ExportSettings, "askForLocation" | "defaultDirectory">,
+  ) => Promise<string>;
+  onCopy: (options: ExportImageOptions) => Promise<string>;
+  onChooseDefaultDirectory: (currentDirectory: string) => Promise<string | null>;
+  isTauriRuntime: boolean;
   onBack: () => void;
 }) {
-  const [resolution, setResolution] = useState<ExportResolution>("2560x1440");
-  const [aspectRatio, setAspectRatio] = useState<ExportAspectRatio>("16:9");
-  const [width, setWidth] = useState(2560);
-  const [height, setHeight] = useState(1440);
-  const [distortionPreset, setDistortionPreset] = useState(
-    settings.landscapePreset,
-  );
-  const [distortionStrength, setDistortionStrength] = useState(1);
-  const [distortionProgress, setDistortionProgress] = useState(0.5);
-  const [blurMultiplier, setBlurMultiplier] = useState(settings.blurMultiplier);
-  const [scrimAlpha, setScrimAlpha] = useState(settings.scrimAlpha);
-  const [watermark, setWatermark] = useState(false);
-  const [watermarkBackground, setWatermarkBackground] =
-    useState<WatermarkBackground>("WHITE");
+  const [exportSettings, setExportSettings] = useState<ExportSettings>(loadExportSettings);
   const [previewUrl, setPreviewUrl] = useState("");
   const [previewPending, setPreviewPending] = useState(true);
   const [previewFailed, setPreviewFailed] = useState(false);
-  const [previewScale, setPreviewScale] = useState(1);
   const [exporting, setExporting] = useState(false);
+  const [copying, setCopying] = useState(false);
   const [resultMessage, setResultMessage] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
+  const {
+    resolution,
+    aspectRatio,
+    width,
+    height,
+    distortionPreset,
+    distortionStrength,
+    distortionProgress,
+    blurMultiplier,
+    scrimAlpha,
+    watermark,
+    watermarkBackground,
+    previewScale,
+    askForLocation,
+    defaultDirectory,
+  } = exportSettings;
+  const updateExportSetting = <Key extends keyof ExportSettings>(
+    key: Key,
+    value: ExportSettings[Key],
+  ) => {
+    setExportSettings((current) => ({ ...current, [key]: value }));
+  };
   const portrait = height >= width;
   const presetOptions = portrait ? portraitPresets : landscapePresets;
   const selectedPreset = Math.min(
@@ -1145,6 +1167,10 @@ function ExportImagePage({
   const watermarkHeight = watermark
     ? exportWatermarkHeight(width, height)
     : 0;
+
+  useEffect(() => {
+    saveExportSettings(exportSettings);
+  }, [exportSettings]);
 
   useEffect(() => {
     let disposed = false;
@@ -1191,63 +1217,117 @@ function ExportImagePage({
   ]);
 
   const selectResolution = (value: ExportResolution) => {
-    setResolution(value);
-    if (value === "custom") return;
-    const [nextWidth, nextHeight] = value.split("x").map(Number);
-    setWidth(nextWidth);
-    setHeight(nextHeight);
-    setAspectRatio("16:9");
-    setDistortionPreset((current) => Math.min(current, 4));
+    setExportSettings((current) => {
+      if (value === "custom") {
+        return { ...current, resolution: value };
+      }
+      const [nextWidth, nextHeight] = value.split("x").map(Number);
+      return {
+        ...current,
+        resolution: value,
+        width: nextWidth,
+        height: nextHeight,
+        aspectRatio: "16:9",
+        distortionPreset: Math.min(current.distortionPreset, 4),
+      };
+    });
   };
 
   const selectAspectRatio = (value: ExportAspectRatio) => {
-    setAspectRatio(value);
-    if (value === "custom") return;
-    const nextDimensions = dimensionsForAspectRatio(value, width, height);
-    setWidth(nextDimensions.width);
-    setHeight(nextDimensions.height);
-    const matchingResolution = exportResolutions.find(
-      (option) => option.value !== "custom"
-        && option.value === `${nextDimensions.width}x${nextDimensions.height}`,
-    )?.value;
-    setResolution(matchingResolution ?? "custom");
+    setExportSettings((current) => {
+      if (value === "custom") {
+        return { ...current, aspectRatio: value };
+      }
+      const nextDimensions = dimensionsForAspectRatio(
+        value,
+        current.width,
+        current.height,
+      );
+      const matchingResolution = exportResolutions.find(
+        (option) => option.value !== "custom"
+          && option.value === `${nextDimensions.width}x${nextDimensions.height}`,
+      )?.value;
+      return {
+        ...current,
+        aspectRatio: value,
+        width: nextDimensions.width,
+        height: nextDimensions.height,
+        resolution: matchingResolution ?? "custom",
+      };
+    });
   };
 
   const changeWidth = (value: number) => {
     if (!Number.isFinite(value)) return;
-    setResolution("custom");
-    setAspectRatio("custom");
-    setWidth(Math.round(value));
+    setExportSettings((current) => ({
+      ...current,
+      resolution: "custom",
+      aspectRatio: "custom",
+      width: Math.round(value),
+    }));
   };
 
   const changeHeight = (value: number) => {
     if (!Number.isFinite(value)) return;
-    setResolution("custom");
-    setAspectRatio("custom");
-    setHeight(Math.round(value));
+    setExportSettings((current) => ({
+      ...current,
+      resolution: "custom",
+      aspectRatio: "custom",
+      height: Math.round(value),
+    }));
   };
+
+  const currentExportOptions = (): ExportImageOptions => ({
+    width: Math.max(320, Math.min(4096, width)),
+    height: Math.max(320, Math.min(4096, height)),
+    distortionPreset: selectedPreset,
+    distortionStrength,
+    distortionProgress,
+    blurMultiplier,
+    scrimAlpha,
+    watermark,
+    watermarkBackground,
+  });
 
   const exportImage = async () => {
     setExporting(true);
     setResultMessage("");
     setErrorMessage("");
     try {
-      const result = await onExport({
-        width: Math.max(320, Math.min(4096, width)),
-        height: Math.max(320, Math.min(4096, height)),
-        distortionPreset: selectedPreset,
-        distortionStrength,
-        distortionProgress,
-        blurMultiplier,
-        scrimAlpha,
-        watermark,
-        watermarkBackground,
+      const result = await onExport(currentExportOptions(), {
+        askForLocation,
+        defaultDirectory,
       });
       setResultMessage(result);
     } catch (error) {
       setErrorMessage(String(error));
     } finally {
       setExporting(false);
+    }
+  };
+
+  const copyImage = async () => {
+    setCopying(true);
+    setResultMessage("");
+    setErrorMessage("");
+    try {
+      const result = await onCopy(currentExportOptions());
+      setResultMessage(result);
+    } catch (error) {
+      setErrorMessage(String(error));
+    } finally {
+      setCopying(false);
+    }
+  };
+
+  const chooseDefaultDirectory = async () => {
+    setResultMessage("");
+    setErrorMessage("");
+    try {
+      const directory = await onChooseDefaultDirectory(defaultDirectory);
+      if (directory) updateExportSetting("defaultDirectory", directory);
+    } catch (error) {
+      setErrorMessage(String(error));
     }
   };
 
@@ -1258,7 +1338,7 @@ function ExportImagePage({
         progress={1}
         onBack={onBack}
       />
-      <div className="flex shrink-0 justify-center px-2 pb-5 z-50 pt-16">
+      <div className="flex shrink-0 justify-center px-2 pb-5 z-50 pt-20">
         <ExportImagePreview
           previewUrl={previewUrl}
           previewPending={previewPending}
@@ -1267,12 +1347,12 @@ function ExportImagePage({
           height={height}
           watermarkHeight={watermarkHeight}
           previewScale={previewScale}
-          onResize={setPreviewScale}
+          onResize={(value) => updateExportSetting("previewScale", value)}
         />
       </div>
       <OverlayScrollbarsComponent
         defer
-        className="min-h-0 flex-1 -my-24 overscroll-contain"
+        className="export-image-scrollbar min-h-0 flex-1 -my-32 overscroll-contain"
         options={{
           overflow: { x: "hidden", y: "scroll" },
           scrollbars: {
@@ -1282,7 +1362,7 @@ function ExportImagePage({
           },
         }}
       >
-        <div className="flex flex-col gap-5 px-4 py-24 box-border">
+        <div className="flex flex-col gap-5 px-4 pt-30 pb-34 box-border">
           <div className="order-2">
             <SettingsCard>
               <ChoiceTabs
@@ -1290,7 +1370,7 @@ function ExportImagePage({
                 label="封面扭曲方案"
                 value={selectedPreset}
                 options={presetOptions}
-                onChange={setDistortionPreset}
+                onChange={(value) => updateExportSetting("distortionPreset", value)}
                 variant="drawer"
               />
               <Separator className="mx-2 w-[calc(100%-1rem)] bg-white/15" />
@@ -1301,7 +1381,7 @@ function ExportImagePage({
                 minValue={0}
                 maxValue={1.5}
                 step={0.05}
-                onChange={setDistortionStrength}
+                onChange={(value) => updateExportSetting("distortionStrength", value)}
               />
               <Separator className="mx-2 w-[calc(100%-1rem)] bg-white/15" />
               <RangeSetting
@@ -1311,7 +1391,7 @@ function ExportImagePage({
                 minValue={0}
                 maxValue={1}
                 step={0.01}
-                onChange={setDistortionProgress}
+                onChange={(value) => updateExportSetting("distortionProgress", value)}
               />
               <Separator className="mx-2 w-[calc(100%-1rem)] bg-white/15" />
               <RangeSetting
@@ -1321,7 +1401,7 @@ function ExportImagePage({
                 minValue={0}
                 maxValue={2}
                 step={0.05}
-                onChange={setBlurMultiplier}
+                onChange={(value) => updateExportSetting("blurMultiplier", value)}
               />
               <Separator className="mx-2 w-[calc(100%-1rem)] bg-white/15" />
               <RangeSetting
@@ -1331,7 +1411,7 @@ function ExportImagePage({
                 minValue={0}
                 maxValue={0.8}
                 step={0.05}
-                onChange={setScrimAlpha}
+                onChange={(value) => updateExportSetting("scrimAlpha", value)}
               />
             </SettingsCard>
           </div>
@@ -1402,7 +1482,7 @@ function ExportImagePage({
                 <Toggle
                   label="添加歌曲水印"
                   value={watermark}
-                  onChange={setWatermark}
+                  onChange={(value) => updateExportSetting("watermark", value)}
                 />
               </SettingRow>
               {watermark && (
@@ -1413,27 +1493,69 @@ function ExportImagePage({
                     label="水印背景"
                     value={watermarkBackground}
                     options={watermarkBackgrounds}
-                    onChange={setWatermarkBackground}
+                    onChange={(value) => updateExportSetting("watermarkBackground", value)}
                     variant="drawer"
                   />
                 </>
               )}
             </SettingsCard>
           </div>
+          <div className="order-3">
+            <SettingsCard>
+              <SettingRow
+                icon={DownloadSimpleIcon}
+                title="导出时询问导出位置"
+                description="每次导出前选择保存位置和文件名"
+              >
+                <Toggle
+                  label="导出时询问导出位置"
+                  value={askForLocation}
+                  onChange={(value) => updateExportSetting("askForLocation", value)}
+                />
+              </SettingRow>
+              <Separator className="mx-2 w-[calc(100%-1rem)] bg-white/15" />
+              <SettingRow
+                icon={FolderOpenIcon}
+                title="默认导出目录"
+                description={defaultDirectory || (isTauriRuntime ? "未设置时使用图片/Pear Wall" : "桌面版可设置默认目录")}
+              >
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  isDisabled={!isTauriRuntime}
+                  onPress={() => void chooseDefaultDirectory()}
+                  className="bg-white/10 text-white"
+                >
+                  <FolderOpenIcon aria-hidden size={18} />
+                  选择
+                </Button>
+              </SettingRow>
+            </SettingsCard>
+          </div>
         </div>
       </OverlayScrollbarsComponent>
 
       <div className="shrink-0 px-4 pb-4 pt-3 min-h-24">
-        <Button
-          fullWidth
-          size="lg"
-          isDisabled={exporting}
-          onPress={() => void exportImage()}
-          className="bg-white font-semibold text-neutral-900"
-        >
-          <DownloadSimpleIcon aria-hidden size={20} />
-          {exporting ? "正在导出…" : "导出 PNG 图片"}
-        </Button>
+        <div className="grid grid-cols-2 gap-3">
+          <Button
+            size="lg"
+            isDisabled={exporting || copying}
+            onPress={() => void copyImage()}
+            className="bg-white/10 font-semibold text-white"
+          >
+            <CopyIcon aria-hidden size={20} />
+            {copying ? "正在复制…" : "复制图片"}
+          </Button>
+          <Button
+            size="lg"
+            isDisabled={exporting || copying}
+            onPress={() => void exportImage()}
+            className="bg-white font-semibold text-neutral-900"
+          >
+            <DownloadSimpleIcon aria-hidden size={20} />
+            {exporting ? "正在导出…" : "导出 PNG"}
+          </Button>
+        </div>
         {(resultMessage || errorMessage) && (
           <p
             className={`mt-2 break-all px-2 text-center text-xs ${errorMessage ? "text-red-300" : "text-white/65"}`}
@@ -2265,17 +2387,77 @@ export function SettingsApp() {
     return dataUrl;
   }, [mediaArtwork]);
 
-  const exportCurrentImage = async (options: ExportImageOptions) => {
+  const exportCurrentImage = async (
+    options: ExportImageOptions,
+    destination: Pick<ExportSettings, "askForLocation" | "defaultDirectory">,
+  ) => {
     const dataUrl = renderCurrentImage(options);
     if (isTauriRuntime) {
-      const path = await invoke<string>("save_exported_image", { dataUrl });
-      return `图片已保存至 ${path}`;
+      const fileName = destination.askForLocation
+        ? `Pear-Wall-${options.width}x${options.height}.png`
+        : `Pear-Wall-${Date.now()}.png`;
+      let defaultDirectory = destination.defaultDirectory;
+      if (destination.askForLocation && !defaultDirectory) {
+        try {
+          defaultDirectory = await invoke<string>("get_default_export_directory");
+        } catch {
+          defaultDirectory = "";
+        }
+      }
+      const path = destination.askForLocation
+        ? await saveFile({
+          title: "导出 PNG 图片",
+          defaultPath: defaultDirectory
+            ? `${defaultDirectory.replace(/[\\/]+$/, "")}/${fileName}`
+            : fileName,
+          filters: [{ name: "PNG 图片", extensions: ["png"] }],
+        })
+        : defaultDirectory
+          ? `${defaultDirectory.replace(/[\\/]+$/, "")}/${fileName}`
+          : null;
+      if (!path) {
+        return destination.askForLocation ? "已取消导出" : "";
+      }
+      const savedPath = await invoke<string>("save_exported_image", {
+        dataUrl,
+        path,
+      });
+      return `图片已保存至 ${savedPath}`;
     }
     const link = document.createElement("a");
     link.href = dataUrl;
     link.download = `Pear-Wall-${options.width}x${options.height}.png`;
     link.click();
     return "图片已开始下载";
+  };
+
+  const copyCurrentImage = async (options: ExportImageOptions) => {
+    const dataUrl = renderCurrentImage(options);
+    if (!navigator.clipboard || typeof ClipboardItem === "undefined") {
+      throw new Error("当前环境不支持复制图片");
+    }
+    const encoded = dataUrl.slice("data:image/png;base64,".length);
+    const binary = atob(encoded);
+    const bytes = new Uint8Array(binary.length);
+    for (let index = 0; index < binary.length; index += 1) {
+      bytes[index] = binary.charCodeAt(index);
+    }
+    const blob = new Blob([bytes], { type: "image/png" });
+    await navigator.clipboard.write([
+      new ClipboardItem({ "image/png": blob }),
+    ]);
+    return "图片已复制到剪贴板";
+  };
+
+  const chooseDefaultExportDirectory = async (currentDirectory: string) => {
+    if (!isTauriRuntime) return null;
+    const selected = await openDialog({
+      directory: true,
+      multiple: false,
+      title: "选择默认导出目录",
+      ...(currentDirectory ? { defaultPath: currentDirectory } : {}),
+    });
+    return typeof selected === "string" ? selected : null;
   };
 
   return (
@@ -2831,9 +3013,11 @@ export function SettingsApp() {
           className={`mx-auto h-full w-full max-w-lg transition-[translate,opacity] duration-300 ease-out ${route === "exportImage" ? "translate-x-0 opacity-100" : "pointer-events-none translate-x-8 opacity-0"}`}
         >
           <ExportImagePage
-            settings={settings}
             onPreview={renderCurrentImage}
             onExport={exportCurrentImage}
+            onCopy={copyCurrentImage}
+            onChooseDefaultDirectory={chooseDefaultExportDirectory}
+            isTauriRuntime={isTauriRuntime}
             onBack={closeExportImagePage}
           />
         </div>
