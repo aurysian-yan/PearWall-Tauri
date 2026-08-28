@@ -175,10 +175,8 @@ jobs:
         with:
           name: pearwall-release-${{ needs.prepare.outputs.version }}
           path: |
-            desktop/build/release/windows/*.exe
-            desktop/build/release/windows/*.scr
-            desktop/build/release/macos/*.dmg
-            desktop/build/release/macos/*.zip
+            desktop/build/release/windows/Pear-Wall-Screen-Saver-${{ needs.prepare.outputs.version }}-setup.exe
+            desktop/build/release/macos/Pear-Wall-Screen-Saver-${{ needs.prepare.outputs.version }}.dmg
           if-no-files-found: error
 
   release:
