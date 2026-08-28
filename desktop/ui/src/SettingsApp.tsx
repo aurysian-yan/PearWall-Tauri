@@ -2122,6 +2122,7 @@ export function SettingsApp() {
       settings.audioVisualization &&
       shouldShowPermissionNotice(),
   );
+  const [resetSettingsOpen, setResetSettingsOpen] = useState(false);
   const [sharedSettingsReady, setSharedSettingsReady] =
     useState(!usesSharedSettings);
   const [previewReady, setPreviewReady] = useState(false);
@@ -2268,6 +2269,11 @@ export function SettingsApp() {
   const handlePermissionNoticeAcknowledgement = () => {
     acknowledgePermissionNotice();
     setPermissionNoticeOpen(false);
+  };
+
+  const resetToDefaultSettings = () => {
+    setSettings(defaultSettings);
+    setResetSettingsOpen(false);
   };
 
   const syncPreview = () => {
@@ -3200,10 +3206,8 @@ export function SettingsApp() {
             >
               <Button
                 variant="ghost"
-                onPress={() => {
-                  setSettings(defaultSettings);
-                }}
-                className="bg-white/10 text-white/75 transition-colors hover:bg-white/15 hover:text-white"
+                onPress={() => setResetSettingsOpen(true)}
+                className="bg-white/10 text-white/75 backdrop-blur-sm transition-colors hover:bg-white/15 hover:text-white"
               >
                 恢复默认设置
               </Button>
@@ -3273,6 +3277,67 @@ export function SettingsApp() {
         onOpenChange={setPermissionNoticeOpen}
         onAcknowledge={handlePermissionNoticeAcknowledgement}
       />
+      <Modal isOpen={resetSettingsOpen} onOpenChange={setResetSettingsOpen}>
+        <Modal.Backdrop variant="blur" className="!bg-backdrop/35">
+          <Modal.Container size="sm" placement="center" className="!p-0">
+            <div className="my-auto">
+              <SmoothCorners
+                asChild
+                autoEffects={false}
+                corners={{ radius: 37, smoothing: 0.6 }}
+                innerBorder={{
+                  width: 1,
+                  color: "currentColor",
+                  opacity: 0.1,
+                }}
+              >
+                <Modal.Dialog className="!w-[299px] !max-w-[299px] !overflow-hidden !bg-background/30 !p-0 !text-overlay-foreground shadow-2xl backdrop-blur-2xl backdrop-saturate-150">
+                  <Modal.Header className="!gap-0 !px-[25px] !pt-[23px] !text-left">
+                    <Modal.Heading className="!text-[15px] !font-bold !leading-[18px] !text-overlay-foreground">
+                      恢复默认设置？
+                    </Modal.Heading>
+                  </Modal.Header>
+                  <Modal.Body className="!-m-0 !mt-3 !px-[25px] !pb-0 !text-[14px] !font-normal !leading-5.5 !text-muted">
+                    <p>这会将主页中的所有设置恢复为默认值，且无法撤销。</p>
+                  </Modal.Body>
+                  <Modal.Footer className="!mt-[18px] !flex-col !items-stretch !gap-[7px] !px-[18px] !pb-[18px]">
+                    <SmoothCorners
+                      asChild
+                      autoEffects={false}
+                      corners={{ radius: 18, smoothing: 1 }}
+                    >
+                      <Button
+                        variant="danger-soft"
+                        size="sm"
+                        fullWidth
+                        onPress={resetToDefaultSettings}
+                        className="!h-8 !min-h-8 !px-0 !text-[15px] !font-normal !leading-[18px]"
+                      >
+                        恢复默认
+                      </Button>
+                    </SmoothCorners>
+                    <SmoothCorners
+                      asChild
+                      autoEffects={false}
+                      corners={{ radius: 18, smoothing: 1 }}
+                    >
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        fullWidth
+                        onPress={() => setResetSettingsOpen(false)}
+                        className="!h-8 !min-h-8 !bg-foreground/10 !px-0 !text-[15px] !font-normal !leading-[18px] hover:!bg-foreground/15"
+                      >
+                        取消
+                      </Button>
+                    </SmoothCorners>
+                  </Modal.Footer>
+                </Modal.Dialog>
+              </SmoothCorners>
+            </div>
+          </Modal.Container>
+        </Modal.Backdrop>
+      </Modal>
     </div>
   );
 }
