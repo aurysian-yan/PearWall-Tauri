@@ -62,8 +62,8 @@ create-dmg \
   --icon-size 120 \
   --text-size 14 \
   --icon "${APP_BUNDLE_NAME}" 200 150 \
-  --icon "${SAVER_BUNDLE_NAME}" 200 320 \
-  --app-drop-link 200 500 \
+  --icon "${SAVER_BUNDLE_NAME}" 200 500 \
+  --app-drop-link 200 320 \
   --background "${BACKGROUND}" \
   "${DMG_PATH}" \
   "${STAGING_ROOT}"
