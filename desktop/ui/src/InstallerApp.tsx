@@ -47,7 +47,7 @@ interface UnsplashPhoto {
 const previewState: InstallerState = {
   mode: "install",
   installedVersion: null,
-  targetVersion: "0.1.2",
+  targetVersion: "1.0.0",
   desktopShortcuts: false,
   startMenuShortcuts: true,
 };
