@@ -1597,16 +1597,15 @@ function ExportImagePage({
                     </NumberField.Group>
                   </NumberField>
                 </div>
-                <div className="col-span-2 flex justify-end">
+                <div className="col-span-2 flex justify-center">
                   <Button
-                    isIconOnly
                     size="sm"
                     variant="ghost"
-                    aria-label="宽高对调"
                     onPress={swapDimensions}
-                    className="text-white/70 hover:text-white"
+                    className="gap-2 bg-white/8 px-3 text-white/75 hover:bg-white/15 hover:text-white"
                   >
                     <SwapIcon aria-hidden size={18} weight="bold" />
+                    <span>交换宽高</span>
                   </Button>
                 </div>
                 <p className="col-span-2 text-xs text-white/45">
@@ -3226,7 +3225,7 @@ export function SettingsApp() {
         shouldScaleBackground={false}
       >
         <Drawer.Portal>
-          <Drawer.Overlay className="fixed inset-0 z-[60] bg-black/50" />
+          <Drawer.Overlay className="fixed inset-0 z-[60] bg-black/50 backdrop-blur-sm" />
           <Drawer.Content className="drawer-content fixed inset-x-0 bottom-0 z-[61] mx-auto flex max-h-[88vh] min-h-[320px] w-full max-w-2xl flex-col overflow-hidden bg-neutral-950/70 text-white shadow-2xl outline-none ring-1 ring-inset ring-white/10 backdrop-blur-xl backdrop-saturate-150">
             {/*<Drawer.Handle className="!absolute !left-1/2 !top-2 !z-30 !mx-0 !flex !h-[15px] !w-16 !-translate-x-1/2 !items-center !justify-center !bg-transparent !text-white/55 !opacity-100 [&>[data-vaul-handle-hitarea]]:grid [&>[data-vaul-handle-hitarea]]:place-items-center">
                 <DynamicDrawerHandle
@@ -3254,7 +3253,7 @@ export function SettingsApp() {
       </Drawer.Root>
       <div
         aria-hidden={route !== "exportImage"}
-        className={`fixed inset-0 z-[70] h-full w-full bg-black/50 text-white transition-opacity duration-300 ease-out ${route === "exportImage" ? "opacity-100" : "pointer-events-none opacity-0"}`}
+        className={`fixed inset-0 z-[70] h-full w-full bg-black/50 text-white backdrop-blur-sm transition-opacity duration-300 ease-out ${route === "exportImage" ? "opacity-100" : "pointer-events-none opacity-0"}`}
       >
         <div
           className={`mx-auto h-full w-full max-w-lg transition-[translate,opacity] duration-300 ease-out ${route === "exportImage" ? "translate-x-0 opacity-100" : "pointer-events-none translate-x-8 opacity-0"}`}
