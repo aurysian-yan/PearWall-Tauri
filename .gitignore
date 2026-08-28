@@ -14,15 +14,8 @@
 .cxx
 local.properties
 
-# Android project kept outside this repository
-/app/
-/classic/
-/gradle/
-/build.gradle.kts
-/settings.gradle.kts
-/gradle.properties
-/gradlew
-/gradlew.bat
+# Android Compose project kept outside this repository
+/compose/
 
 # Android/Gradle build outputs
 **/build/

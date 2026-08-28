@@ -88,7 +88,7 @@ async function createBuildEnvironment() {
     throw new Error(`缺少 Rust 目标：${windowsTarget}`);
   }
 
-  await access(resolve(projectRoot, 'dmgbg@2x.png'));
+  await access(resolve(desktopRoot, 'assets', 'dmgbg@2x.png'));
   return env;
 }
 

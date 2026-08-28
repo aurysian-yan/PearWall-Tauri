@@ -23,6 +23,24 @@ enum PearWallArtworkFallback: String {
     case desktop = "DESKTOP"
 }
 
+enum PearWallAudioVisualization {
+    static let minimumPulse = 0.0
+    static let maximumPulse = 1.0
+    static let minimumIntensity = 0.5
+    static let maximumIntensity = 3.0
+    static let imagePulseIntensity = 0.08
+
+    static func clampedPulse(_ value: Double) -> Double {
+        guard value.isFinite else { return minimumPulse }
+        return min(maximumPulse, max(minimumPulse, value))
+    }
+
+    static func clampedIntensity(_ value: Double) -> Double {
+        guard value.isFinite else { return minimumIntensity }
+        return min(maximumIntensity, max(minimumIntensity, value))
+    }
+}
+
 struct PearWallSettings {
     var dynamicWallpaperDisplayIds: [String]?
     var audioVisualization = true
@@ -75,9 +93,8 @@ struct PearWallSettings {
             return
         }
         audioVisualization = Self.boolean(object, key: "audioVisualization", fallback: audioVisualization)
-        audioIntensity = min(
-            3,
-            max(0.5, Self.number(object, key: "audioIntensity", fallback: audioIntensity))
+        audioIntensity = PearWallAudioVisualization.clampedIntensity(
+            Self.number(object, key: "audioIntensity", fallback: audioIntensity)
         )
         pauseFlow = Self.boolean(object, key: "pauseFlow", fallback: pauseFlow)
         hideCursor = Self.boolean(object, key: "hideCursor", fallback: hideCursor)

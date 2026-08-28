@@ -73,7 +73,7 @@ final class PearWallRenderSession {
             0.1,
             max(0, now - (lastAudioPulseUptime ?? now - 1.0 / 60.0))
         )
-        let targetPulse = min(1, max(0, Double(pulse)))
+        let targetPulse = PearWallAudioVisualization.clampedPulse(Double(pulse))
         let response = targetPulse > smoothedAudioPulse ? 0.08 : 0.2
         let amount = 1 - exp(-pulseDelta / response)
         smoothedAudioPulse += (targetPulse - smoothedAudioPulse) * amount

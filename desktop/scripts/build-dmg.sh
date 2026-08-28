@@ -10,7 +10,7 @@ APP_VERSION="${APP_VERSION:-$(node -e 'const fs=require("node:fs");process.stdou
 DMG_NAME="${DMG_NAME:-Pear-Wall-Screen-Saver-${APP_VERSION}.dmg}"
 DMG_PATH="${OUTPUT}/${DMG_NAME}"
 MOUNT_NAME="/Volumes/${APP_NAME}"
-BACKGROUND="${BACKGROUND:-${PROJECT_ROOT}/dmgbg@2x.png}"
+BACKGROUND="${BACKGROUND:-${DESKTOP_ROOT}/assets/dmgbg@2x.png}"
 SRC="${SAVER_BUNDLE_PATH:-${OUTPUT}/Pear Wall.saver}"
 SAVER_BUNDLE_NAME="$(basename "${SRC}")"
 APP_SRC="${APP_BUNDLE_PATH:-${OUTPUT}/Pear Wall.app}"
@@ -58,7 +58,7 @@ ditto "${APP_SRC}" "${STAGING_ROOT}/${APP_BUNDLE_NAME}"
 
 create-dmg \
   --volname "${APP_NAME}" \
-  --window-size 400 640 \
+  --window-size 676 732 \
   --icon-size 120 \
   --text-size 14 \
   --icon "${APP_BUNDLE_NAME}" 200 150 \

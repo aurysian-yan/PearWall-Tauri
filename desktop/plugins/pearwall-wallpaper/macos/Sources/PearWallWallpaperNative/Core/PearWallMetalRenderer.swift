@@ -43,7 +43,7 @@ struct PearWallMetalConfiguration: Equatable {
         randomPreset: Bool = false,
         moruStyle: String = "OFF"
     ) {
-        self.audioIntensity = Float(min(3, max(0.5, audioIntensity)))
+        self.audioIntensity = Float(PearWallAudioVisualization.clampedIntensity(audioIntensity))
         self.renderScale = Float(min(1, max(0.25, renderScale)))
         self.blurEnabled = blurEnabled
         self.blurMultiplier = Float(min(2, max(0, blurMultiplier)))
@@ -452,7 +452,7 @@ final class PearWallMetalRenderer: NSObject, MTKViewDelegate {
     var animationTime: Float = 0
     var audioPulse: Float = 0
     private static let artworkTransitionDuration: TimeInterval = 0.5
-    private static let imagePulseIntensity: Float = 0.08
+    private static let imagePulseIntensity = Float(PearWallAudioVisualization.imagePulseIntensity)
     private static let blurDownsample = 4
     private static let kawaseSigmaPerOffset: Float = 16
     private static let maximumScreenSaverPixels = 1920 * 1080
@@ -902,8 +902,11 @@ final class PearWallMetalRenderer: NSObject, MTKViewDelegate {
         )
         var viewScale = rotationViewScale(aspect: viewAspect)
         var time = animationTime
+        let pulse = PearWallAudioVisualization.clampedPulse(Double(audioPulse))
         var imageScale = 1
-            + Self.imagePulseIntensity * configuration.audioIntensity * audioPulse * audioPulse
+            + Self.imagePulseIntensity
+            * configuration.audioIntensity
+            * Float(pulse * pulse)
         var mix = transitionMix
         encoder.setRenderPipelineState(artworkPipeline)
         encoder.setVertexBuffer(vertexBuffer, offset: 0, index: 0)

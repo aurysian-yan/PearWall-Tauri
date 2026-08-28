@@ -193,6 +193,11 @@ jobs:
       TAG: ${{ needs.prepare.outputs.tag }}
       VERSION: ${{ needs.prepare.outputs.version }}
     steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
       - name: Download packages
         uses: actions/download-artifact@v8
         with:
@@ -205,8 +210,64 @@ jobs:
           cd release
           find . -type f ! -name SHA256SUMS.txt -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS.txt
 
+      - name: Generate release notes from commits
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          previous_tag="$(git tag --list 'v*' --sort=-version:refname | head -n 1)"
+          if [[ -n "$previous_tag" ]]; then
+            commit_range="${previous_tag}..${GITHUB_SHA}"
+          else
+            commit_range="$GITHUB_SHA"
+          fi
+
+          declare -A sections=(
+            [新增]=""
+            [修复]=""
+            [优化]=""
+            [重构]=""
+            [文档]=""
+            [其他]=""
+          )
+
+          while IFS=$'\t' read -r hash subject; do
+            [[ -z "$hash" ]] && continue
+
+            case "$subject" in
+              feat:*|feat\(*\):*|feature:*|新增*) section="新增" ;;
+              fix:*|fix\(*\):*|bugfix:*|修复*) section="修复" ;;
+              perf:*|perf\(*\):*|优化*) section="优化" ;;
+              refactor:*|refactor\(*\):*|重构*) section="重构" ;;
+              docs:*|docs\(*\):*|文档*) section="文档" ;;
+              *) section="其他" ;;
+            esac
+
+            short_hash="${hash:0:7}"
+            commit_link="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/commit/${hash}"
+            sections["$section"]+="- ${subject} ([${short_hash}](${commit_link}))"$'\n'
+          done < <(git log --no-merges --pretty=format:'%H%x09%s' "$commit_range")
+
+          {
+            echo "## 更新日志"
+            echo
+            if [[ -n "$previous_tag" ]]; then
+              echo "本次更新包含 `${previous_tag}..${TAG}` 之间的提交。"
+            else
+              echo "本次更新包含项目历史提交。"
+            fi
+
+            for section in 新增 修复 优化 重构 文档 其他; do
+              if [[ -n "${sections[$section]}" ]]; then
+                echo
+                echo "### ${section}"
+                printf '%s' "${sections[$section]}"
+              fi
+            done
+          } > release-notes.md
+
       - name: Create release
         shell: bash
         run: |
           mapfile -d '' assets < <(find release -type f -print0 | sort -z)
-          gh release create "$TAG" "${assets[@]}" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "Pear Wall ${TAG}" --generate-notes
+          gh release create "$TAG" "${assets[@]}" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "Pear Wall ${TAG}" --notes-file release-notes.md
