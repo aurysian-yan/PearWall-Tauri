@@ -13,7 +13,13 @@ export function SectionTitle({ children }: { children: ReactNode }) {
   );
 }
 
-export function SettingsCard({ children }: { children: ReactNode }) {
+export function SettingsCard({
+  children,
+  className,
+}: {
+  children: ReactNode;
+  className?: string;
+}) {
   return (
     <SmoothCorners
       asChild
@@ -23,7 +29,7 @@ export function SettingsCard({ children }: { children: ReactNode }) {
     >
       <Card
         variant="transparent"
-        className="gap-0 overflow-hidden bg-black/25 p-0 text-white shadow-none backdrop-blur-[10px] backdrop-saturate-150"
+        className={`gap-0 overflow-hidden bg-black/25 p-0 text-white shadow-none backdrop-blur-[10px] backdrop-saturate-150 ${className ?? ""}`}
       >
         {children}
       </Card>

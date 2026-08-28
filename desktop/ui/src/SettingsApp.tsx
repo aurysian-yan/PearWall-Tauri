@@ -9,7 +9,6 @@ import {
 } from "@heroui/react";
 import { SmoothCorners } from "@lisse/react";
 import { OverlayScrollbarsComponent } from "overlayscrollbars-react";
-import BlurEffect from "react-progressive-blur";
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { openUrl } from "@tauri-apps/plugin-opener";
@@ -23,6 +22,7 @@ import {
   CursorIcon,
   DesktopIcon,
   DeviceMobileIcon,
+  DotsSixVerticalIcon,
   DownloadSimpleIcon,
   FileTextIcon,
   FrameCornersIcon,
@@ -81,8 +81,8 @@ type DrawerPage =
   | "advanced"
   | "dynamicWallpaperDisplays"
   | "screenSaverDisplays"
-  | "exportImage"
   | "licenses";
+type SettingsRoute = "home" | "exportImage";
 type MediaArtwork = {
   key: string;
   data_url: string | null;
@@ -127,6 +127,7 @@ type BatteryNavigator = Navigator & {
   getBattery?: () => Promise<BatteryManagerLike>;
 };
 type ExportResolution = "1920x1080" | "2560x1440" | "3840x2160" | "custom";
+type ExportAspectRatio = "16:9" | "16:10" | "4:3" | "1:1" | "9:16" | "custom";
 type WatermarkBackground = "WHITE" | "BLACK" | "BLUR_WHITE" | "BLUR_BLACK";
 type ExportImageOptions = {
   width: number;
@@ -185,6 +186,15 @@ const exportResolutions: SelectOption<ExportResolution>[] = [
   { value: "custom", label: "自定义" },
 ];
 
+const exportAspectRatios: SelectOption<ExportAspectRatio>[] = [
+  { value: "16:9", label: "16:9" },
+  { value: "16:10", label: "16:10" },
+  { value: "4:3", label: "4:3" },
+  { value: "1:1", label: "1:1" },
+  { value: "9:16", label: "9:16" },
+  { value: "custom", label: "自定义" },
+];
+
 const watermarkBackgrounds: SelectOption<WatermarkBackground>[] = [
   { value: "WHITE", label: "白色" },
   { value: "BLACK", label: "黑色" },
@@ -194,6 +204,25 @@ const watermarkBackgrounds: SelectOption<WatermarkBackground>[] = [
 
 function exportWatermarkHeight(width: number, height: number) {
   return Math.max(24, Math.round(Math.min(width * 0.11, height * 0.18)));
+}
+
+function dimensionsForAspectRatio(
+  aspectRatio: Exclude<ExportAspectRatio, "custom">,
+  currentWidth: number,
+  currentHeight: number,
+) {
+  const [numerator, denominator] = aspectRatio.split(":").map(Number);
+  const longEdge = Math.max(320, Math.min(4096, Math.max(currentWidth, currentHeight)));
+  const longRatio = Math.max(numerator, denominator);
+  const shortRatio = Math.min(numerator, denominator);
+  const scale = Math.min(
+    4096 / longRatio,
+    Math.max(longEdge / longRatio, 320 / shortRatio),
+  );
+  return {
+    width: Math.max(320, Math.round(numerator * scale)),
+    height: Math.max(320, Math.round(denominator * scale)),
+  };
 }
 
 function detectPerformanceTier(): "LOW" | "BALANCED" | "HIGH" {
@@ -263,6 +292,10 @@ function shouldShowPermissionNotice() {
   } catch {
     return true;
   }
+}
+
+function readSettingsRoute(): SettingsRoute {
+  return window.location.hash === "#/export-image" ? "exportImage" : "home";
 }
 
 function acknowledgePermissionNotice() {
@@ -440,6 +473,7 @@ function ChoiceTabs<T extends string | number>({
   options,
   onChange,
   variant = "default",
+  showLabel = true,
 }: {
   icon: IconType;
   label: string;
@@ -447,20 +481,23 @@ function ChoiceTabs<T extends string | number>({
   options: SelectOption<T>[];
   onChange: (value: T) => void;
   variant?: "default" | "drawer";
+  showLabel?: boolean;
 }) {
   const isDrawerVariant = variant === "drawer";
 
   return (
     <div className="px-4 py-4">
-      <div className="mb-3 flex items-center gap-3">
-        <Icon
-          aria-hidden
-          size={20}
-          weight="regular"
-          className="shrink-0 text-white/90"
-        />
-        <span className="text-[14px] font-semibold text-white">{label}</span>
-      </div>
+      {showLabel && (
+        <div className="mb-3 flex items-center gap-3">
+          <Icon
+            aria-hidden
+            size={20}
+            weight="regular"
+            className="shrink-0 text-white/90"
+          />
+          <span className="text-[14px] font-semibold text-white">{label}</span>
+        </div>
+      )}
       <Tabs
         selectedKey={String(value)}
         onSelectionChange={(key) => {
@@ -876,48 +913,52 @@ function DisplaySelector({
 function DrawerHeader({
   title,
   progress,
+  onBack,
 }: {
   title: string;
   progress: number;
+  onBack?: () => void;
 }) {
+  const backButton = (
+    <Button
+      isIconOnly
+      size="sm"
+      variant="ghost"
+      aria-label="返回"
+      onPress={onBack}
+      className="z-30 !bg-white/8 text-white/75 hover:!bg-white/20 hover:text-white !p-0 backdrop-blur-[10px] backdrop-saturate-150 min-w-9 min-h-9 -m-1"
+    >
+      <CaretLeft
+        aria-hidden
+        size={24}
+        className="absolute min-w-6 min-h-6"
+      />
+    </Button>
+  );
+
   return (
     <div className="pointer-events-none absolute inset-x-0 top-0 z-20 h-16">
-      <div
-        aria-hidden
-        className="absolute inset-x-0 top-0 h-20 overflow-hidden transition-opacity duration-200"
-        style={{ opacity: progress }}
-      >
-        <BlurEffect
-          position="top"
-          intensity={64}
-          className="!pointer-events-none !absolute !inset-x-0 !top-0 !h-20 !w-full"
-        />
-      </div>
       <div className="relative flex h-16 items-center justify-between px-5 pt-2">
         <div className="pointer-events-auto">
-          <Drawer.Close asChild>
-            <Button
-              isIconOnly
-              size="sm"
-              variant="ghost"
-              aria-label="返回"
-              className="z-30 !bg-white/8 text-white/75 hover:!bg-white/20 hover:text-white !p-0 backdrop-blur-[10px] backdrop-saturate-150 min-w-9 min-h-9 -m-1"
-            >
-              <CaretLeft
-                aria-hidden
-                size={24}
-                className="absolute min-w-6 min-h-6"
-              />
-            </Button>
-          </Drawer.Close>
+          {onBack ? (
+            backButton
+          ) : (
+            <Drawer.Close asChild>{backButton}</Drawer.Close>
+          )}
         </div>
-        <span
-          aria-hidden
-          className="z-30 pointer-events-none absolute inset-x-20 truncate text-center text-base font-semibold text-white transition-opacity duration-200 -mt-1"
-          style={{ opacity: progress }}
-        >
-          {title}
-        </span>
+        {onBack ? (
+          <h1 className="z-30 pointer-events-none absolute inset-x-20 truncate text-center text-base font-semibold text-white -mt-1">
+            {title}
+          </h1>
+        ) : (
+          <span
+            aria-hidden
+            className="z-30 pointer-events-none absolute inset-x-20 truncate text-center text-base font-semibold text-white transition-opacity duration-200 -mt-1"
+            style={{ opacity: progress }}
+          >
+            {title}
+          </span>
+        )}
       </div>
     </div>
   );
@@ -955,16 +996,127 @@ function DrawerHero({
   );
 }
 
-function ExportImageDrawer({
+function ExportImagePreview({
+  previewUrl,
+  previewPending,
+  previewFailed,
+  width,
+  height,
+  watermarkHeight,
+  previewScale,
+  onResize,
+}: {
+  previewUrl: string;
+  previewPending: boolean;
+  previewFailed: boolean;
+  width: number;
+  height: number;
+  watermarkHeight: number;
+  previewScale: number;
+  onResize: (scale: number) => void;
+}) {
+  const previewHeight = 256;
+  const basePreviewWidth = Math.max(
+    1,
+    Math.round(previewHeight * width / Math.max(1, height + watermarkHeight)),
+  );
+  const previewWidth = Math.max(1, Math.round(basePreviewWidth * previewScale));
+  const scaledPreviewHeight = Math.max(1, Math.round(previewHeight * previewScale));
+
+  const startResize = (event: React.PointerEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+    const startX = event.clientX;
+    const startScale = previewScale;
+    const scalePerPixel = 1 / Math.max(1, previewHeight);
+    const handleMove = (moveEvent: PointerEvent) => {
+      const nextScale = Math.max(
+        0.75,
+        Math.min(
+          1.5,
+          startScale + (moveEvent.clientX - startX) * scalePerPixel,
+        ),
+      );
+      onResize(nextScale);
+    };
+    const stopResize = () => {
+      window.removeEventListener("pointermove", handleMove);
+      window.removeEventListener("pointerup", stopResize);
+    };
+    window.addEventListener("pointermove", handleMove);
+    window.addEventListener("pointerup", stopResize, { once: true });
+  };
+
+  return (
+    <SettingsCard className="!w-fit">
+      <div className="flex justify-center px-3 py-3">
+        <SmoothCorners
+          asChild
+          autoEffects={false}
+          corners={{ radius: 12, smoothing: 0.6 }}
+        >
+          <div
+            className="relative flex shrink-0 items-center justify-center overflow-hidden bg-black/35"
+            style={{
+              width: `${previewWidth}px`,
+              height: `${scaledPreviewHeight}px`,
+            }}
+          >
+            {previewUrl && (
+              <SmoothCorners
+                asChild
+                autoEffects={false}
+                corners={{ radius: 12, smoothing: 0.6 }}
+              >
+                <img
+                  src={previewUrl}
+                  alt="导出效果预览"
+                  className={`absolute left-1/2 top-1/2 max-w-none object-contain transition-opacity ${previewPending ? "opacity-60" : "opacity-100"}`}
+                  style={{
+                    width: `${previewWidth}px`,
+                    height: `${scaledPreviewHeight}px`,
+                    transform: "translate(-50%, -50%)",
+                  }}
+                />
+              </SmoothCorners>
+            )}
+            {!previewUrl && (
+              <p className="px-4 text-center text-xs text-white/55">
+                {previewFailed ? "暂时无法生成效果预览" : "正在生成效果预览…"}
+              </p>
+            )}
+            {previewUrl && previewPending && (
+              <p className="absolute bottom-3 right-3 text-xs text-white/65">
+                正在更新预览…
+              </p>
+            )}
+            <button
+              type="button"
+              aria-label="调整预览大小"
+              className="absolute inset-y-0 right-0 flex w-5 cursor-ew-resize items-center justify-center text-white/70 opacity-75 transition-opacity hover:opacity-100"
+              onPointerDown={startResize}
+            >
+              <DotsSixVerticalIcon aria-hidden size={16} weight="bold" />
+            </button>
+          </div>
+        </SmoothCorners>
+      </div>
+    </SettingsCard>
+  );
+}
+
+function ExportImagePage({
   settings,
   onPreview,
   onExport,
+  onBack,
 }: {
   settings: Settings;
   onPreview: (options: ExportImageOptions) => string;
   onExport: (options: ExportImageOptions) => Promise<string>;
+  onBack: () => void;
 }) {
   const [resolution, setResolution] = useState<ExportResolution>("2560x1440");
+  const [aspectRatio, setAspectRatio] = useState<ExportAspectRatio>("16:9");
   const [width, setWidth] = useState(2560);
   const [height, setHeight] = useState(1440);
   const [distortionPreset, setDistortionPreset] = useState(
@@ -980,6 +1132,7 @@ function ExportImageDrawer({
   const [previewUrl, setPreviewUrl] = useState("");
   const [previewPending, setPreviewPending] = useState(true);
   const [previewFailed, setPreviewFailed] = useState(false);
+  const [previewScale, setPreviewScale] = useState(1);
   const [exporting, setExporting] = useState(false);
   const [resultMessage, setResultMessage] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
@@ -1043,18 +1196,34 @@ function ExportImageDrawer({
     const [nextWidth, nextHeight] = value.split("x").map(Number);
     setWidth(nextWidth);
     setHeight(nextHeight);
+    setAspectRatio("16:9");
     setDistortionPreset((current) => Math.min(current, 4));
+  };
+
+  const selectAspectRatio = (value: ExportAspectRatio) => {
+    setAspectRatio(value);
+    if (value === "custom") return;
+    const nextDimensions = dimensionsForAspectRatio(value, width, height);
+    setWidth(nextDimensions.width);
+    setHeight(nextDimensions.height);
+    const matchingResolution = exportResolutions.find(
+      (option) => option.value !== "custom"
+        && option.value === `${nextDimensions.width}x${nextDimensions.height}`,
+    )?.value;
+    setResolution(matchingResolution ?? "custom");
   };
 
   const changeWidth = (value: number) => {
     if (!Number.isFinite(value)) return;
     setResolution("custom");
+    setAspectRatio("custom");
     setWidth(Math.round(value));
   };
 
   const changeHeight = (value: number) => {
     if (!Number.isFinite(value)) return;
     setResolution("custom");
+    setAspectRatio("custom");
     setHeight(Math.round(value));
   };
 
@@ -1083,182 +1252,196 @@ function ExportImageDrawer({
   };
 
   return (
-    <div className="space-y-5 px-4">
-      <DrawerCard>
-        <div className="px-4 py-4">
-          <div className="mb-3 flex items-center justify-between gap-3">
-            <p className="text-sm font-semibold text-white">效果预览</p>
-            <p className="text-xs text-white/45">
-              {width} × {height + watermarkHeight}
-            </p>
-          </div>
-          <div
-            className="relative flex w-full items-center justify-center overflow-hidden bg-black/35"
-            style={{ aspectRatio: `${width} / ${height + watermarkHeight}` }}
-          >
-            {previewUrl && (
-              <img
-                src={previewUrl}
-                alt="导出效果预览"
-                className={`h-full w-full object-contain transition-opacity ${previewPending ? "opacity-60" : "opacity-100"}`}
-              />
-            )}
-            {!previewUrl && (
-              <p className="px-4 text-center text-xs text-white/55">
-                {previewFailed ? "暂时无法生成效果预览" : "正在生成效果预览…"}
-              </p>
-            )}
-            {previewUrl && previewPending && (
-              <p className="absolute bottom-3 right-3 text-xs text-white/65">
-                正在更新预览…
-              </p>
-            )}
-          </div>
-        </div>
-      </DrawerCard>
-
-      <DrawerCard>
-        <ChoiceTabs
-          icon={MagicWandIcon}
-          label="封面扭曲方案"
-          value={selectedPreset}
-          options={presetOptions}
-          onChange={setDistortionPreset}
-          variant="drawer"
+    <div className="relative flex h-full min-h-0 flex-1 flex-col">
+      <DrawerHeader
+        title="导出图片"
+        progress={1}
+        onBack={onBack}
+      />
+      <div className="flex shrink-0 justify-center px-2 pb-5 z-50 pt-16">
+        <ExportImagePreview
+          previewUrl={previewUrl}
+          previewPending={previewPending}
+          previewFailed={previewFailed}
+          width={width}
+          height={height}
+          watermarkHeight={watermarkHeight}
+          previewScale={previewScale}
+          onResize={setPreviewScale}
         />
-        <Separator className="mx-2 w-[calc(100%-1rem)] bg-white/15" />
-        <RangeSetting
-          icon={FrameCornersIcon}
-          label="扭曲强度"
-          value={distortionStrength}
-          minValue={0}
-          maxValue={1.5}
-          step={0.05}
-          onChange={setDistortionStrength}
-        />
-        <Separator className="mx-2 w-[calc(100%-1rem)] bg-white/15" />
-        <RangeSetting
-          icon={PlayIcon}
-          label="扭曲位置"
-          value={distortionProgress}
-          minValue={0}
-          maxValue={1}
-          step={0.01}
-          onChange={setDistortionProgress}
-        />
-        <Separator className="mx-2 w-[calc(100%-1rem)] bg-white/15" />
-        <RangeSetting
-          icon={DropIcon}
-          label="导出模糊强度"
-          value={blurMultiplier}
-          minValue={0}
-          maxValue={2}
-          step={0.05}
-          onChange={setBlurMultiplier}
-        />
-        <Separator className="mx-2 w-[calc(100%-1rem)] bg-white/15" />
-        <RangeSetting
-          icon={CircleHalfIcon}
-          label="导出画面遮罩"
-          value={scrimAlpha}
-          minValue={0}
-          maxValue={0.8}
-          step={0.05}
-          onChange={setScrimAlpha}
-        />
-      </DrawerCard>
-
-      <DrawerCard>
-        <ChoiceTabs
-          icon={CornersOutIcon}
-          label="导出分辨率"
-          value={resolution}
-          options={exportResolutions}
-          onChange={selectResolution}
-          variant="drawer"
-        />
-        <Separator className="mx-2 w-[calc(100%-1rem)] bg-white/15" />
-        <div className="grid grid-cols-2 gap-3 px-4 py-4">
-          <div className="min-w-0">
-            <div className="mb-2 text-xs font-medium text-white/65">宽度</div>
-            <NumberField
-              aria-label="导出宽度"
-              value={width}
-              minValue={320}
-              maxValue={4096}
-              step={1}
-              onChange={changeWidth}
-              fullWidth
-            >
-              <NumberField.Group className="!w-full !grid-cols-1 !bg-white/8">
-                <NumberField.Input className="!w-full min-w-0 text-white" />
-              </NumberField.Group>
-            </NumberField>
-          </div>
-          <div className="min-w-0">
-            <div className="mb-2 text-xs font-medium text-white/65">高度</div>
-            <NumberField
-              aria-label="导出高度"
-              value={height}
-              minValue={320}
-              maxValue={4096}
-              step={1}
-              onChange={changeHeight}
-              fullWidth
-            >
-              <NumberField.Group className="!w-full !grid-cols-1 !bg-white/8">
-                <NumberField.Input className="!w-full min-w-0 text-white" />
-              </NumberField.Group>
-            </NumberField>
-          </div>
-          <p className="col-span-2 text-xs text-white/45">
-            单边范围为 320–4096 像素，图片最大为 1200 万像素
-          </p>
-        </div>
-        <Separator className="mx-2 w-[calc(100%-1rem)] bg-white/15" />
-        <SettingRow
-          icon={ImageIcon}
-          title="添加歌曲水印"
-          description="在画面下方追加 Logo 与歌曲信息"
-        >
-          <Toggle
-            label="添加歌曲水印"
-            value={watermark}
-            onChange={setWatermark}
-          />
-        </SettingRow>
-        {watermark && (
-          <>
-            <Separator className="mx-2 w-[calc(100%-1rem)] bg-white/15" />
-            <ChoiceTabs
-              icon={CircleHalfIcon}
-              label="水印背景"
-              value={watermarkBackground}
-              options={watermarkBackgrounds}
-              onChange={setWatermarkBackground}
-              variant="drawer"
-            />
-          </>
-        )}
-      </DrawerCard>
-
-      <Button
-        fullWidth
-        size="lg"
-        isDisabled={exporting}
-        onPress={() => void exportImage()}
-        className="bg-white font-semibold text-neutral-900"
+      </div>
+      <OverlayScrollbarsComponent
+        defer
+        className="min-h-0 flex-1 -my-24 overscroll-contain"
+        options={{
+          overflow: { x: "hidden", y: "scroll" },
+          scrollbars: {
+            theme: "os-theme-light",
+            autoHide: "scroll",
+            autoHideDelay: 700,
+          },
+        }}
       >
-        <DownloadSimpleIcon aria-hidden size={20} />
-        {exporting ? "正在导出…" : "导出 PNG 图片"}
-      </Button>
-      {(resultMessage || errorMessage) && (
-        <p
-          className={`break-all px-2 text-center text-xs ${errorMessage ? "text-red-300" : "text-white/65"}`}
+        <div className="flex flex-col gap-5 px-4 py-24 box-border">
+          <div className="order-2">
+            <SettingsCard>
+              <ChoiceTabs
+                icon={MagicWandIcon}
+                label="封面扭曲方案"
+                value={selectedPreset}
+                options={presetOptions}
+                onChange={setDistortionPreset}
+                variant="drawer"
+              />
+              <Separator className="mx-2 w-[calc(100%-1rem)] bg-white/15" />
+              <RangeSetting
+                icon={FrameCornersIcon}
+                label="扭曲强度"
+                value={distortionStrength}
+                minValue={0}
+                maxValue={1.5}
+                step={0.05}
+                onChange={setDistortionStrength}
+              />
+              <Separator className="mx-2 w-[calc(100%-1rem)] bg-white/15" />
+              <RangeSetting
+                icon={PlayIcon}
+                label="扭曲位置"
+                value={distortionProgress}
+                minValue={0}
+                maxValue={1}
+                step={0.01}
+                onChange={setDistortionProgress}
+              />
+              <Separator className="mx-2 w-[calc(100%-1rem)] bg-white/15" />
+              <RangeSetting
+                icon={DropIcon}
+                label="导出模糊强度"
+                value={blurMultiplier}
+                minValue={0}
+                maxValue={2}
+                step={0.05}
+                onChange={setBlurMultiplier}
+              />
+              <Separator className="mx-2 w-[calc(100%-1rem)] bg-white/15" />
+              <RangeSetting
+                icon={CircleHalfIcon}
+                label="导出画面遮罩"
+                value={scrimAlpha}
+                minValue={0}
+                maxValue={0.8}
+                step={0.05}
+                onChange={setScrimAlpha}
+              />
+            </SettingsCard>
+          </div>
+          <div className="order-1">
+            <SettingsCard>
+              <ChoiceTabs
+                icon={CornersOutIcon}
+                label="导出分辨率"
+                value={resolution}
+                options={exportResolutions}
+                onChange={selectResolution}
+                variant="drawer"
+                showLabel={false}
+              />
+              <Separator className="mx-2 w-[calc(100%-1rem)] bg-white/15" />
+              <ChoiceTabs
+                icon={FrameCornersIcon}
+                label="图片比例"
+                value={aspectRatio}
+                options={exportAspectRatios}
+                onChange={selectAspectRatio}
+                variant="drawer"
+              />
+              <Separator className="mx-2 w-[calc(100%-1rem)] bg-white/15" />
+              <div className="grid grid-cols-2 gap-3 px-4 py-4">
+                <div className="min-w-0">
+                  <div className="mb-2 text-xs font-medium text-white/65">宽度</div>
+                  <NumberField
+                    aria-label="导出宽度"
+                    value={width}
+                    minValue={320}
+                    maxValue={4096}
+                    step={1}
+                    onChange={changeWidth}
+                    fullWidth
+                  >
+                    <NumberField.Group className="!w-full !grid-cols-1 !bg-white/8">
+                      <NumberField.Input className="!w-full min-w-0 text-white" />
+                    </NumberField.Group>
+                  </NumberField>
+                </div>
+                <div className="min-w-0">
+                  <div className="mb-2 text-xs font-medium text-white/65">高度</div>
+                  <NumberField
+                    aria-label="导出高度"
+                    value={height}
+                    minValue={320}
+                    maxValue={4096}
+                    step={1}
+                    onChange={changeHeight}
+                    fullWidth
+                  >
+                    <NumberField.Group className="!w-full !grid-cols-1 !bg-white/8">
+                      <NumberField.Input className="!w-full min-w-0 text-white" />
+                    </NumberField.Group>
+                  </NumberField>
+                </div>
+                <p className="col-span-2 text-xs text-white/45">
+                  单边范围为 320–4096 像素，图片最大为 1200 万像素
+                </p>
+              </div>
+              <Separator className="mx-2 w-[calc(100%-1rem)] bg-white/15" />
+              <SettingRow
+                icon={ImageIcon}
+                title="添加歌曲水印"
+                description="在画面下方追加 Logo 与歌曲信息"
+              >
+                <Toggle
+                  label="添加歌曲水印"
+                  value={watermark}
+                  onChange={setWatermark}
+                />
+              </SettingRow>
+              {watermark && (
+                <>
+                  <Separator className="mx-2 w-[calc(100%-1rem)] bg-white/15" />
+                  <ChoiceTabs
+                    icon={CircleHalfIcon}
+                    label="水印背景"
+                    value={watermarkBackground}
+                    options={watermarkBackgrounds}
+                    onChange={setWatermarkBackground}
+                    variant="drawer"
+                  />
+                </>
+              )}
+            </SettingsCard>
+          </div>
+        </div>
+      </OverlayScrollbarsComponent>
+
+      <div className="shrink-0 px-4 pb-4 pt-3 min-h-24">
+        <Button
+          fullWidth
+          size="lg"
+          isDisabled={exporting}
+          onPress={() => void exportImage()}
+          className="bg-white font-semibold text-neutral-900"
         >
-          {errorMessage || resultMessage}
-        </p>
-      )}
+          <DownloadSimpleIcon aria-hidden size={20} />
+          {exporting ? "正在导出…" : "导出 PNG 图片"}
+        </Button>
+        {(resultMessage || errorMessage) && (
+          <p
+            className={`mt-2 break-all px-2 text-center text-xs ${errorMessage ? "text-red-300" : "text-white/65"}`}
+          >
+            {errorMessage || resultMessage}
+          </p>
+        )}
+      </div>
     </div>
   );
 }
@@ -1275,8 +1458,6 @@ function DrawerPageContent({
   displayDiscoveryFailed,
   onDynamicWallpaperDisplayChange,
   onScreenSaverDisplayChange,
-  onPreviewImage,
-  onExportImage,
 }: {
   page: DrawerPage;
   settings: Settings;
@@ -1289,14 +1470,11 @@ function DrawerPageContent({
   displayDiscoveryFailed: boolean;
   onDynamicWallpaperDisplayChange: (id: string, enabled: boolean) => void;
   onScreenSaverDisplayChange: (id: string, enabled: boolean) => void;
-  onPreviewImage: (options: ExportImageOptions) => string;
-  onExportImage: (options: ExportImageOptions) => Promise<string>;
 }) {
   const titles: Record<DrawerPage, string> = {
     advanced: "高级设置",
     dynamicWallpaperDisplays: "动态壁纸显示器",
     screenSaverDisplays: "屏保显示器",
-    exportImage: "导出图片",
     licenses: "开源许可",
   };
   const descriptions: Record<DrawerPage, string> = {
@@ -1305,14 +1483,12 @@ function DrawerPageContent({
       : "调整渲染质量与屏幕方向方案，也可以让 Pear Wall 自动随机切换。",
     dynamicWallpaperDisplays: "选择用于显示动态壁纸的显示器。",
     screenSaverDisplays: "选择用于显示动态屏保画面的显示器，未启用的显示器将保持纯黑。",
-    exportImage: "调整当前封面的画面参数，并导出指定分辨率的 PNG 图片。",
     licenses: "Pear Wall 能够顺利运行，离不开这些优秀的开源库。",
   };
   const icons: Record<DrawerPage, IconType> = {
     advanced: SlidersHorizontalIcon,
     dynamicWallpaperDisplays: DesktopIcon,
     screenSaverDisplays: MonitorIcon,
-    exportImage: DownloadSimpleIcon,
     licenses: FileTextIcon,
   };
   const [scrollTop, setScrollTop] = useState(0);
@@ -1467,14 +1643,6 @@ function DrawerPageContent({
             </div>
           )}
 
-          {page === "exportImage" && (
-            <ExportImageDrawer
-              settings={settings}
-              onPreview={onPreviewImage}
-              onExport={onExportImage}
-            />
-          )}
-
           {page === "licenses" && (
             <div className="space-y-3 px-4">
               <p className="!px-3 text-sm leading-relaxed text-white/65">
@@ -1627,12 +1795,37 @@ export function SettingsApp() {
   const [mediaArtwork, setMediaArtwork] = useState<MediaArtwork | null>(null);
   const [contentVisible, setContentVisible] = useState(true);
   const [pureMode, setPureMode] = useState(false);
+  const [route, setRoute] = useState<SettingsRoute>(readSettingsRoute);
   const [drawerPage, setDrawerPage] = useState<DrawerPage | null>(null);
   const [drawerHandleProgress, setDrawerHandleProgress] = useState(0);
   const previewRef = useRef<HTMLIFrameElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const sharedSaveQueue = useRef<Promise<unknown>>(Promise.resolve());
   const mediaArtworkCache = useRef<MediaArtwork | null>(null);
+
+  useEffect(() => {
+    const handleHashChange = () => setRoute(readSettingsRoute());
+    window.addEventListener("hashchange", handleHashChange);
+    return () => window.removeEventListener("hashchange", handleHashChange);
+  }, []);
+
+  const openExportImagePage = () => {
+    setDrawerPage(null);
+    if (window.location.hash === "#/export-image") {
+      setRoute("exportImage");
+      return;
+    }
+    window.location.hash = "#/export-image";
+  };
+
+  const closeExportImagePage = () => {
+    window.history.replaceState(
+      null,
+      "",
+      `${window.location.pathname}${window.location.search}`,
+    );
+    setRoute("home");
+  };
 
   useEffect(() => {
     if (settings.performanceMode !== "AUTO") {
@@ -2107,7 +2300,7 @@ export function SettingsApp() {
 
       <OverlayScrollbarsComponent
         defer
-        className="settings-scrollbar absolute inset-0 overscroll-contain"
+        className={`settings-scrollbar absolute inset-0 overscroll-contain transition-[translate,opacity] duration-300 ease-out ${route === "exportImage" ? "-translate-x-8 opacity-0" : "translate-x-0 opacity-100"}`}
         options={{
           overflow: { x: "hidden", y: "scroll" },
           scrollbars: {
@@ -2127,7 +2320,7 @@ export function SettingsApp() {
         }}
       >
         <main
-          aria-hidden={!contentVisible}
+          aria-hidden={route !== "home" || !contentVisible}
           className={`mx-auto w-full max-w-lg px-4 pb-12 pt-10 sm:px-6 sm:pt-12 transition-opacity duration-200 ease-out ${contentVisible ? "opacity-100" : "pointer-events-none opacity-0"}`}
         >
           <header className="mb-6 mt-[35dvh]">
@@ -2498,7 +2691,7 @@ export function SettingsApp() {
               <button
                 type="button"
                 className="block w-full text-left"
-                onClick={() => setDrawerPage("exportImage")}
+                onClick={openExportImagePage}
               >
                 <SettingRow
                   icon={DownloadSimpleIcon}
@@ -2591,7 +2784,7 @@ export function SettingsApp() {
         </main>
       </OverlayScrollbarsComponent>
       <Drawer.Root
-        open={drawerPage !== null}
+        open={route === "home" && drawerPage !== null}
         onOpenChange={(open) => {
           if (!open) setDrawerPage(null);
           setDrawerHandleProgress(0);
@@ -2625,13 +2818,26 @@ export function SettingsApp() {
                 displayDiscoveryFailed={displayDiscoveryFailed}
                 onDynamicWallpaperDisplayChange={toggleDynamicWallpaperDisplay}
                 onScreenSaverDisplayChange={toggleScreenSaverDisplay}
-                onPreviewImage={renderCurrentImage}
-                onExportImage={exportCurrentImage}
               />
             )}
           </Drawer.Content>
         </Drawer.Portal>
       </Drawer.Root>
+      <div
+        aria-hidden={route !== "exportImage"}
+        className={`fixed inset-0 z-[70] h-full w-full bg-black/50 text-white transition-opacity duration-300 ease-out ${route === "exportImage" ? "opacity-100" : "pointer-events-none opacity-0"}`}
+      >
+        <div
+          className={`mx-auto h-full w-full max-w-lg transition-[translate,opacity] duration-300 ease-out ${route === "exportImage" ? "translate-x-0 opacity-100" : "pointer-events-none translate-x-8 opacity-0"}`}
+        >
+          <ExportImagePage
+            settings={settings}
+            onPreview={renderCurrentImage}
+            onExport={exportCurrentImage}
+            onBack={closeExportImagePage}
+          />
+        </div>
+      </div>
       <PermissionNotice
         open={permissionNoticeOpen}
         onOpenChange={setPermissionNoticeOpen}
