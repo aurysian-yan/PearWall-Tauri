@@ -12,6 +12,9 @@
     pauseFlow: true,
     pauseArtworkFallback: false,
     hideCursor: true,
+    performanceMode: 'MANUAL',
+    autoBatterySaverMax: 20,
+    autoBatteryBalancedMax: 60,
     renderScale: 0.75,
     blurEnabled: true,
     blurMultiplier: 1,
@@ -54,6 +57,8 @@
   let desktopArtworkFailed = false;
   let screenSaverMode = false;
   let previewReady = false;
+  let performanceStatus = {};
+  let performanceMonitor = null;
   const beatLogState = {
     count: 0,
     previousPulse: 0,
@@ -211,6 +216,22 @@
     document.documentElement.style.cursor = cursor;
     document.body.style.cursor = cursor;
     canvas.style.cursor = cursor;
+  }
+
+  function applyEffectiveSettings() {
+    const resolver = window.PearWallPerformance;
+    const resolution = resolver
+      ? resolver.effectiveSettings(settings, performanceStatus)
+      : { settings, quality: null };
+    renderer.setSettings(resolution.settings);
+  }
+
+  if (window.PearWallPerformance) {
+    performanceMonitor = window.PearWallPerformance.createMonitor((status) => {
+      performanceStatus = status;
+      applyEffectiveSettings();
+    });
+    performanceStatus = performanceMonitor.status();
   }
 
   window.PearWallSetScreenSaverMode = (enabled) => {
@@ -394,13 +415,41 @@
     if (!properties) return;
     const previousArtworkFallback = settings.artworkFallback;
     const artworkFallbackProvided = Boolean(properties.artworkFallback && properties.artworkFallback.value != null);
+    const renderScaleValue = properties.renderScale && properties.renderScale.value;
+    const performanceModeProvided = Boolean(properties.performanceMode && properties.performanceMode.value != null);
+    if (String(renderScaleValue || '').toUpperCase() === 'AUTO') {
+      settings.performanceMode = 'AUTO';
+    } else if (renderScaleValue !== undefined) {
+      settings.renderScale = Math.max(0.25, Math.min(1, numberValue(properties.renderScale, settings.renderScale)));
+    }
+    if (performanceModeProvided) {
+      settings.performanceMode = stringValue(properties.performanceMode, settings.performanceMode).toUpperCase() === 'AUTO'
+        ? 'AUTO'
+        : 'MANUAL';
+    }
+    const legacyBatterySaverProperty = properties.autoBatterySaverThreshold;
+    const saverProperty = properties.autoBatterySaverMax || legacyBatterySaverProperty;
+    if (saverProperty && saverProperty.value !== undefined) {
+      settings.autoBatterySaverMax = Math.max(
+        1,
+        Math.min(98, Math.round(numberValue(saverProperty, settings.autoBatterySaverMax))),
+      );
+    }
+    if (properties.autoBatteryBalancedMax && properties.autoBatteryBalancedMax.value !== undefined) {
+      settings.autoBatteryBalancedMax = Math.max(
+        settings.autoBatterySaverMax + 1,
+        Math.min(99, Math.round(numberValue(
+          properties.autoBatteryBalancedMax,
+          settings.autoBatteryBalancedMax,
+        ))),
+      );
+    }
     settings.audioVisualization = booleanValue(properties.audioVisualization, settings.audioVisualization);
     settings.audioIntensity = Math.max(0.5, Math.min(3, numberValue(properties.audioIntensity, settings.audioIntensity)));
     settings.pauseFlow = booleanValue(properties.pauseFlow, settings.pauseFlow);
     settings.pauseArtworkFallback = booleanValue(properties.pauseArtworkFallback, settings.pauseArtworkFallback);
     settings.hideCursor = booleanValue(properties.hideCursor, settings.hideCursor);
     settings.blurEnabled = booleanValue(properties.blurEnabled, settings.blurEnabled);
-    settings.renderScale = Math.max(0.25, Math.min(1, numberValue(properties.renderScale, settings.renderScale)));
     settings.scrimAlpha = Math.max(0, Math.min(0.8, numberValue(properties.scrimAlpha, settings.scrimAlpha)));
     settings.blurMultiplier = Math.max(0, Math.min(2, numberValue(properties.blurMultiplier, settings.blurMultiplier)));
     settings.flowSpeed = stringValue(properties.flowSpeed, settings.flowSpeed);
@@ -416,7 +465,11 @@
       settings.artworkFallback = settings.customArtwork ? 'CUSTOM' : 'DEFAULT';
     }
     if (settings.artworkFallback === 'DESKTOP' && previousArtworkFallback !== 'DESKTOP') desktopArtworkFailed = false;
-    renderer.setSettings(settings);
+    if (performanceMonitor) {
+      if (settings.performanceMode === 'AUTO') performanceMonitor.start();
+      else performanceMonitor.stop();
+    }
+    applyEffectiveSettings();
     applyCursorVisibility();
     applyCurrentArtwork();
   }

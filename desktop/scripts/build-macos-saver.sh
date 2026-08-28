@@ -33,6 +33,7 @@ xcrun swiftc \
   -framework AppKit \
   -framework Metal \
   -framework MetalKit \
+  -framework IOKit \
   -framework ScreenSaver \
   -framework QuartzCore
 

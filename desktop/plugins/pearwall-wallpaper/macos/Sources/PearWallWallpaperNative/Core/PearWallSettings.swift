@@ -1,5 +1,6 @@
 import Darwin
 import Foundation
+import Metal
 
 func pearWallApplicationSupportDirectory() -> URL? {
     guard let user = getpwuid(getuid()),
@@ -50,6 +51,9 @@ struct PearWallSettings {
     var screenSaverDisplay = PearWallScreenSaverDisplay.primary
     var screenSaverDisplayIds: [String]?
     var showConfigurationDetails = true
+    var performanceMode = "MANUAL"
+    var autoBatterySaverMax = 20
+    var autoBatteryBalancedMax = 60
     var renderScale = 0.75
     var blurEnabled = true
     var blurMultiplier = 1.0
@@ -73,11 +77,30 @@ struct PearWallSettings {
         }
     }
 
-    var metalConfiguration: PearWallMetalConfiguration {
-        PearWallMetalConfiguration(
+    func metalConfiguration(
+        device: MTLDevice,
+        qualityOverride: PearWallAutoQuality? = nil
+    ) -> PearWallMetalConfiguration {
+        let rawRenderScale = min(1, max(0.25, renderScale))
+        let quality: PearWallAutoQuality?
+        if performanceMode.uppercased() == "AUTO" {
+            quality = qualityOverride ?? PearWallPerformance.quality(
+                tier: PearWallPerformance.hardwareTier(for: device),
+                power: PearWallPerformance.powerStatus(),
+                batterySaverMax: autoBatterySaverMax,
+                batteryBalancedMax: autoBatteryBalancedMax
+            )
+        } else {
+            quality = nil
+        }
+        let effectiveRenderScale = quality.map {
+            PearWallPerformance.maximumRenderScale(for: $0)
+        } ?? rawRenderScale
+        let effectiveBlurEnabled = quality == .powerSaving ? false : blurEnabled
+        return PearWallMetalConfiguration(
             audioIntensity: audioIntensity,
-            renderScale: renderScale,
-            blurEnabled: blurEnabled,
+            renderScale: effectiveRenderScale,
+            blurEnabled: effectiveBlurEnabled,
             blurMultiplier: blurMultiplier,
             scrimAlpha: scrimAlpha,
             portraitPreset: portraitPreset,
@@ -102,6 +125,20 @@ struct PearWallSettings {
             object,
             key: "showConfigurationDetails",
             fallback: showConfigurationDetails
+        )
+        performanceMode = Self.string(object, key: "performanceMode", fallback: performanceMode)
+            .uppercased() == "AUTO" ? "AUTO" : "MANUAL"
+        let legacyBatterySaverMax = Self.integer(object, key: "autoBatterySaverThreshold", fallback: autoBatterySaverMax)
+        autoBatterySaverMax = min(
+            98,
+            max(1, Self.integer(object, key: "autoBatterySaverMax", fallback: legacyBatterySaverMax))
+        )
+        autoBatteryBalancedMax = min(
+            99,
+            max(
+                autoBatterySaverMax + 1,
+                Self.integer(object, key: "autoBatteryBalancedMax", fallback: autoBatteryBalancedMax)
+            )
         )
         renderScale = Self.number(object, key: "renderScale", fallback: renderScale)
         blurEnabled = Self.boolean(object, key: "blurEnabled", fallback: blurEnabled)

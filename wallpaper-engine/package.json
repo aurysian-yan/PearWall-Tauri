@@ -3,6 +3,6 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "check": "node --check src/audio.js && node --check src/mesh.js && node --check src/renderer.js && node --check src/main.js"
+    "check": "node --check src/audio.js && node --check src/mesh.js && node --check src/performance.js && node --check src/renderer.js && node --check src/main.js"
   }
 }

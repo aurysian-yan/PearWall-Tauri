@@ -23,6 +23,9 @@ export const defaultSettings: Settings = {
   screenSaverDisplay: 'PRIMARY',
   screenSaverDisplayIds: null,
   showConfigurationDetails: true,
+  performanceMode: 'MANUAL',
+  autoBatterySaverMax: 20,
+  autoBatteryBalancedMax: 60,
   renderScale: 0.75,
   blurEnabled: true,
   blurMultiplier: 1,
@@ -38,6 +41,10 @@ export const defaultSettings: Settings = {
 };
 
 function normalizedSettings(saved: Partial<Settings>): Settings {
+  const savedWithLegacy = saved as Partial<Settings> & {
+    autoBatterySaverThreshold?: unknown;
+  };
+  const { autoBatterySaverThreshold: _, ...savedWithoutLegacy } = savedWithLegacy;
   const savedArtworkFallback = ['DEFAULT', 'CUSTOM', 'DESKTOP'].includes(
     saved.artworkFallback || '',
   )
@@ -51,6 +58,25 @@ function normalizedSettings(saved: Partial<Settings>): Settings {
   const screenSaverDisplay = saved.screenSaverDisplay === 'SECONDARY'
     ? 'SECONDARY'
     : 'PRIMARY';
+  const performanceMode = saved.performanceMode === 'AUTO' ? 'AUTO' : 'MANUAL';
+  const legacyBatterySaverMax = Number(savedWithLegacy.autoBatterySaverThreshold);
+  const autoBatterySaverMax = Math.min(
+    98,
+    Math.max(
+      1,
+      Math.round(
+        Number(saved.autoBatterySaverMax)
+          || (Number.isFinite(legacyBatterySaverMax) ? legacyBatterySaverMax : 20),
+      ),
+    ),
+  );
+  const autoBatteryBalancedMax = Math.min(
+    99,
+    Math.max(
+      autoBatterySaverMax + 1,
+      Math.round(Number(saved.autoBatteryBalancedMax) || 60),
+    ),
+  );
   const screenSaverDisplayIds = Array.isArray(saved.screenSaverDisplayIds)
     ? saved.screenSaverDisplayIds.filter(
       (value): value is string => typeof value === 'string',
@@ -63,7 +89,7 @@ function normalizedSettings(saved: Partial<Settings>): Settings {
     : null;
   return {
     ...defaultSettings,
-    ...saved,
+    ...savedWithoutLegacy,
     audioIntensity: Math.min(
       3,
       Math.max(0.5, Number(saved.audioIntensity) || defaultSettings.audioIntensity),
@@ -72,6 +98,9 @@ function normalizedSettings(saved: Partial<Settings>): Settings {
     dynamicWallpaperDisplayIds,
     screenSaverDisplay,
     screenSaverDisplayIds,
+    performanceMode,
+    autoBatterySaverMax,
+    autoBatteryBalancedMax,
   } as Settings;
 }
 

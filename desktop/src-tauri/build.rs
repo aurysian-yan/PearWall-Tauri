@@ -32,14 +32,21 @@ fn build_macos_native() {
         .flag("-fblocks")
         .flag("-mmacosx-version-min=15.0")
         .compile("pearwall_macos_audio_tap");
+    cc::Build::new()
+        .file("native/macos_power.m")
+        .flag("-fobjc-arc")
+        .flag("-mmacosx-version-min=15.0")
+        .compile("pearwall_macos_power");
     println!("cargo:rustc-link-lib=framework=AppKit");
     println!("cargo:rustc-link-lib=framework=CoreAudio");
     println!("cargo:rustc-link-lib=framework=Foundation");
+    println!("cargo:rustc-link-lib=framework=IOKit");
     println!("cargo:rustc-link-lib=framework=ServiceManagement");
     println!("cargo:rerun-if-changed=native/macos_now_playing.m");
     println!("cargo:rerun-if-changed=native/macos_app_service.m");
     println!("cargo:rerun-if-changed=native/macos_status_item.m");
     println!("cargo:rerun-if-changed=native/macos_audio_tap.m");
+    println!("cargo:rerun-if-changed=native/macos_power.m");
 }
 
 fn add_macos_swift_runtime_paths() {

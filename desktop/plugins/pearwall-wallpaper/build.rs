@@ -11,6 +11,7 @@ fn main() {
         "AppKit",
         "CoreGraphics",
         "Foundation",
+        "IOKit",
         "Metal",
         "MetalKit",
         "QuartzCore",

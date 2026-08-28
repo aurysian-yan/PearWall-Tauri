@@ -2,6 +2,7 @@ export type FlowSpeed = 'SLOW' | 'NORMAL' | 'FAST';
 export type MoruStyle = 'OFF' | 'NARROW' | 'WIDE' | 'SMOOTH';
 export type ArtworkFallback = 'DEFAULT' | 'CUSTOM' | 'DESKTOP';
 export type ScreenSaverDisplay = 'PRIMARY' | 'SECONDARY';
+export type PerformanceMode = 'MANUAL' | 'AUTO';
 
 export type Settings = {
   dynamicWallpaperEnabled: boolean;
@@ -13,6 +14,9 @@ export type Settings = {
   screenSaverDisplay: ScreenSaverDisplay;
   screenSaverDisplayIds: string[] | null;
   showConfigurationDetails: boolean;
+  performanceMode: PerformanceMode;
+  autoBatterySaverMax: number;
+  autoBatteryBalancedMax: number;
   renderScale: number;
   blurEnabled: boolean;
   blurMultiplier: number;

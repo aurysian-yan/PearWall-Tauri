@@ -153,6 +153,7 @@ final class PearWallWallpaperController {
 
         let refreshTimer = Timer(timeInterval: 1, repeats: true) { [weak self] _ in
             self?.refreshSettings(force: false)
+            self?.refreshPerformance()
             self?.reconcileDisplays()
             self?.refreshArtwork()
         }
@@ -193,6 +194,13 @@ final class PearWallWallpaperController {
         guard running else { return }
         for target in targets.values {
             target.session.drawFrame()
+        }
+    }
+
+    private func refreshPerformance() {
+        guard running else { return }
+        for target in targets.values {
+            target.session.refreshPerformance()
         }
     }
 

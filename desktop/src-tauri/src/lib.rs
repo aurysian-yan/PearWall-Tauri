@@ -20,6 +20,8 @@ mod macos_audio;
 #[cfg(target_os = "macos")]
 mod macos_now_playing;
 #[cfg(target_os = "macos")]
+mod macos_power;
+#[cfg(target_os = "macos")]
 mod macos_runtime_state;
 #[cfg(target_os = "macos")]
 mod macos_status_item;
@@ -170,6 +172,55 @@ struct ConnectedDisplay {
     scale_factor: f64,
     is_builtin: bool,
     is_primary: bool,
+}
+
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct PowerStatus {
+    available: bool,
+    battery_percent: Option<u8>,
+    on_battery: Option<bool>,
+    low_power_mode: bool,
+}
+
+#[tauri::command]
+fn get_power_status() -> PowerStatus {
+    #[cfg(windows)]
+    {
+        use windows::Win32::System::Power::{GetSystemPowerStatus, SYSTEM_POWER_STATUS};
+
+        let mut status = SYSTEM_POWER_STATUS::default();
+        if unsafe { GetSystemPowerStatus(&mut status) }.is_ok() {
+            return PowerStatus {
+                available: true,
+                battery_percent: (status.BatteryLifePercent != 255)
+                    .then_some(status.BatteryLifePercent),
+                on_battery: match status.ACLineStatus {
+                    0 => Some(true),
+                    1 => Some(false),
+                    _ => None,
+                },
+                low_power_mode: false,
+            };
+        }
+    }
+
+    #[cfg(target_os = "macos")]
+    if let Some((battery_percent, on_battery, low_power_mode)) = macos_power::read() {
+        return PowerStatus {
+            available: true,
+            battery_percent,
+            on_battery,
+            low_power_mode,
+        };
+    }
+
+    PowerStatus {
+        available: false,
+        battery_percent: None,
+        on_battery: None,
+        low_power_mode: false,
+    }
 }
 
 #[cfg(not(target_os = "macos"))]
@@ -719,6 +770,7 @@ pub fn run() {
             reset_audio,
             get_media_artwork,
             get_connected_displays,
+            get_power_status,
             get_desktop_wallpaper,
             save_exported_image,
             is_screen_saver_mode,

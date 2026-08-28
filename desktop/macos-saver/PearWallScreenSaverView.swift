@@ -177,6 +177,7 @@ final class PearWallScreenSaverView: ScreenSaverView {
         guard refreshTimer == nil else { return }
         let timer = Timer(timeInterval: 1, repeats: true) { [weak self] _ in
             self?.refreshSharedSettings()
+            self?.renderSession?.refreshPerformance()
             self?.reconcileRenderTarget()
             self?.refreshArtwork()
         }

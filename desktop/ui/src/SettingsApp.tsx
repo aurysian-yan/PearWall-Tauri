@@ -17,6 +17,7 @@ import { Drawer } from "vaul";
 import {
   CaretLeft,
   CaretRightIcon,
+  BatteryMediumIcon,
   CheckIcon,
   CornersOutIcon,
   CursorIcon,
@@ -108,6 +109,23 @@ type WallpaperRuntimeStatus = {
   running: boolean;
   displayCount: number;
 };
+type AutoQuality = "POWER_SAVING" | "BALANCED" | "CLEAR";
+type PowerStatus = {
+  available: boolean;
+  batteryPercent: number | null;
+  onBattery: boolean | null;
+  lowPowerMode: boolean;
+};
+type BatteryManagerLike = {
+  level: number;
+  charging: boolean;
+  addEventListener: (type: "levelchange" | "chargingchange", listener: () => void) => void;
+  removeEventListener: (type: "levelchange" | "chargingchange", listener: () => void) => void;
+};
+type BatteryNavigator = Navigator & {
+  deviceMemory?: number;
+  getBattery?: () => Promise<BatteryManagerLike>;
+};
 type ExportResolution = "1920x1080" | "2560x1440" | "3840x2160" | "custom";
 type WatermarkBackground = "WHITE" | "BLACK" | "BLUR_WHITE" | "BLUR_BLACK";
 type ExportImageOptions = {
@@ -147,11 +165,18 @@ const moruStyles: SelectOption<MoruStyle>[] = [
   { value: "SMOOTH", label: "柔和" },
 ];
 
-const renderScales: SelectOption<number>[] = [
+const renderScales: SelectOption<number | "AUTO">[] = [
   { value: 0.5, label: "省电" },
   { value: 0.75, label: "均衡" },
   { value: 1, label: "清晰" },
+  { value: "AUTO", label: "自动" },
 ];
+
+const autoQualityLabels: Record<AutoQuality, string> = {
+  POWER_SAVING: "省电",
+  BALANCED: "均衡",
+  CLEAR: "清晰",
+};
 
 const exportResolutions: SelectOption<ExportResolution>[] = [
   { value: "1920x1080", label: "1080p" },
@@ -169,6 +194,48 @@ const watermarkBackgrounds: SelectOption<WatermarkBackground>[] = [
 
 function exportWatermarkHeight(width: number, height: number) {
   return Math.max(24, Math.round(Math.min(width * 0.11, height * 0.18)));
+}
+
+function detectPerformanceTier(): "LOW" | "BALANCED" | "HIGH" {
+  const runtimeNavigator = navigator as BatteryNavigator;
+  const cores = Number(runtimeNavigator.hardwareConcurrency) || 0;
+  const memory = Number(runtimeNavigator.deviceMemory) || 0;
+  if (cores > 0 && cores <= 4) return "LOW";
+  if (memory > 0 && memory <= 4 && cores <= 8) return "LOW";
+  if (cores >= 8 && memory >= 8) return "HIGH";
+  if (cores >= 12) return "HIGH";
+  return "BALANCED";
+}
+
+function resolveAutoQuality(
+  status: PowerStatus | null,
+  saverMax: number,
+  balancedMax: number,
+): AutoQuality {
+  const tier = detectPerformanceTier();
+  const normalizedStatus = status ?? {
+    available: false,
+    batteryPercent: null,
+    onBattery: null,
+    lowPowerMode: false,
+  };
+  const normalizedSaverMax = Math.max(1, Math.min(98, Math.round(saverMax)));
+  const normalizedBalancedMax = Math.max(
+    normalizedSaverMax + 1,
+    Math.min(99, Math.round(balancedMax)),
+  );
+  if (normalizedStatus.lowPowerMode || tier === "LOW") return "POWER_SAVING";
+  if (normalizedStatus.batteryPercent !== null) {
+    if (normalizedStatus.batteryPercent < normalizedSaverMax) {
+      return "POWER_SAVING";
+    }
+    if (normalizedStatus.batteryPercent < normalizedBalancedMax) {
+      return "BALANCED";
+    }
+    return "CLEAR";
+  }
+  if (normalizedStatus.onBattery === false && tier === "HIGH") return "CLEAR";
+  return "BALANCED";
 }
 
 const portraitPresets: SelectOption<number>[] = [
@@ -280,6 +347,88 @@ function RangeSetting({
           <Slider.Thumb className="border-0 bg-white shadow-md" />
         </Slider.Track>
       </Slider>
+    </div>
+  );
+}
+
+function BatteryRangeSetting({
+  values,
+  currentQuality,
+  onChange,
+  icon: Icon,
+}: {
+  icon: IconType;
+  values: [number, number];
+  currentQuality: AutoQuality;
+  onChange: (values: [number, number]) => void;
+}) {
+  const [saverMax, balancedMax] = values;
+
+  return (
+    <div className="px-4 py-4">
+      <div className="mb-3 flex items-center justify-between gap-3 text-sm font-medium text-white/80">
+        <Icon
+          aria-hidden
+          size={20}
+          weight="regular"
+          className="shrink-0 text-white/90"
+        />
+        <span className="w-full text-[14px] font-semibold text-white">
+          自动电量范围
+        </span>
+        <span className="whitespace-nowrap text-white/75">
+          {saverMax}% / {balancedMax}%
+        </span>
+      </div>
+      <div className="relative">
+        <Slider
+          aria-label="自动电量范围"
+          value={[saverMax / 100, balancedMax / 100]}
+          minValue={0}
+          maxValue={1}
+          step={0.01}
+          onChange={(next) => {
+            if (!Array.isArray(next) || next.length < 2) return;
+            const ordered = next
+              .map((value) => Math.round(Number(value) * 100))
+              .sort((left, right) => left - right);
+            const nextSaverMax = Math.min(98, Math.max(1, ordered[0]));
+            const nextBalancedMax = Math.min(
+              99,
+              Math.max(nextSaverMax + 1, ordered[1]),
+            );
+            onChange([nextSaverMax, nextBalancedMax]);
+          }}
+        >
+          <Slider.Track className="bg-white/20">
+            <Slider.Fill />
+            <Slider.Thumb
+              index={0}
+              aria-label="省电上限"
+              className="border-0 bg-white shadow-md"
+            />
+            <Slider.Thumb
+              index={1}
+              aria-label="均衡上限"
+              className="border-0 bg-white shadow-md"
+            />
+          </Slider.Track>
+        </Slider>
+      </div>
+      <div className="mt-1 flex justify-between text-xs text-white/55">
+        <span>省电 &lt; {saverMax}%</span>
+        <span>均衡 {saverMax}–{balancedMax - 1}%</span>
+        <span>清晰 ≥ {balancedMax}%</span>
+      </div>
+      <div className="mt-3 flex items-center justify-between text-xs text-white/65">
+        <span>当前档位</span>
+        <span className="font-semibold text-white">
+          {autoQualityLabels[currentQuality]}
+        </span>
+      </div>
+      <p className="mt-2 text-[11px] leading-relaxed text-white/45">
+        自动模式参考：设备性能档位、电池电量、供电状态和系统低电量模式
+      </p>
     </div>
   );
 }
@@ -1117,6 +1266,7 @@ function ExportImageDrawer({
 function DrawerPageContent({
   page,
   settings,
+  currentAutoQuality,
   update,
   isMacOSRuntime,
   supportsScreenSaverDisplays,
@@ -1130,6 +1280,7 @@ function DrawerPageContent({
 }: {
   page: DrawerPage;
   settings: Settings;
+  currentAutoQuality: AutoQuality;
   update: UpdateSetting;
   isMacOSRuntime: boolean;
   supportsScreenSaverDisplays: boolean;
@@ -1203,11 +1354,34 @@ function DrawerPageContent({
                 <ChoiceTabs
                   icon={GaugeIcon}
                   label="渲染质量"
-                  value={settings.renderScale}
+                  value={settings.performanceMode === "AUTO"
+                    ? "AUTO"
+                    : settings.renderScale}
                   options={renderScales}
-                  onChange={(value) => update("renderScale", value)}
+                  onChange={(value) => {
+                    if (value === "AUTO") {
+                      update("performanceMode", "AUTO");
+                      return;
+                    }
+                    update("renderScale", value as number);
+                    update("performanceMode", "MANUAL");
+                  }}
                   variant="drawer"
                 />
+                {settings.performanceMode === "AUTO" && (
+                  <>
+                    <Separator className="mx-2 w-[calc(100%-1rem)] bg-white/15" />
+                    <BatteryRangeSetting
+                      icon={BatteryMediumIcon}
+                      values={[settings.autoBatterySaverMax, settings.autoBatteryBalancedMax]}
+                      currentQuality={currentAutoQuality}
+                      onChange={([saverMax, balancedMax]) => {
+                        update("autoBatterySaverMax", saverMax);
+                        update("autoBatteryBalancedMax", balancedMax);
+                      }}
+                    />
+                  </>
+                )}
                 <Separator className="mx-2 w-[calc(100%-1rem)] bg-white/15" />
                 <ChoiceTabs
                   icon={DeviceMobileIcon}
@@ -1429,6 +1603,7 @@ export function SettingsApp() {
   const supportsScreenSaverDisplays = isMacOSRuntime || isWindowsRuntime;
   const usesSharedSettings = isTauriRuntime;
   const [settings, setSettings] = useState<Settings>(loadSettings);
+  const [powerStatus, setPowerStatus] = useState<PowerStatus | null>(null);
   const [connectedDisplays, setConnectedDisplays] = useState<ConnectedDisplay[]>([]);
   const [displayLoading, setDisplayLoading] = useState(supportsDynamicWallpaper);
   const [displayDiscoveryFailed, setDisplayDiscoveryFailed] = useState(false);
@@ -1458,6 +1633,96 @@ export function SettingsApp() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const sharedSaveQueue = useRef<Promise<unknown>>(Promise.resolve());
   const mediaArtworkCache = useRef<MediaArtwork | null>(null);
+
+  useEffect(() => {
+    if (settings.performanceMode !== "AUTO") {
+      setPowerStatus(null);
+      return;
+    }
+    let disposed = false;
+    let pending = false;
+    let battery: BatteryManagerLike | null = null;
+
+    const updateFromBattery = () => {
+      if (disposed || !battery) return;
+      setPowerStatus({
+        available: true,
+        batteryPercent: Math.round(battery.level * 100),
+        onBattery: !battery.charging,
+        lowPowerMode: false,
+      });
+    };
+
+    const readPowerStatus = async () => {
+      if (disposed || pending) return;
+      pending = true;
+      try {
+        let nextStatus: PowerStatus | null = null;
+        if (isTauriRuntime) {
+          try {
+            const nativeStatus = await invoke<PowerStatus>("get_power_status");
+            if (nativeStatus.available) nextStatus = nativeStatus;
+          } catch {
+            nextStatus = null;
+          }
+        }
+        if (!nextStatus) {
+          const batteryNavigator = navigator as BatteryNavigator;
+          if (batteryNavigator.getBattery) {
+            const nextBattery = battery ?? await batteryNavigator.getBattery();
+            if (disposed) return;
+            if (!battery) {
+              battery = nextBattery;
+              battery.addEventListener("levelchange", updateFromBattery);
+              battery.addEventListener("chargingchange", updateFromBattery);
+            }
+            nextStatus = {
+              available: true,
+              batteryPercent: Math.round(nextBattery.level * 100),
+              onBattery: !nextBattery.charging,
+              lowPowerMode: false,
+            };
+          }
+        }
+        if (!disposed) {
+          setPowerStatus(nextStatus ?? {
+            available: false,
+            batteryPercent: null,
+            onBattery: null,
+            lowPowerMode: false,
+          });
+        }
+      } catch {
+        if (!disposed) {
+          setPowerStatus({
+            available: false,
+            batteryPercent: null,
+            onBattery: null,
+            lowPowerMode: false,
+          });
+        }
+      } finally {
+        pending = false;
+      }
+    };
+
+    void readPowerStatus();
+    const timer = window.setInterval(() => {
+      void readPowerStatus();
+    }, 60 * 1000);
+    return () => {
+      disposed = true;
+      window.clearInterval(timer);
+      battery?.removeEventListener("levelchange", updateFromBattery);
+      battery?.removeEventListener("chargingchange", updateFromBattery);
+    };
+  }, [isTauriRuntime, settings.performanceMode]);
+
+  const currentAutoQuality = resolveAutoQuality(
+    powerStatus,
+    settings.autoBatterySaverMax,
+    settings.autoBatteryBalancedMax,
+  );
 
   const update: UpdateSetting = (key, value) => {
     if (
@@ -2351,6 +2616,7 @@ export function SettingsApp() {
               <DrawerPageContent
                 page={drawerPage}
                 settings={settings}
+                currentAutoQuality={currentAutoQuality}
                 update={update}
                 isMacOSRuntime={isMacOSRuntime}
                 supportsScreenSaverDisplays={supportsScreenSaverDisplays}

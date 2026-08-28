@@ -13,6 +13,7 @@ final class PearWallRenderSession {
 
     let view: MTKView
     private let renderer: PearWallMetalRenderer
+    private let device: MTLDevice
     private let resourceBundle: Bundle
     private let state: PearWallRenderState
     private let runtimeStateReader = PearWallRuntimeStateReader()
@@ -21,6 +22,7 @@ final class PearWallRenderSession {
     private var missingArtworkSince: Date?
     private var smoothedAudioPulse = 0.0
     private var lastAudioPulseUptime: TimeInterval?
+    private var lastPerformanceCheckUptime: TimeInterval?
 
     init?(
         frame: NSRect,
@@ -46,15 +48,46 @@ final class PearWallRenderSession {
         }
         self.view = view
         self.renderer = renderer
+        self.device = device
         self.resourceBundle = resourceBundle
         self.state = state
         self.settings = settings
-        renderer.setConfiguration(settings.metalConfiguration)
+        renderer.setConfiguration(settings.metalConfiguration(device: device))
+        if settings.performanceMode.uppercased() == "AUTO" {
+            lastPerformanceCheckUptime = ProcessInfo.processInfo.systemUptime
+        }
     }
 
     func updateSettings(_ settings: PearWallSettings) {
         self.settings = settings
-        renderer.setConfiguration(settings.metalConfiguration)
+        lastPerformanceCheckUptime = nil
+        if settings.performanceMode.uppercased() == "AUTO" {
+            refreshPerformance(force: true)
+        } else {
+            renderer.setConfiguration(settings.metalConfiguration(device: device))
+        }
+    }
+
+    func refreshPerformance(force: Bool = false) {
+        guard settings.performanceMode.uppercased() == "AUTO" else { return }
+        let now = ProcessInfo.processInfo.systemUptime
+        if !force,
+           let lastPerformanceCheckUptime,
+           now - lastPerformanceCheckUptime < 60 {
+            return
+        }
+        lastPerformanceCheckUptime = now
+        let power = PearWallPerformance.powerStatus()
+        let quality = PearWallPerformance.quality(
+            tier: PearWallPerformance.hardwareTier(for: device),
+            power: power,
+            batterySaverMax: settings.autoBatterySaverMax,
+            batteryBalancedMax: settings.autoBatteryBalancedMax
+        )
+        renderer.setConfiguration(settings.metalConfiguration(
+            device: device,
+            qualityOverride: quality
+        ))
     }
 
     func drawFrame() {
