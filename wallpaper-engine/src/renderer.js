@@ -9,6 +9,8 @@
   const MORU_STYLES = new Set(['OFF', 'NARROW', 'WIDE', 'SMOOTH']);
   const PRESET_COUNTS = { portrait: 4, landscape: 5 };
   const SCREEN_SAVER_MAX_PIXELS = 1920 * 1080;
+  const MOBILE_MAX_PIXELS = 1920 * 1080;
+  const IS_ANDROID = typeof navigator !== 'undefined' && /Android/i.test(navigator.userAgent || '');
 
   function clamp(value, min, max) {
     return Math.max(min, Math.min(max, value));
@@ -16,6 +18,17 @@
 
   function lerp(from, to, amount) {
     return from + (to - from) * amount;
+  }
+
+  function flowSpeedMultiplier(value) {
+    switch (String(value || '').toUpperCase()) {
+      case 'SLOW':
+        return 0.5;
+      case 'FAST':
+        return 2;
+      default:
+        return 1;
+    }
   }
 
   function compileShader(gl, type, source) {
@@ -345,7 +358,7 @@
       this.bindTarget(rotation);
       gl.clear(gl.COLOR_BUFFER_BIT);
       this.rotationProgram.use();
-      this.rotationProgram.float('uTime', time * (this.settings.flowSpeed === 'FAST' ? 2 : 1));
+      this.rotationProgram.float('uTime', time);
       const aspect = rotation.width / rotation.height;
       this.rotationProgram.vec2('uViewScale', aspect >= 1 ? 1 : 1 / aspect, aspect >= 1 ? aspect : 1);
       this.rotationProgram.vec3('uImageScales', imageScale, imageScale, imageScale);
@@ -477,17 +490,18 @@
       this.lastAudioPulseTimestamp = timestamp;
       const transitionMix = this.getTransitionMix(timestamp);
       const blurSigma = 24 * this.settings.blurMultiplier;
+      const motionTime = time * flowSpeedMultiplier(this.settings.flowSpeed);
       this.drawBackdrop(
         1 + IMAGE_PULSE_INTENSITY
           * this.settings.audioIntensity
           * this.smoothedAudioPulse
           * this.smoothedAudioPulse,
         blurSigma,
-        time,
+        motionTime,
         transitionMix,
         this.targets.lyrics,
       );
-      this.renderMaterial(this.targets.lyrics.texture, this.targets.lyrics.texture, 1, time);
+      this.renderMaterial(this.targets.lyrics.texture, this.targets.lyrics.texture, 1, motionTime);
     }
 
     exportPixels(options) {
@@ -536,8 +550,11 @@
       const requestedWidth = Math.max(1, Math.round(this.canvas.clientWidth * ratio));
       const requestedHeight = Math.max(1, Math.round(this.canvas.clientHeight * ratio));
       const requestedPixels = requestedWidth * requestedHeight;
-      const budgetScale = window.PearWallNativeFrameDriver && requestedPixels > SCREEN_SAVER_MAX_PIXELS
-        ? Math.sqrt(SCREEN_SAVER_MAX_PIXELS / requestedPixels)
+      const pixelBudget = window.PearWallNativeFrameDriver
+        ? SCREEN_SAVER_MAX_PIXELS
+        : (IS_ANDROID ? MOBILE_MAX_PIXELS : 0);
+      const budgetScale = pixelBudget > 0 && requestedPixels > pixelBudget
+        ? Math.sqrt(pixelBudget / requestedPixels)
         : 1;
       const width = Math.max(1, Math.round(requestedWidth * budgetScale));
       const height = Math.max(1, Math.round(requestedHeight * budgetScale));

@@ -10,6 +10,7 @@
     audioVisualization: false,
     audioIntensity: 1,
     pauseFlow: true,
+    pauseArtworkFallback: false,
     hideCursor: true,
     renderScale: 0.75,
     blurEnabled: true,
@@ -45,6 +46,7 @@
   let watermarkArtworkSource = '';
   let watermarkArtworkImage = null;
   let mediaArtworkAvailable = false;
+  let mediaArtworkSource = '';
   let mediaArtworkMissing = false;
   let mediaArtworkFallbackTimer = 0;
   let desktopArtworkSource = '';
@@ -276,8 +278,10 @@
     mediaArtworkMissing = false;
     clearMediaArtworkFallbackTimer();
     mediaArtworkAvailable = true;
+    mediaArtworkSource = source;
     cacheWatermarkArtwork(source);
-    renderer.setArtworkSource(source);
+    if (playbackPlaying || !settings.pauseArtworkFallback) renderer.setArtworkSource(source);
+    else applyArtworkFallback(true);
     return true;
   }
 
@@ -341,8 +345,8 @@
       });
   }
 
-  function applyArtworkFallback() {
-    if (mediaArtworkAvailable) return;
+  function applyArtworkFallback(force = false) {
+    if (mediaArtworkAvailable && !force) return;
     if (settings.artworkFallback === 'CUSTOM' && settings.customArtwork) {
       renderer.setArtworkSource(fileArtworkSource(settings.customArtwork));
       return;
@@ -374,6 +378,18 @@
       });
   }
 
+  function applyCurrentArtwork() {
+    if (settings.pauseArtworkFallback && !playbackPlaying) {
+      applyArtworkFallback(true);
+      return;
+    }
+    if (mediaArtworkAvailable && mediaArtworkSource) {
+      renderer.setArtworkSource(mediaArtworkSource);
+      return;
+    }
+    applyArtworkFallback();
+  }
+
   function applyUserProperties(properties) {
     if (!properties) return;
     const previousArtworkFallback = settings.artworkFallback;
@@ -381,6 +397,7 @@
     settings.audioVisualization = booleanValue(properties.audioVisualization, settings.audioVisualization);
     settings.audioIntensity = Math.max(0.5, Math.min(3, numberValue(properties.audioIntensity, settings.audioIntensity)));
     settings.pauseFlow = booleanValue(properties.pauseFlow, settings.pauseFlow);
+    settings.pauseArtworkFallback = booleanValue(properties.pauseArtworkFallback, settings.pauseArtworkFallback);
     settings.hideCursor = booleanValue(properties.hideCursor, settings.hideCursor);
     settings.blurEnabled = booleanValue(properties.blurEnabled, settings.blurEnabled);
     settings.renderScale = Math.max(0.25, Math.min(1, numberValue(properties.renderScale, settings.renderScale)));
@@ -401,7 +418,7 @@
     if (settings.artworkFallback === 'DESKTOP' && previousArtworkFallback !== 'DESKTOP') desktopArtworkFailed = false;
     renderer.setSettings(settings);
     applyCursorVisibility();
-    applyArtworkFallback();
+    applyCurrentArtwork();
   }
 
   function setPlaybackState(playing) {
@@ -412,11 +429,12 @@
       analyzer.reset();
       if (tauriInvoke) tauriInvoke('reset_audio').catch(() => {});
       resetRustAudioPulse();
+      if (settings.pauseArtworkFallback) applyArtworkFallback(true);
     } else if (mediaArtworkMissing) {
       confirmMissingMediaArtwork();
+    } else {
+      applyCurrentArtwork();
     }
-    if (playing) return;
-    applyArtworkFallback();
   }
 
   function watermarkHeight(width, height) {

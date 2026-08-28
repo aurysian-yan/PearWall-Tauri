@@ -1,22 +1,78 @@
 {
-  "description": "Pear Wall 动态壁纸",
+  "description": "Pear Wall 动态壁纸\n官网：https://pearwall.aurysian.top",
   "file": "index.html",
   "general": {
     "properties": {
+      "brandHeader": {
+        "order": 100,
+        "text": "<center><img src='assets/pearwall-logo.png' width='180' height='62' alt='🍐 Pear Wall'></center>",
+        "type": "text"
+      },
       "schemecolor": {
-        "order": 0,
+        "order": 110,
         "text": "主题颜色",
         "type": "color",
         "value": "0 0 0"
       },
+      "groupArtwork": {
+        "order": 200,
+        "text": "未获取到封面时",
+        "type": "group"
+      },
+      "artworkTip": {
+        "order": 210,
+        "text": "实验性功能：封面只在媒体信息变化时刷新。若当前歌曲已在播放，请切歌或暂停后继续；同时确认 Wallpaper Engine 设置中的媒体集成已开启。",
+        "type": "text"
+      },
+      "artworkFallback": {
+        "order": 220,
+        "text": "封面来源",
+        "type": "combo",
+        "value": "DEFAULT",
+        "options": [
+          { "label": "使用默认封面", "value": "DEFAULT" },
+          { "label": "使用自选图片", "value": "CUSTOM" }
+        ]
+      },
+      "customArtwork": {
+        "order": 230,
+        "condition": "artworkFallback.value == \"CUSTOM\"",
+        "text": "使用自选图片",
+        "type": "file",
+        "fileType": "image",
+        "value": ""
+      },
+      "groupPause": {
+        "order": 300,
+        "text": "暂停时",
+        "type": "group"
+      },
+      "pauseFlow": {
+        "order": 310,
+        "text": "暂停流动效果",
+        "type": "bool",
+        "value": true
+      },
+      "pauseArtworkFallback": {
+        "order": 320,
+        "text": "暂停时显示替补图片",
+        "type": "bool",
+        "value": false
+      },
+      "groupAppearance": {
+        "order": 400,
+        "text": "画面效果",
+        "type": "group"
+      },
       "audioVisualization": {
-        "order": 10,
-        "text": "音频可视化",
+        "order": 410,
+        "text": "开启音频可视化（实验性）",
         "type": "bool",
         "value": true
       },
       "audioIntensity": {
-        "order": 15,
+        "order": 420,
+        "condition": "audioVisualization.value == true",
         "text": "音频律动强度",
         "type": "slider",
         "value": 1,
@@ -26,42 +82,15 @@
         "precision": 1,
         "step": 0.1
       },
-      "pauseFlow": {
-        "order": 20,
-        "text": "暂停时冻结画面",
-        "type": "bool",
-        "value": true
-      },
       "blurEnabled": {
-        "order": 30,
-        "text": "启用背景模糊",
+        "order": 430,
+        "text": "背景模糊",
         "type": "bool",
         "value": true
-      },
-      "renderScale": {
-        "order": 40,
-        "text": "渲染分辨率",
-        "type": "slider",
-        "value": 0.75,
-        "min": 0.25,
-        "max": 1,
-        "fraction": true,
-        "precision": 2,
-        "step": 0.01
-      },
-      "scrimAlpha": {
-        "order": 50,
-        "text": "暗角强度",
-        "type": "slider",
-        "value": 0.4,
-        "min": 0,
-        "max": 0.8,
-        "fraction": true,
-        "precision": 2,
-        "step": 0.01
       },
       "blurMultiplier": {
-        "order": 60,
+        "order": 440,
+        "condition": "blurEnabled.value == true",
         "text": "模糊强度",
         "type": "slider",
         "value": 1,
@@ -71,65 +100,96 @@
         "precision": 2,
         "step": 0.01
       },
+      "scrimAlpha": {
+        "order": 450,
+        "text": "画面遮罩",
+        "type": "slider",
+        "value": 0.4,
+        "min": 0,
+        "max": 0.8,
+        "fraction": true,
+        "precision": 2,
+        "step": 0.01
+      },
       "flowSpeed": {
-        "order": 70,
+        "order": 460,
         "text": "流动速度",
         "type": "combo",
         "value": "NORMAL",
         "options": [
+          { "label": "舒缓", "value": "SLOW" },
           { "label": "标准", "value": "NORMAL" },
-          { "label": "快速", "value": "FAST" }
+          { "label": "活跃", "value": "FAST" }
         ]
       },
       "moruStyle": {
-        "order": 80,
-        "text": "Moru 样式",
+        "order": 470,
+        "text": "光栅玻璃",
         "type": "combo",
         "value": "OFF",
         "options": [
           { "label": "关闭", "value": "OFF" },
-          { "label": "窄", "value": "NARROW" },
-          { "label": "宽", "value": "WIDE" },
+          { "label": "细腻", "value": "NARROW" },
+          { "label": "宽阔", "value": "WIDE" },
           { "label": "柔和", "value": "SMOOTH" }
         ]
       },
+      "groupAdvanced": {
+        "order": 500,
+        "text": "高级设置",
+        "type": "group"
+      },
+      "renderScale": {
+        "order": 510,
+        "text": "渲染质量",
+        "type": "combo",
+        "value": 0.75,
+        "options": [
+          { "label": "省电", "value": 0.5 },
+          { "label": "均衡", "value": 0.75 },
+          { "label": "清晰", "value": 1 }
+        ]
+      },
       "portraitPreset": {
-        "order": 90,
-        "text": "竖屏网格",
+        "order": 520,
+        "text": "竖屏方案",
         "type": "combo",
         "value": 0,
         "options": [
-          { "label": "预设 1", "value": 0 },
-          { "label": "预设 2", "value": 1 },
-          { "label": "预设 3", "value": 2 },
-          { "label": "预设 4", "value": 3 }
+          { "label": "方案 1", "value": 0 },
+          { "label": "方案 2", "value": 1 },
+          { "label": "方案 3", "value": 2 },
+          { "label": "方案 4", "value": 3 }
         ]
       },
       "landscapePreset": {
-        "order": 100,
-        "text": "横屏网格",
+        "order": 530,
+        "text": "横屏方案",
         "type": "combo",
         "value": 0,
         "options": [
-          { "label": "预设 1", "value": 0 },
-          { "label": "预设 2", "value": 1 },
-          { "label": "预设 3", "value": 2 },
-          { "label": "预设 4", "value": 3 },
-          { "label": "预设 5", "value": 4 }
+          { "label": "方案 1", "value": 0 },
+          { "label": "方案 2", "value": 1 },
+          { "label": "方案 3", "value": 2 },
+          { "label": "方案 4", "value": 3 },
+          { "label": "方案 5", "value": 4 }
         ]
       },
       "randomPreset": {
-        "order": 105,
-        "text": "随机切换方案",
+        "order": 540,
+        "text": "随机切换",
         "type": "bool",
         "value": false
       },
-      "customArtwork": {
-        "order": 110,
-        "text": "自定义封面",
-        "type": "file",
-        "fileType": "image",
-        "value": ""
+      "groupAbout": {
+        "order": 600,
+        "text": "关于",
+        "type": "group"
+      },
+      "websiteFooter": {
+        "order": 610,
+        "text": "壁纸另提供屏幕保护程序版本 访问pearwall.aurysian.top了解更多",
+        "type": "text"
       }
     },
     "supportsaudioprocessing": true

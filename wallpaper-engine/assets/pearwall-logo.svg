@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="360" height="88" viewBox="0 0 360 88" role="img" aria-labelledby="title">
+  <title id="title">Pear Wall</title>
+  <rect width="360" height="88" fill="#0c1224"/>
+  <path d="M38 27c-5 0-9 4-9 9 0 12 8 21 18 21s18-9 18-21c0-5-4-9-9-9-3 0-6 2-9 5-3-3-6-5-9-5Z" fill="#8bd9bd"/>
+  <path d="M47 27c1-7 6-11 13-12-1 7-5 11-13 12Z" fill="#55c79a"/>
+  <text x="83" y="56" fill="#fff" font-family="Arial, Helvetica, sans-serif" font-size="32" font-weight="600" letter-spacing="0.5">Pear Wall</text>
+</svg>
