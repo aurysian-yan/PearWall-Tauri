@@ -592,7 +592,8 @@
     const centerY = height + stripHeight / 2;
     const logoHeight = stripHeight * 0.31;
     const logoWidth = logoHeight * 64 / 19;
-    const logoX = 28;
+    const previewRenderScale = Math.min(1, 720 / Math.max(width, height));
+    const logoX = 28 / previewRenderScale;
     const logoY = centerY - logoHeight / 2;
     const logoPath = String(options.watermarkLogoPath || '');
     let logoDrawn = false;
