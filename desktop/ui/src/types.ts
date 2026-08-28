@@ -4,8 +4,9 @@ export type ArtworkFallback = 'DEFAULT' | 'CUSTOM' | 'DESKTOP';
 export type ScreenSaverDisplay = 'PRIMARY' | 'SECONDARY';
 export type PerformanceMode = 'MANUAL' | 'AUTO';
 export type ExportResolution = '1920x1080' | '2560x1440' | '3840x2160' | 'custom';
-export type ExportAspectRatio = '16:9' | '16:10' | '4:3' | '1:1' | '9:16' | 'custom';
+export type ExportAspectRatio = '16:9' | '16:10' | '4:3' | '1:1' | 'custom';
 export type WatermarkBackground = 'WHITE' | 'BLACK' | 'BLUR_WHITE' | 'BLUR_BLACK';
+export type WatermarkPlacement = 'OVERLAY' | 'BELOW';
 
 export type ExportSettings = {
   resolution: ExportResolution;
@@ -19,6 +20,7 @@ export type ExportSettings = {
   scrimAlpha: number;
   watermark: boolean;
   watermarkBackground: WatermarkBackground;
+  watermarkPlacement: WatermarkPlacement;
   previewScale: number;
   askForLocation: boolean;
   defaultDirectory: string;

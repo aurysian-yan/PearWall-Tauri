@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom/client';
 import { I18nProvider } from '@heroui/react';
 import { SettingsApp } from './SettingsApp';
 import './index.css';
+import 'sonner/dist/styles.css';
 
 if (/Windows/i.test(navigator.userAgent)) {
   document.documentElement.classList.add('windows');

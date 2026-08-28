@@ -6,17 +6,23 @@ import {
   Separator,
   Slider,
   Tabs,
+  Spinner,
 } from "@heroui/react";
 import { SmoothCorners } from "@lisse/react";
 import { OverlayScrollbarsComponent } from "overlayscrollbars-react";
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { open as openDialog, save as saveFile } from "@tauri-apps/plugin-dialog";
+import {
+  open as openDialog,
+  save as saveFile,
+} from "@tauri-apps/plugin-dialog";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { Drawer } from "vaul";
+import { Toaster, toast } from "sonner";
 import {
   CaretLeft,
   CaretRightIcon,
+  SwapIcon,
   BatteryMediumIcon,
   CheckIcon,
   CornersOutIcon,
@@ -71,6 +77,7 @@ import type {
   MoruStyle,
   Settings,
   WatermarkBackground,
+  WatermarkPlacement,
 } from "./types";
 import { DynamicDrawerHandle } from "./DynamicDrawerHandle";
 import { PearWallLogo } from "./PearWallLogo";
@@ -87,10 +94,7 @@ import licenseDataJson from "./generated/openSourceLicenses.json";
 
 type SelectOption<T extends string | number> = { value: T; label: string };
 type DrawerPage =
-  | "advanced"
-  | "dynamicWallpaperDisplays"
-  | "screenSaverDisplays"
-  | "licenses";
+  "advanced" | "dynamicWallpaperDisplays" | "screenSaverDisplays" | "licenses";
 type SettingsRoute = "home" | "exportImage";
 type MediaArtwork = {
   key: string;
@@ -128,8 +132,14 @@ type PowerStatus = {
 type BatteryManagerLike = {
   level: number;
   charging: boolean;
-  addEventListener: (type: "levelchange" | "chargingchange", listener: () => void) => void;
-  removeEventListener: (type: "levelchange" | "chargingchange", listener: () => void) => void;
+  addEventListener: (
+    type: "levelchange" | "chargingchange",
+    listener: () => void,
+  ) => void;
+  removeEventListener: (
+    type: "levelchange" | "chargingchange",
+    listener: () => void,
+  ) => void;
 };
 type BatteryNavigator = Navigator & {
   deviceMemory?: number;
@@ -145,6 +155,7 @@ type ExportImageOptions = {
   scrimAlpha: number;
   watermark: boolean;
   watermarkBackground: WatermarkBackground;
+  watermarkPlacement: WatermarkPlacement;
   watermarkLogoPath?: string;
   songTitle?: string;
   songArtist?: string;
@@ -197,7 +208,6 @@ const exportAspectRatios: SelectOption<ExportAspectRatio>[] = [
   { value: "16:10", label: "16:10" },
   { value: "4:3", label: "4:3" },
   { value: "1:1", label: "1:1" },
-  { value: "9:16", label: "9:16" },
   { value: "custom", label: "自定义" },
 ];
 
@@ -207,6 +217,22 @@ const watermarkBackgrounds: SelectOption<WatermarkBackground>[] = [
   { value: "BLUR_WHITE", label: "白色模糊" },
   { value: "BLUR_BLACK", label: "黑色模糊" },
 ];
+
+const watermarkPlacements: SelectOption<WatermarkPlacement>[] = [
+  { value: "BELOW", label: "下方延伸" },
+  { value: "OVERLAY", label: "覆盖图片" },
+];
+
+const minimumExportLoadingDuration = 1000;
+
+function waitForMinimumExportLoading(startedAt: number) {
+  const remaining =
+    minimumExportLoadingDuration - (performance.now() - startedAt);
+  if (remaining <= 0) return Promise.resolve();
+  return new Promise<void>((resolve) => {
+    window.setTimeout(resolve, remaining);
+  });
+}
 
 function exportWatermarkHeight(width: number, height: number) {
   return Math.max(24, Math.round(Math.min(width * 0.11, height * 0.18)));
@@ -218,7 +244,10 @@ function dimensionsForAspectRatio(
   currentHeight: number,
 ) {
   const [numerator, denominator] = aspectRatio.split(":").map(Number);
-  const longEdge = Math.max(320, Math.min(4096, Math.max(currentWidth, currentHeight)));
+  const longEdge = Math.max(
+    320,
+    Math.min(4096, Math.max(currentWidth, currentHeight)),
+  );
   const longRatio = Math.max(numerator, denominator);
   const shortRatio = Math.min(numerator, denominator);
   const scale = Math.min(
@@ -294,7 +323,9 @@ const permissionNoticeStorageKey = "pearwall.permission-notice.v2";
 
 function shouldShowPermissionNotice() {
   try {
-    return window.localStorage.getItem(permissionNoticeStorageKey) !== "acknowledged";
+    return (
+      window.localStorage.getItem(permissionNoticeStorageKey) !== "acknowledged"
+    );
   } catch {
     return true;
   }
@@ -456,7 +487,9 @@ function BatteryRangeSetting({
       </div>
       <div className="mt-1 flex justify-between text-xs text-white/55">
         <span>省电 &lt; {saverMax}%</span>
-        <span>均衡 {saverMax}–{balancedMax - 1}%</span>
+        <span>
+          均衡 {saverMax}–{balancedMax - 1}%
+        </span>
         <span>清晰 ≥ {balancedMax}%</span>
       </div>
       <div className="mt-3 flex items-center justify-between text-xs text-white/65">
@@ -548,9 +581,7 @@ function aspectRatioLabel(width: number, height: number) {
   const common = commonRatios.find(
     (value) => Math.abs(ratio - value.width / value.height) < 0.015,
   );
-  return common
-    ? `${common.width}:${common.height}`
-    : `${ratio.toFixed(2)}:1`;
+  return common ? `${common.width}:${common.height}` : `${ratio.toFixed(2)}:1`;
 }
 
 function displayName(display: ConnectedDisplay, index: number) {
@@ -561,10 +592,8 @@ function displayName(display: ConnectedDisplay, index: number) {
 
 function physicalSizeLabel(display: ConnectedDisplay) {
   if (!display.physicalWidthMm || !display.physicalHeightMm) return null;
-  const diagonalInches = Math.hypot(
-    display.physicalWidthMm,
-    display.physicalHeightMm,
-  ) / 25.4;
+  const diagonalInches =
+    Math.hypot(display.physicalWidthMm, display.physicalHeightMm) / 25.4;
   return `${diagonalInches.toFixed(1)} 英寸`;
 }
 
@@ -607,8 +636,8 @@ function DisplayArrangement({
     logicalWidth: display.width / Math.max(1, display.scaleFactor),
     logicalHeight: display.height / Math.max(1, display.scaleFactor),
   }));
-  const anchor = logicalFrames.find((display) => display.isPrimary)
-    ?? logicalFrames[0];
+  const anchor =
+    logicalFrames.find((display) => display.isPrimary) ?? logicalFrames[0];
   const usePhysicalSize = logicalFrames.every(
     (display) => display.physicalWidthMm && display.physicalHeightMm,
   );
@@ -631,29 +660,41 @@ function DisplayArrangement({
       ...display,
       visualWidth,
       visualHeight,
-      visualX: (
-        display.positionX + display.logicalWidth / 2 - anchorCenterX
-      ) * horizontalScale - visualWidth / 2,
-      visualY: (
-        display.positionY + display.logicalHeight / 2 - anchorCenterY
-      ) * verticalScale - visualHeight / 2,
+      visualX:
+        (display.positionX + display.logicalWidth / 2 - anchorCenterX) *
+          horizontalScale -
+        visualWidth / 2,
+      visualY:
+        (display.positionY + display.logicalHeight / 2 - anchorCenterY) *
+          verticalScale -
+        visualHeight / 2,
     };
   });
-  const displayGap = Math.max(
-    ...frames.flatMap((display) => [display.visualWidth, display.visualHeight]),
-  ) * 0.012;
+  const displayGap =
+    Math.max(
+      ...frames.flatMap((display) => [
+        display.visualWidth,
+        display.visualHeight,
+      ]),
+    ) * 0.012;
   const relationTolerance = 0.5;
 
   for (let pass = 0; pass < frames.length * frames.length; pass += 1) {
     let adjusted = false;
     for (let firstIndex = 0; firstIndex < frames.length; firstIndex += 1) {
-      for (let secondIndex = firstIndex + 1; secondIndex < frames.length; secondIndex += 1) {
+      for (
+        let secondIndex = firstIndex + 1;
+        secondIndex < frames.length;
+        secondIndex += 1
+      ) {
         const first = frames[firstIndex];
         const second = frames[secondIndex];
-        const overlapsHorizontally = first.visualX < second.visualX + second.visualWidth
-          && second.visualX < first.visualX + first.visualWidth;
-        const overlapsVertically = first.visualY < second.visualY + second.visualHeight
-          && second.visualY < first.visualY + first.visualHeight;
+        const overlapsHorizontally =
+          first.visualX < second.visualX + second.visualWidth &&
+          second.visualX < first.visualX + first.visualWidth;
+        const overlapsVertically =
+          first.visualY < second.visualY + second.visualHeight &&
+          second.visualY < first.visualY + first.visualHeight;
         if (!overlapsHorizontally || !overlapsVertically) continue;
 
         const adjustments: Array<{
@@ -661,11 +702,11 @@ function DisplayArrangement({
           apply: () => void;
         }> = [];
         if (
-          first.positionX + first.logicalWidth
-          <= second.positionX + relationTolerance
+          first.positionX + first.logicalWidth <=
+          second.positionX + relationTolerance
         ) {
-          const distance = first.visualX + first.visualWidth + displayGap
-            - second.visualX;
+          const distance =
+            first.visualX + first.visualWidth + displayGap - second.visualX;
           adjustments.push({
             distance,
             apply: () => {
@@ -674,11 +715,11 @@ function DisplayArrangement({
           });
         }
         if (
-          second.positionX + second.logicalWidth
-          <= first.positionX + relationTolerance
+          second.positionX + second.logicalWidth <=
+          first.positionX + relationTolerance
         ) {
-          const distance = second.visualX + second.visualWidth + displayGap
-            - first.visualX;
+          const distance =
+            second.visualX + second.visualWidth + displayGap - first.visualX;
           adjustments.push({
             distance,
             apply: () => {
@@ -687,11 +728,11 @@ function DisplayArrangement({
           });
         }
         if (
-          first.positionY + first.logicalHeight
-          <= second.positionY + relationTolerance
+          first.positionY + first.logicalHeight <=
+          second.positionY + relationTolerance
         ) {
-          const distance = first.visualY + first.visualHeight + displayGap
-            - second.visualY;
+          const distance =
+            first.visualY + first.visualHeight + displayGap - second.visualY;
           adjustments.push({
             distance,
             apply: () => {
@@ -700,11 +741,11 @@ function DisplayArrangement({
           });
         }
         if (
-          second.positionY + second.logicalHeight
-          <= first.positionY + relationTolerance
+          second.positionY + second.logicalHeight <=
+          first.positionY + relationTolerance
         ) {
-          const distance = second.visualY + second.visualHeight + displayGap
-            - first.visualY;
+          const distance =
+            second.visualY + second.visualHeight + displayGap - first.visualY;
           adjustments.push({
             distance,
             apply: () => {
@@ -735,12 +776,13 @@ function DisplayArrangement({
   const padding = Math.max(maxX - minX, maxY - minY) * 0.04;
   const viewBoxWidth = maxX - minX + padding * 2;
   const viewBoxHeight = maxY - minY + padding * 2;
-  const previewScale = previewViewport.width > 0 && previewViewport.height > 0
-    ? Math.min(
-      previewViewport.width / viewBoxWidth,
-      previewViewport.height / viewBoxHeight,
-    )
-    : 1;
+  const previewScale =
+    previewViewport.width > 0 && previewViewport.height > 0
+      ? Math.min(
+          previewViewport.width / viewBoxWidth,
+          previewViewport.height / viewBoxHeight,
+        )
+      : 1;
   const labelSize = 14 / Math.max(previewScale, 0.01);
   const primaryIconSize = 12 / Math.max(previewScale, 0.01);
   const cornerRadius = 8 / Math.max(previewScale, 0.01);
@@ -770,15 +812,27 @@ function DisplayArrangement({
                     width={display.visualWidth}
                     height={display.visualHeight}
                     rx={cornerRadius}
-                    fill={enabled ? "rgba(255,255,255,0.18)" : "rgba(255,255,255,0.04)"}
-                    stroke={enabled ? "rgba(255,255,255,0.9)" : "rgba(255,255,255,0.3)"}
+                    fill={
+                      enabled
+                        ? "rgba(255,255,255,0.18)"
+                        : "rgba(255,255,255,0.04)"
+                    }
+                    stroke={
+                      enabled
+                        ? "rgba(255,255,255,0.9)"
+                        : "rgba(255,255,255,0.3)"
+                    }
                     strokeWidth={strokeWidth}
                   />
                   <text
                     x={display.visualX + display.visualWidth / 2}
                     y={display.visualY + display.visualHeight / 2}
                     dy="0.12em"
-                    fill={enabled ? "rgba(255,255,255,0.95)" : "rgba(255,255,255,0.45)"}
+                    fill={
+                      enabled
+                        ? "rgba(255,255,255,0.95)"
+                        : "rgba(255,255,255,0.45)"
+                    }
                     fontSize={labelSize}
                     fontWeight="600"
                     textAnchor="middle"
@@ -788,7 +842,11 @@ function DisplayArrangement({
                   {display.isPrimary && (
                     <HouseIcon
                       aria-label="主屏幕"
-                      x={display.visualX + display.visualWidth / 2 - primaryIconSize / 2}
+                      x={
+                        display.visualX +
+                        display.visualWidth / 2 -
+                        primaryIconSize / 2
+                      }
                       y={display.visualY + display.visualHeight * 0.7}
                       width={primaryIconSize}
                       height={primaryIconSize}
@@ -829,7 +887,7 @@ function DisplaySelector({
   onChange: (id: string, enabled: boolean) => void;
 }) {
   const enabledDisplayCount = displays.filter((display) =>
-    selectedIds.includes(display.id)
+    selectedIds.includes(display.id),
   ).length;
 
   return (
@@ -920,10 +978,12 @@ function DrawerHeader({
   title,
   progress,
   onBack,
+  className,
 }: {
   title: string;
   progress: number;
   onBack?: () => void;
+  className?: string;
 }) {
   const backButton = (
     <Button
@@ -934,16 +994,14 @@ function DrawerHeader({
       onPress={onBack}
       className="z-30 !bg-white/8 text-white/75 hover:!bg-white/20 hover:text-white !p-0 backdrop-blur-[10px] backdrop-saturate-150 min-w-9 min-h-9 -m-1"
     >
-      <CaretLeft
-        aria-hidden
-        size={24}
-        className="absolute min-w-6 min-h-6"
-      />
+      <CaretLeft aria-hidden size={24} className="absolute min-w-6 min-h-6" />
     </Button>
   );
 
   return (
-    <div className="pointer-events-none absolute inset-x-0 top-0 z-20 h-16">
+    <div
+      className={`pointer-events-none absolute inset-x-0 top-0 z-20 h-16 ${className ?? ""}`}
+    >
       <div className="relative flex h-16 items-center justify-between px-5 pt-2">
         <div className="pointer-events-auto">
           {onBack ? (
@@ -1010,6 +1068,7 @@ function ExportImagePreview({
   height,
   watermarkHeight,
   previewScale,
+  availableWidth,
   onResize,
 }: {
   previewUrl: string;
@@ -1019,15 +1078,27 @@ function ExportImagePreview({
   height: number;
   watermarkHeight: number;
   previewScale: number;
+  availableWidth: number;
   onResize: (scale: number) => void;
 }) {
   const previewHeight = 256;
+  const previewHorizontalPadding = 24;
   const basePreviewWidth = Math.max(
     1,
-    Math.round(previewHeight * width / Math.max(1, height + watermarkHeight)),
+    Math.round((previewHeight * width) / Math.max(1, height + watermarkHeight)),
   );
-  const previewWidth = Math.max(1, Math.round(basePreviewWidth * previewScale));
-  const scaledPreviewHeight = Math.max(1, Math.round(previewHeight * previewScale));
+  const displayScale = Math.min(
+    previewScale,
+    availableWidth > 0
+      ? Math.max(1, availableWidth - previewHorizontalPadding) /
+        basePreviewWidth
+      : previewScale,
+  );
+  const previewWidth = Math.max(1, Math.round(basePreviewWidth * displayScale));
+  const scaledPreviewHeight = Math.max(
+    1,
+    Math.round(previewHeight * displayScale),
+  );
 
   const startResize = (event: React.PointerEvent<HTMLButtonElement>) => {
     event.preventDefault();
@@ -1053,60 +1124,62 @@ function ExportImagePreview({
   };
 
   return (
-    <SettingsCard className="!w-fit">
-      <div className="flex justify-center px-3 py-3">
-        <SmoothCorners
-          asChild
-          autoEffects={false}
-          corners={{ radius: 12, smoothing: 0.6 }}
-        >
-          <div
-            className="relative flex shrink-0 items-center justify-center overflow-hidden bg-black/35"
-            style={{
-              width: `${previewWidth}px`,
-              height: `${scaledPreviewHeight}px`,
-            }}
+    <div className="flex min-h-100 w-full min-w-0 items-center justify-center">
+      <SettingsCard className="!mx-auto !w-fit min-w-0 max-w-full">
+        <div className="flex min-w-0 max-w-full justify-center px-3 py-3">
+          <SmoothCorners
+            asChild
+            autoEffects={false}
+            corners={{ radius: 12, smoothing: 0.6 }}
           >
-            {previewUrl && (
-              <SmoothCorners
-                asChild
-                autoEffects={false}
-                corners={{ radius: 12, smoothing: 0.6 }}
-              >
-                <img
-                  src={previewUrl}
-                  alt="导出效果预览"
-                  className={`absolute left-1/2 top-1/2 max-w-none object-contain transition-opacity ${previewPending ? "opacity-60" : "opacity-100"}`}
-                  style={{
-                    width: `${previewWidth}px`,
-                    height: `${scaledPreviewHeight}px`,
-                    transform: "translate(-50%, -50%)",
-                  }}
-                />
-              </SmoothCorners>
-            )}
-            {!previewUrl && (
-              <p className="px-4 text-center text-xs text-white/55">
-                {previewFailed ? "暂时无法生成效果预览" : "正在生成效果预览…"}
-              </p>
-            )}
-            {previewUrl && previewPending && (
-              <p className="absolute bottom-3 right-3 text-xs text-white/65">
-                正在更新预览…
-              </p>
-            )}
-            <button
-              type="button"
-              aria-label="调整预览大小"
-              className="absolute inset-y-0 right-0 flex w-5 cursor-ew-resize items-center justify-center text-white/70 opacity-75 transition-opacity hover:opacity-100"
-              onPointerDown={startResize}
+            <div
+              className="relative flex min-w-0 max-w-full shrink-0 items-center justify-center overflow-hidden bg-black/35"
+              style={{
+                width: `${previewWidth}px`,
+                height: `${scaledPreviewHeight}px`,
+              }}
             >
-              <DotsSixVerticalIcon aria-hidden size={16} weight="bold" />
-            </button>
-          </div>
-        </SmoothCorners>
-      </div>
-    </SettingsCard>
+              {previewUrl && (
+                <SmoothCorners
+                  asChild
+                  autoEffects={false}
+                  corners={{ radius: 12, smoothing: 0.6 }}
+                >
+                  <img
+                    src={previewUrl}
+                    alt="导出效果预览"
+                    className={`absolute left-1/2 top-1/2 max-w-none object-contain transition-opacity ${previewPending ? "opacity-60" : "opacity-100"}`}
+                    style={{
+                      width: `${previewWidth}px`,
+                      height: `${scaledPreviewHeight}px`,
+                      transform: "translate(-50%, -50%)",
+                    }}
+                  />
+                </SmoothCorners>
+              )}
+              {!previewUrl && (
+                <p className="px-4 text-center text-xs text-white/55">
+                  {previewFailed ? "暂时无法生成效果预览" : "正在生成效果预览…"}
+                </p>
+              )}
+              {previewUrl && previewPending && (
+                <p className="absolute bottom-3 right-3 text-xs text-white/65">
+                  正在更新预览…
+                </p>
+              )}
+              <button
+                type="button"
+                aria-label="调整预览大小"
+                className="absolute inset-y-0 right-0 flex w-5 cursor-ew-resize items-center justify-center text-white/70 opacity-75 transition-opacity hover:opacity-100"
+                onPointerDown={startResize}
+              >
+                <DotsSixVerticalIcon aria-hidden size={16} weight="bold" />
+              </button>
+            </div>
+          </SmoothCorners>
+        </div>
+      </SettingsCard>
+    </div>
   );
 }
 
@@ -1124,18 +1197,21 @@ function ExportImagePage({
     destination: Pick<ExportSettings, "askForLocation" | "defaultDirectory">,
   ) => Promise<string>;
   onCopy: (options: ExportImageOptions) => Promise<string>;
-  onChooseDefaultDirectory: (currentDirectory: string) => Promise<string | null>;
+  onChooseDefaultDirectory: (
+    currentDirectory: string,
+  ) => Promise<string | null>;
   isTauriRuntime: boolean;
   onBack: () => void;
 }) {
-  const [exportSettings, setExportSettings] = useState<ExportSettings>(loadExportSettings);
+  const [exportSettings, setExportSettings] =
+    useState<ExportSettings>(loadExportSettings);
   const [previewUrl, setPreviewUrl] = useState("");
   const [previewPending, setPreviewPending] = useState(true);
   const [previewFailed, setPreviewFailed] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [copying, setCopying] = useState(false);
-  const [resultMessage, setResultMessage] = useState("");
-  const [errorMessage, setErrorMessage] = useState("");
+  const previewContainerRef = useRef<HTMLDivElement>(null);
+  const [previewContainerWidth, setPreviewContainerWidth] = useState(0);
   const {
     resolution,
     aspectRatio,
@@ -1148,6 +1224,7 @@ function ExportImagePage({
     scrimAlpha,
     watermark,
     watermarkBackground,
+    watermarkPlacement,
     previewScale,
     askForLocation,
     defaultDirectory,
@@ -1158,15 +1235,32 @@ function ExportImagePage({
   ) => {
     setExportSettings((current) => ({ ...current, [key]: value }));
   };
+  useEffect(() => {
+    const container = previewContainerRef.current;
+    if (!container) return;
+
+    const updateWidth = () => {
+      const styles = window.getComputedStyle(container);
+      const horizontalPadding =
+        Number.parseFloat(styles.paddingLeft) +
+        Number.parseFloat(styles.paddingRight);
+      setPreviewContainerWidth(
+        Math.max(1, Math.floor(container.clientWidth - horizontalPadding)),
+      );
+    };
+
+    updateWidth();
+    const observer = new ResizeObserver(updateWidth);
+    observer.observe(container);
+    return () => observer.disconnect();
+  }, []);
   const portrait = height >= width;
   const presetOptions = portrait ? portraitPresets : landscapePresets;
-  const selectedPreset = Math.min(
-    distortionPreset,
-    presetOptions.length - 1,
-  );
-  const watermarkHeight = watermark
-    ? exportWatermarkHeight(width, height)
-    : 0;
+  const selectedPreset = Math.min(distortionPreset, presetOptions.length - 1);
+  const watermarkHeight =
+    watermark && watermarkPlacement === "BELOW"
+      ? exportWatermarkHeight(width, height)
+      : 0;
 
   useEffect(() => {
     saveExportSettings(exportSettings);
@@ -1188,6 +1282,7 @@ function ExportImagePage({
           scrimAlpha,
           watermark,
           watermarkBackground,
+          watermarkPlacement,
         });
         if (disposed) return;
         setPreviewUrl(nextPreviewUrl);
@@ -1213,6 +1308,7 @@ function ExportImagePage({
     selectedPreset,
     watermark,
     watermarkBackground,
+    watermarkPlacement,
     width,
   ]);
 
@@ -1244,8 +1340,9 @@ function ExportImagePage({
         current.height,
       );
       const matchingResolution = exportResolutions.find(
-        (option) => option.value !== "custom"
-          && option.value === `${nextDimensions.width}x${nextDimensions.height}`,
+        (option) =>
+          option.value !== "custom" &&
+          option.value === `${nextDimensions.width}x${nextDimensions.height}`,
       )?.value;
       return {
         ...current,
@@ -1277,6 +1374,16 @@ function ExportImagePage({
     }));
   };
 
+  const swapDimensions = () => {
+    setExportSettings((current) => ({
+      ...current,
+      resolution: "custom",
+      aspectRatio: "custom",
+      width: current.height,
+      height: current.width,
+    }));
+  };
+
   const currentExportOptions = (): ExportImageOptions => ({
     width: Math.max(320, Math.min(4096, width)),
     height: Math.max(320, Math.min(4096, height)),
@@ -1287,47 +1394,46 @@ function ExportImagePage({
     scrimAlpha,
     watermark,
     watermarkBackground,
+    watermarkPlacement,
   });
 
   const exportImage = async () => {
+    const startedAt = performance.now();
     setExporting(true);
-    setResultMessage("");
-    setErrorMessage("");
     try {
       const result = await onExport(currentExportOptions(), {
         askForLocation,
         defaultDirectory,
       });
-      setResultMessage(result);
+      if (result) toast.success(result);
     } catch (error) {
-      setErrorMessage(String(error));
+      toast.error(String(error));
     } finally {
+      await waitForMinimumExportLoading(startedAt);
       setExporting(false);
     }
   };
 
   const copyImage = async () => {
+    const startedAt = performance.now();
     setCopying(true);
-    setResultMessage("");
-    setErrorMessage("");
     try {
       const result = await onCopy(currentExportOptions());
-      setResultMessage(result);
+      if (result) toast.success(result);
     } catch (error) {
-      setErrorMessage(String(error));
+      toast.error(String(error));
     } finally {
+      await waitForMinimumExportLoading(startedAt);
       setCopying(false);
     }
   };
 
   const chooseDefaultDirectory = async () => {
-    setResultMessage("");
-    setErrorMessage("");
     try {
       const directory = await onChooseDefaultDirectory(defaultDirectory);
       if (directory) updateExportSetting("defaultDirectory", directory);
     } catch (error) {
-      setErrorMessage(String(error));
+      toast.error(String(error));
     }
   };
 
@@ -1337,8 +1443,12 @@ function ExportImagePage({
         title="导出图片"
         progress={1}
         onBack={onBack}
+        className="top-12 z-[60]"
       />
-      <div className="flex shrink-0 justify-center px-2 pb-5 z-50 pt-20">
+      <div
+        ref={previewContainerRef}
+        className="flex w-full min-w-0 shrink-0 justify-center px-4 pb-5 z-50 pt-32"
+      >
         <ExportImagePreview
           previewUrl={previewUrl}
           previewPending={previewPending}
@@ -1347,6 +1457,7 @@ function ExportImagePage({
           height={height}
           watermarkHeight={watermarkHeight}
           previewScale={previewScale}
+          availableWidth={previewContainerWidth}
           onResize={(value) => updateExportSetting("previewScale", value)}
         />
       </div>
@@ -1370,7 +1481,9 @@ function ExportImagePage({
                 label="封面扭曲方案"
                 value={selectedPreset}
                 options={presetOptions}
-                onChange={(value) => updateExportSetting("distortionPreset", value)}
+                onChange={(value) =>
+                  updateExportSetting("distortionPreset", value)
+                }
                 variant="drawer"
               />
               <Separator className="mx-2 w-[calc(100%-1rem)] bg-white/15" />
@@ -1381,7 +1494,9 @@ function ExportImagePage({
                 minValue={0}
                 maxValue={1.5}
                 step={0.05}
-                onChange={(value) => updateExportSetting("distortionStrength", value)}
+                onChange={(value) =>
+                  updateExportSetting("distortionStrength", value)
+                }
               />
               <Separator className="mx-2 w-[calc(100%-1rem)] bg-white/15" />
               <RangeSetting
@@ -1391,7 +1506,9 @@ function ExportImagePage({
                 minValue={0}
                 maxValue={1}
                 step={0.01}
-                onChange={(value) => updateExportSetting("distortionProgress", value)}
+                onChange={(value) =>
+                  updateExportSetting("distortionProgress", value)
+                }
               />
               <Separator className="mx-2 w-[calc(100%-1rem)] bg-white/15" />
               <RangeSetting
@@ -1401,7 +1518,9 @@ function ExportImagePage({
                 minValue={0}
                 maxValue={2}
                 step={0.05}
-                onChange={(value) => updateExportSetting("blurMultiplier", value)}
+                onChange={(value) =>
+                  updateExportSetting("blurMultiplier", value)
+                }
               />
               <Separator className="mx-2 w-[calc(100%-1rem)] bg-white/15" />
               <RangeSetting
@@ -1438,7 +1557,9 @@ function ExportImagePage({
               <Separator className="mx-2 w-[calc(100%-1rem)] bg-white/15" />
               <div className="grid grid-cols-2 gap-3 px-4 py-4">
                 <div className="min-w-0">
-                  <div className="mb-2 text-xs font-medium text-white/65">宽度</div>
+                  <div className="mb-2 text-xs font-medium text-white/65">
+                    宽度
+                  </div>
                   <NumberField
                     aria-label="导出宽度"
                     value={width}
@@ -1454,7 +1575,9 @@ function ExportImagePage({
                   </NumberField>
                 </div>
                 <div className="min-w-0">
-                  <div className="mb-2 text-xs font-medium text-white/65">高度</div>
+                  <div className="mb-2 text-xs font-medium text-white/65">
+                    高度
+                  </div>
                   <NumberField
                     aria-label="导出高度"
                     value={height}
@@ -1469,15 +1592,27 @@ function ExportImagePage({
                     </NumberField.Group>
                   </NumberField>
                 </div>
+                <div className="col-span-2 flex justify-end">
+                  <Button
+                    isIconOnly
+                    size="sm"
+                    variant="ghost"
+                    aria-label="宽高对调"
+                    onPress={swapDimensions}
+                    className="text-white/70 hover:text-white"
+                  >
+                    <SwapIcon aria-hidden size={18} weight="bold" />
+                  </Button>
+                </div>
                 <p className="col-span-2 text-xs text-white/45">
-                  单边范围为 320–4096 像素，图片最大为 1200 万像素
+                  单边范围为 320–4096 像素，图片最大为 2000 万像素
                 </p>
               </div>
               <Separator className="mx-2 w-[calc(100%-1rem)] bg-white/15" />
               <SettingRow
                 icon={ImageIcon}
                 title="添加歌曲水印"
-                description="在画面下方追加 Logo 与歌曲信息"
+                description="添加 Logo 与歌曲信息"
               >
                 <Toggle
                   label="添加歌曲水印"
@@ -1489,11 +1624,24 @@ function ExportImagePage({
                 <>
                   <Separator className="mx-2 w-[calc(100%-1rem)] bg-white/15" />
                   <ChoiceTabs
+                    icon={FrameCornersIcon}
+                    label="水印位置"
+                    value={watermarkPlacement}
+                    options={watermarkPlacements}
+                    onChange={(value) =>
+                      updateExportSetting("watermarkPlacement", value)
+                    }
+                    variant="drawer"
+                  />
+                  <Separator className="mx-2 w-[calc(100%-1rem)] bg-white/15" />
+                  <ChoiceTabs
                     icon={CircleHalfIcon}
                     label="水印背景"
                     value={watermarkBackground}
                     options={watermarkBackgrounds}
-                    onChange={(value) => updateExportSetting("watermarkBackground", value)}
+                    onChange={(value) =>
+                      updateExportSetting("watermarkBackground", value)
+                    }
                     variant="drawer"
                   />
                 </>
@@ -1510,14 +1658,21 @@ function ExportImagePage({
                 <Toggle
                   label="导出时询问导出位置"
                   value={askForLocation}
-                  onChange={(value) => updateExportSetting("askForLocation", value)}
+                  onChange={(value) =>
+                    updateExportSetting("askForLocation", value)
+                  }
                 />
               </SettingRow>
               <Separator className="mx-2 w-[calc(100%-1rem)] bg-white/15" />
               <SettingRow
                 icon={FolderOpenIcon}
                 title="默认导出目录"
-                description={defaultDirectory || (isTauriRuntime ? "未设置时使用图片/Pear Wall" : "桌面版可设置默认目录")}
+                description={
+                  defaultDirectory ||
+                  (isTauriRuntime
+                    ? "未设置时使用图片/Pear Wall"
+                    : "桌面版可设置默认目录")
+                }
               >
                 <Button
                   size="sm"
@@ -1535,34 +1690,71 @@ function ExportImagePage({
         </div>
       </OverlayScrollbarsComponent>
 
-      <div className="shrink-0 px-4 pb-4 pt-3 min-h-24">
+      <div className="shrink-0 px-4 pb-0 pt-6 min-h-24">
         <div className="grid grid-cols-2 gap-3">
-          <Button
-            size="lg"
-            isDisabled={exporting || copying}
-            onPress={() => void copyImage()}
-            className="bg-white/10 font-semibold text-white"
+          <SmoothCorners
+            asChild
+            autoEffects={false}
+            corners={{ radius: 28, smoothing: 1 }}
+            shadow={{
+              offsetX: 0,
+              offsetY: 4,
+              blur: 12,
+              spread: 0,
+              color: "#000000",
+              opacity: 0.1,
+            }}
+            shadowStrategy="box-shadow"
           >
-            <CopyIcon aria-hidden size={20} />
-            {copying ? "正在复制…" : "复制图片"}
-          </Button>
-          <Button
-            size="lg"
-            isDisabled={exporting || copying}
-            onPress={() => void exportImage()}
-            className="bg-white font-semibold text-neutral-900"
+            <Button
+              fullWidth
+              size="lg"
+              isDisabled={exporting || copying}
+              onPress={() => void copyImage()}
+              className="flex h-13 bg-white/80 backdrop-blur-[10px] backdrop-saturate-150 text-base font-semibold !text-neutral-900"
+            >
+              {copying ? (
+                <div className="w-4.5 h-4.5 flex items-center justify-center">
+                  <Spinner color="current" className="scale-90" />
+                </div>
+              ) : (
+                <CopyIcon aria-hidden size={18} weight="bold" />
+              )}
+              {copying ? "正在复制…" : "复制图片"}
+            </Button>
+          </SmoothCorners>
+          <SmoothCorners
+            asChild
+            autoEffects={false}
+            corners={{ radius: 28, smoothing: 1 }}
+            shadow={{
+              offsetX: 0,
+              offsetY: 4,
+              blur: 12,
+              spread: 0,
+              color: "#000000",
+              opacity: 0.1,
+            }}
+            shadowStrategy="box-shadow"
           >
-            <DownloadSimpleIcon aria-hidden size={20} />
-            {exporting ? "正在导出…" : "导出 PNG"}
-          </Button>
+            <Button
+              fullWidth
+              size="lg"
+              isDisabled={exporting || copying}
+              onPress={() => void exportImage()}
+              className="flex h-13 bg-white/80 backdrop-blur-[10px] backdrop-saturate-150 text-base font-semibold !text-neutral-900"
+            >
+              {exporting ? (
+                <div className="w-4.5 h-4.5 flex items-center justify-center">
+                  <Spinner color="current" className="scale-90" />
+                </div>
+              ) : (
+                <DownloadSimpleIcon aria-hidden size={18} weight="bold" />
+              )}
+              {exporting ? "正在导出…" : "导出 PNG"}
+            </Button>
+          </SmoothCorners>
         </div>
-        {(resultMessage || errorMessage) && (
-          <p
-            className={`mt-2 break-all px-2 text-center text-xs ${errorMessage ? "text-red-300" : "text-white/65"}`}
-          >
-            {errorMessage || resultMessage}
-          </p>
-        )}
       </div>
     </div>
   );
@@ -1604,7 +1796,8 @@ function DrawerPageContent({
       ? "调整渲染质量、屏幕方向方案和屏保配置详情。"
       : "调整渲染质量与屏幕方向方案，也可以让 Pear Wall 自动随机切换。",
     dynamicWallpaperDisplays: "选择用于显示动态壁纸的显示器。",
-    screenSaverDisplays: "选择用于显示动态屏保画面的显示器，未启用的显示器将保持纯黑。",
+    screenSaverDisplays:
+      "选择用于显示动态屏保画面的显示器，未启用的显示器将保持纯黑。",
     licenses: "Pear Wall 能够顺利运行，离不开这些优秀的开源库。",
   };
   const icons: Record<DrawerPage, IconType> = {
@@ -1652,9 +1845,11 @@ function DrawerPageContent({
                 <ChoiceTabs
                   icon={GaugeIcon}
                   label="渲染质量"
-                  value={settings.performanceMode === "AUTO"
-                    ? "AUTO"
-                    : settings.renderScale}
+                  value={
+                    settings.performanceMode === "AUTO"
+                      ? "AUTO"
+                      : settings.renderScale
+                  }
                   options={renderScales}
                   onChange={(value) => {
                     if (value === "AUTO") {
@@ -1671,7 +1866,10 @@ function DrawerPageContent({
                     <Separator className="mx-2 w-[calc(100%-1rem)] bg-white/15" />
                     <BatteryRangeSetting
                       icon={BatteryMediumIcon}
-                      values={[settings.autoBatterySaverMax, settings.autoBatteryBalancedMax]}
+                      values={[
+                        settings.autoBatterySaverMax,
+                        settings.autoBatteryBalancedMax,
+                      ]}
                       currentQuality={currentAutoQuality}
                       onChange={([saverMax, balancedMax]) => {
                         update("autoBatterySaverMax", saverMax);
@@ -1739,8 +1937,10 @@ function DrawerPageContent({
                   title="动态壁纸显示器"
                   selectionLabel="启用动态壁纸"
                   displays={connectedDisplays}
-                  selectedIds={settings.dynamicWallpaperDisplayIds
-                    ?? connectedDisplays.map((display) => display.id)}
+                  selectedIds={
+                    settings.dynamicWallpaperDisplayIds ??
+                    connectedDisplays.map((display) => display.id)
+                  }
                   loading={displayLoading}
                   failed={displayDiscoveryFailed}
                   onChange={onDynamicWallpaperDisplayChange}
@@ -1862,13 +2062,13 @@ function PermissionNotice({
                 </p>
                 <ol className="mt-2 list-decimal space-y-2 pl-5">
                   <li>
-                    在“系统设置 &gt; 隐私与安全性 &gt;
-                    屏幕与系统音频录制”中允许 Pear Wall。
+                    在“系统设置 &gt; 隐私与安全性 &gt; 屏幕与系统音频录制”中允许
+                    Pear Wall。
                   </li>
                   <li>若 macOS 显示“退出并重新打开”，请选择该操作。</li>
                   <li>
-                    如果没有出现提示，从菜单栏的 Pear Wall
-                    图标中选择“退出 Pear Wall”，然后重新打开。
+                    如果没有出现提示，从菜单栏的 Pear Wall 图标中选择“退出 Pear
+                    Wall”，然后重新打开。
                   </li>
                 </ol>
                 <p className="mt-3 text-xs">只关闭窗口不算完全退出。</p>
@@ -1886,33 +2086,40 @@ function PermissionNotice({
 
 export function SettingsApp() {
   const isTauriRuntime = isTauri();
-  const isWindowsRuntime = isTauriRuntime
-    && document.documentElement.classList.contains("windows");
+  const isWindowsRuntime =
+    isTauriRuntime && document.documentElement.classList.contains("windows");
   const isMacOSRuntime = isTauriRuntime && !isWindowsRuntime;
   const supportsDynamicWallpaper = isMacOSRuntime || isWindowsRuntime;
   const supportsScreenSaverDisplays = isMacOSRuntime || isWindowsRuntime;
   const usesSharedSettings = isTauriRuntime;
   const [settings, setSettings] = useState<Settings>(loadSettings);
   const [powerStatus, setPowerStatus] = useState<PowerStatus | null>(null);
-  const [connectedDisplays, setConnectedDisplays] = useState<ConnectedDisplay[]>([]);
-  const [displayLoading, setDisplayLoading] = useState(supportsDynamicWallpaper);
+  const [connectedDisplays, setConnectedDisplays] = useState<
+    ConnectedDisplay[]
+  >([]);
+  const [displayLoading, setDisplayLoading] = useState(
+    supportsDynamicWallpaper,
+  );
   const [displayDiscoveryFailed, setDisplayDiscoveryFailed] = useState(false);
-  const [wallpaperStatus, setWallpaperStatus] = useState<WallpaperRuntimeStatus>({
-    supported: supportsDynamicWallpaper,
-    running: settings.dynamicWallpaperEnabled,
-    displayCount: 0,
-  });
-  const [wallpaperLoading, setWallpaperLoading] = useState(supportsDynamicWallpaper);
+  const [wallpaperStatus, setWallpaperStatus] =
+    useState<WallpaperRuntimeStatus>({
+      supported: supportsDynamicWallpaper,
+      running: settings.dynamicWallpaperEnabled,
+      displayCount: 0,
+    });
+  const [wallpaperLoading, setWallpaperLoading] = useState(
+    supportsDynamicWallpaper,
+  );
   const [wallpaperFailed, setWallpaperFailed] = useState(false);
   const [wallpaperError, setWallpaperError] = useState("");
   const [permissionNoticeOpen, setPermissionNoticeOpen] = useState(
-    () => isMacOSRuntime
-      && settings.audioVisualization
-      && shouldShowPermissionNotice(),
+    () =>
+      isMacOSRuntime &&
+      settings.audioVisualization &&
+      shouldShowPermissionNotice(),
   );
-  const [sharedSettingsReady, setSharedSettingsReady] = useState(
-    !usesSharedSettings,
-  );
+  const [sharedSettingsReady, setSharedSettingsReady] =
+    useState(!usesSharedSettings);
   const [previewReady, setPreviewReady] = useState(false);
   const [mediaArtwork, setMediaArtwork] = useState<MediaArtwork | null>(null);
   const [contentVisible, setContentVisible] = useState(true);
@@ -1984,7 +2191,8 @@ export function SettingsApp() {
         if (!nextStatus) {
           const batteryNavigator = navigator as BatteryNavigator;
           if (batteryNavigator.getBattery) {
-            const nextBattery = battery ?? await batteryNavigator.getBattery();
+            const nextBattery =
+              battery ?? (await batteryNavigator.getBattery());
             if (disposed) return;
             if (!battery) {
               battery = nextBattery;
@@ -2000,12 +2208,14 @@ export function SettingsApp() {
           }
         }
         if (!disposed) {
-          setPowerStatus(nextStatus ?? {
-            available: false,
-            batteryPercent: null,
-            onBattery: null,
-            lowPowerMode: false,
-          });
+          setPowerStatus(
+            nextStatus ?? {
+              available: false,
+              batteryPercent: null,
+              onBattery: null,
+              lowPowerMode: false,
+            },
+          );
         }
       } catch {
         if (!disposed) {
@@ -2041,10 +2251,10 @@ export function SettingsApp() {
 
   const update: UpdateSetting = (key, value) => {
     if (
-      key === "audioVisualization"
-      && value === true
-      && isMacOSRuntime
-      && shouldShowPermissionNotice()
+      key === "audioVisualization" &&
+      value === true &&
+      isMacOSRuntime &&
+      shouldShowPermissionNotice()
     ) {
       setPermissionNoticeOpen(true);
     }
@@ -2095,7 +2305,9 @@ export function SettingsApp() {
 
     const refreshDisplays = async () => {
       try {
-        const displays = await invoke<ConnectedDisplay[]>("get_connected_displays");
+        const displays = await invoke<ConnectedDisplay[]>(
+          "get_connected_displays",
+        );
         if (disposed) return;
         setConnectedDisplays(displays);
         setDisplayDiscoveryFailed(false);
@@ -2173,16 +2385,18 @@ export function SettingsApp() {
 
   useEffect(() => {
     if (
-      !supportsScreenSaverDisplays
-      || !sharedSettingsReady
-      || connectedDisplays.length === 0
-    ) return;
+      !supportsScreenSaverDisplays ||
+      !sharedSettingsReady ||
+      connectedDisplays.length === 0
+    )
+      return;
     setSettings((current) => {
       if (current.screenSaverDisplayIds !== null) return current;
       const primary = connectedDisplays.find((display) => display.isPrimary);
-      const legacyTarget = current.screenSaverDisplay === "SECONDARY"
-        ? connectedDisplays.find((display) => !display.isPrimary) ?? primary
-        : primary ?? connectedDisplays[0];
+      const legacyTarget =
+        current.screenSaverDisplay === "SECONDARY"
+          ? (connectedDisplays.find((display) => !display.isPrimary) ?? primary)
+          : (primary ?? connectedDisplays[0]);
       return {
         ...current,
         screenSaverDisplayIds: legacyTarget ? [legacyTarget.id] : [],
@@ -2194,9 +2408,10 @@ export function SettingsApp() {
     const handleMessage = (event: MessageEvent) => {
       if (event.source !== previewRef.current?.contentWindow) return;
       if (
-        window.location.protocol !== "file:"
-        && event.origin !== window.location.origin
-      ) return;
+        window.location.protocol !== "file:" &&
+        event.origin !== window.location.origin
+      )
+        return;
       if (event.data?.type !== "pearwall:ready") return;
       setPreviewReady(true);
       const artwork = mediaArtworkCache.current;
@@ -2226,17 +2441,19 @@ export function SettingsApp() {
         if (disposed) return;
         currentKey = artwork.key;
         const cached = mediaArtworkCache.current;
-        const nextArtwork = artwork.data_url || cached?.key !== artwork.key
-          ? artwork
-          : { ...artwork, data_url: cached.data_url };
+        const nextArtwork =
+          artwork.data_url || cached?.key !== artwork.key
+            ? artwork
+            : { ...artwork, data_url: cached.data_url };
         mediaArtworkCache.current = nextArtwork;
         setMediaArtwork((current) => {
           if (
-            current?.key === nextArtwork.key
-            && current.title === nextArtwork.title
-            && current.artist === nextArtwork.artist
-            && current.album === nextArtwork.album
-          ) return current;
+            current?.key === nextArtwork.key &&
+            current.title === nextArtwork.title &&
+            current.artist === nextArtwork.artist &&
+            current.album === nextArtwork.album
+          )
+            return current;
           return nextArtwork;
         });
         previewRef.current?.contentWindow?.postMessage(
@@ -2261,7 +2478,8 @@ export function SettingsApp() {
   }, [isTauriRuntime, previewReady]);
 
   useEffect(() => {
-    if (!isTauriRuntime || !previewReady || !settings.audioVisualization) return;
+    if (!isTauriRuntime || !previewReady || !settings.audioVisualization)
+      return;
     let disposed = false;
     let pending = false;
 
@@ -2352,8 +2570,9 @@ export function SettingsApp() {
 
   const toggleDynamicWallpaperDisplay = (id: string, enabled: boolean) => {
     setSettings((current) => {
-      const selected = current.dynamicWallpaperDisplayIds
-        ?? connectedDisplays.map((display) => display.id);
+      const selected =
+        current.dynamicWallpaperDisplayIds ??
+        connectedDisplays.map((display) => display.id);
       const dynamicWallpaperDisplayIds = enabled
         ? Array.from(new Set([...selected, id]))
         : selected.filter((value) => value !== id);
@@ -2362,30 +2581,32 @@ export function SettingsApp() {
     });
   };
 
-  const renderCurrentImage = useCallback((options: ExportImageOptions) => {
-    const previewWindow = previewRef.current?.contentWindow as
-      | PearWallPreviewWindow
-      | null;
-    const exportImage = previewWindow?.PearWallExportImage;
-    if (!exportImage) {
-      throw new Error("实时画面尚未准备好，请稍后重试");
-    }
-    const logoPath = document
-      .querySelector<SVGPathElement>('svg[aria-label="Pear Wall"] path')
-      ?.getAttribute("d");
-    const dataUrl = exportImage({
-      ...options,
-      watermarkLogoPath: logoPath ?? undefined,
-      songTitle: mediaArtwork?.title,
-      songArtist: mediaArtwork?.artist,
-      songAlbum: mediaArtwork?.album,
-      songArtwork: mediaArtwork?.data_url ?? undefined,
-    });
-    if (!dataUrl.startsWith("data:image/png;base64,")) {
-      throw new Error("无法生成 PNG 图片");
-    }
-    return dataUrl;
-  }, [mediaArtwork]);
+  const renderCurrentImage = useCallback(
+    (options: ExportImageOptions) => {
+      const previewWindow = previewRef.current
+        ?.contentWindow as PearWallPreviewWindow | null;
+      const exportImage = previewWindow?.PearWallExportImage;
+      if (!exportImage) {
+        throw new Error("实时画面尚未准备好，请稍后重试");
+      }
+      const logoPath = document
+        .querySelector<SVGPathElement>('svg[aria-label="Pear Wall"] path')
+        ?.getAttribute("d");
+      const dataUrl = exportImage({
+        ...options,
+        watermarkLogoPath: logoPath ?? undefined,
+        songTitle: mediaArtwork?.title,
+        songArtist: mediaArtwork?.artist,
+        songAlbum: mediaArtwork?.album,
+        songArtwork: mediaArtwork?.data_url ?? undefined,
+      });
+      if (!dataUrl.startsWith("data:image/png;base64,")) {
+        throw new Error("无法生成 PNG 图片");
+      }
+      return dataUrl;
+    },
+    [mediaArtwork],
+  );
 
   const exportCurrentImage = async (
     options: ExportImageOptions,
@@ -2399,19 +2620,21 @@ export function SettingsApp() {
       let defaultDirectory = destination.defaultDirectory;
       if (destination.askForLocation && !defaultDirectory) {
         try {
-          defaultDirectory = await invoke<string>("get_default_export_directory");
+          defaultDirectory = await invoke<string>(
+            "get_default_export_directory",
+          );
         } catch {
           defaultDirectory = "";
         }
       }
       const path = destination.askForLocation
         ? await saveFile({
-          title: "导出 PNG 图片",
-          defaultPath: defaultDirectory
-            ? `${defaultDirectory.replace(/[\\/]+$/, "")}/${fileName}`
-            : fileName,
-          filters: [{ name: "PNG 图片", extensions: ["png"] }],
-        })
+            title: "导出 PNG 图片",
+            defaultPath: defaultDirectory
+              ? `${defaultDirectory.replace(/[\\/]+$/, "")}/${fileName}`
+              : fileName,
+            filters: [{ name: "PNG 图片", extensions: ["png"] }],
+          })
         : defaultDirectory
           ? `${defaultDirectory.replace(/[\\/]+$/, "")}/${fileName}`
           : null;
@@ -2443,9 +2666,7 @@ export function SettingsApp() {
       bytes[index] = binary.charCodeAt(index);
     }
     const blob = new Blob([bytes], { type: "image/png" });
-    await navigator.clipboard.write([
-      new ClipboardItem({ "image/png": blob }),
-    ]);
+    await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
     return "图片已复制到剪贴板";
   };
 
@@ -2464,9 +2685,23 @@ export function SettingsApp() {
     <div
       className={`relative h-full w-full overflow-hidden bg-black text-white ${settings.hideCursor && pureMode && !contentVisible ? "hide-cursor" : ""}`}
     >
-      {isTauriRuntime && (
-        <WindowTitleBar contentVisible={contentVisible} />
-      )}
+      <Toaster
+        position="top-center"
+        theme="dark"
+        offset={{ top: "3.5rem" }}
+        mobileOffset={{ top: "3.5rem" }}
+        toastOptions={{
+          style: {
+            borderRadius: "1.25rem",
+            background: "rgba(0, 0, 0, 0.68)",
+            border: "1px solid rgba(255, 255, 255, 0.14)",
+            backdropFilter: "blur(16px) saturate(150%)",
+            WebkitBackdropFilter: "blur(16px) saturate(150%)",
+            boxShadow: "0 8px 24px rgba(0, 0, 0, 0.22)",
+          },
+        }}
+      />
+      {isTauriRuntime && <WindowTitleBar contentVisible={contentVisible} />}
       <img
         src={settings.customArtwork || "./assets/default_artwork.svg"}
         alt=""
@@ -2599,24 +2834,45 @@ export function SettingsApp() {
                   )}
                 </SettingRow>
               </button>
-              {settings.artworkFallback === "CUSTOM" && settings.customArtwork && (
-                <div className="flex items-center gap-1.5 pr-4 pl-11.5 pb-3 pt-0">
-                  <SmoothCorners
-                    asChild
-                    autoEffects={false}
-                    corners={{ radius: 8, smoothing: 0.6 }}
-                    outerBorder={{ width: 1, color: "#ffffff", opacity: 0.3 }}
-                  >
-                    <img
-                      src={settings.customArtwork}
-                      alt={`${settings.customArtworkName || "自选图片"}预览`}
-                      className="h-14 w-14 shrink-0 object-cover"
-                    />
-                  </SmoothCorners>
-                  <div className="min-w-0 flex-1">
-                    <div className="px-2 pt-1 truncate text-sm text-white/85">
-                      {settings.customArtworkName || "自选图片"}
+              {settings.artworkFallback === "CUSTOM" &&
+                settings.customArtwork && (
+                  <div className="flex items-center gap-1.5 pr-4 pl-11.5 pb-3 pt-0">
+                    <SmoothCorners
+                      asChild
+                      autoEffects={false}
+                      corners={{ radius: 8, smoothing: 0.6 }}
+                      outerBorder={{ width: 1, color: "#ffffff", opacity: 0.3 }}
+                    >
+                      <img
+                        src={settings.customArtwork}
+                        alt={`${settings.customArtworkName || "自选图片"}预览`}
+                        className="h-14 w-14 shrink-0 object-cover"
+                      />
+                    </SmoothCorners>
+                    <div className="min-w-0 flex-1">
+                      <div className="px-2 pt-1 truncate text-sm text-white/85">
+                        {settings.customArtworkName || "自选图片"}
+                      </div>
+                      <SmoothCorners
+                        asChild
+                        autoEffects={false}
+                        corners={{ radius: 28, smoothing: 1 }}
+                      >
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onPress={() => fileInputRef.current?.click()}
+                          className="-mx-1 bg-white/0 text-white/75 transition-colors hover:bg-white/15 hover:text-white"
+                        >
+                          重新选择
+                        </Button>
+                      </SmoothCorners>
                     </div>
+                  </div>
+                )}
+              {settings.artworkFallback === "CUSTOM" &&
+                settings.customArtwork && (
+                  <div className="px-4 pb-3 text-right">
                     <SmoothCorners
                       asChild
                       autoEffects={false}
@@ -2625,40 +2881,21 @@ export function SettingsApp() {
                       <Button
                         size="sm"
                         variant="ghost"
-                        onPress={() => fileInputRef.current?.click()}
+                        onPress={() => {
+                          setSettings((current) => ({
+                            ...current,
+                            artworkFallback: "DEFAULT",
+                            customArtwork: "",
+                            customArtworkName: "",
+                          }));
+                        }}
                         className="-mx-1 bg-white/0 text-white/75 transition-colors hover:bg-white/15 hover:text-white"
                       >
-                        重新选择
+                        恢复默认封面
                       </Button>
                     </SmoothCorners>
                   </div>
-                </div>
-              )}
-              {settings.artworkFallback === "CUSTOM" && settings.customArtwork && (
-                <div className="px-4 pb-3 text-right">
-                  <SmoothCorners
-                    asChild
-                    autoEffects={false}
-                    corners={{ radius: 28, smoothing: 1 }}
-                  >
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onPress={() => {
-                        setSettings((current) => ({
-                          ...current,
-                          artworkFallback: "DEFAULT",
-                          customArtwork: "",
-                          customArtworkName: "",
-                        }));
-                      }}
-                      className="-mx-1 bg-white/0 text-white/75 transition-colors hover:bg-white/15 hover:text-white"
-                    >
-                      恢复默认封面
-                    </Button>
-                  </SmoothCorners>
-                </div>
-              )}
+                )}
             </SettingsCard>
             <input
               ref={fileInputRef}
@@ -2694,11 +2931,13 @@ export function SettingsApp() {
                   <SettingRow
                     icon={DesktopIcon}
                     title="动态壁纸"
-                    description={wallpaperFailed
-                      ? wallpaperError || "无法更新动态壁纸，请重试"
-                      : wallpaperStatus.running
-                        ? `已在 ${wallpaperStatus.displayCount} 台显示器上运行`
-                        : "在桌面图标下方显示当前流动画面"}
+                    description={
+                      wallpaperFailed
+                        ? wallpaperError || "无法更新动态壁纸，请重试"
+                        : wallpaperStatus.running
+                          ? `已在 ${wallpaperStatus.displayCount} 台显示器上运行`
+                          : "在桌面图标下方显示当前流动画面"
+                    }
                   >
                     <Toggle
                       label="动态壁纸"
@@ -2858,9 +3097,11 @@ export function SettingsApp() {
                 <SettingRow
                   icon={SlidersHorizontalIcon}
                   title="高级设置"
-                  description={isMacOSRuntime
-                    ? "调整渲染质量、屏幕方向方案和屏保选项"
-                    : "调整渲染质量、屏幕方向方案和随机切换"}
+                  description={
+                    isMacOSRuntime
+                      ? "调整渲染质量、屏幕方向方案和屏保选项"
+                      : "调整渲染质量、屏幕方向方案和随机切换"
+                  }
                 >
                   <CaretRightIcon
                     aria-hidden

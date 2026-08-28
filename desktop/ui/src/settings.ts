@@ -53,6 +53,7 @@ export const defaultExportSettings: ExportSettings = {
   scrimAlpha: 0.4,
   watermark: false,
   watermarkBackground: 'WHITE',
+  watermarkPlacement: 'BELOW',
   previewScale: 1,
   askForLocation: true,
   defaultDirectory: '',
@@ -63,11 +64,15 @@ function isExportResolution(value: unknown): value is ExportSettings['resolution
 }
 
 function isExportAspectRatio(value: unknown): value is ExportSettings['aspectRatio'] {
-  return ['16:9', '16:10', '4:3', '1:1', '9:16', 'custom'].includes(value as string);
+  return ['16:9', '16:10', '4:3', '1:1', 'custom'].includes(value as string);
 }
 
 function isWatermarkBackground(value: unknown): value is ExportSettings['watermarkBackground'] {
   return ['WHITE', 'BLACK', 'BLUR_WHITE', 'BLUR_BLACK'].includes(value as string);
+}
+
+function isWatermarkPlacement(value: unknown): value is ExportSettings['watermarkPlacement'] {
+  return ['OVERLAY', 'BELOW'].includes(value as string);
 }
 
 function normalizedSettings(saved: Partial<Settings>): Settings {
@@ -138,12 +143,18 @@ function normalizedExportSettings(saved: Partial<ExportSettings>): ExportSetting
   const resolution = isExportResolution(saved.resolution)
     ? saved.resolution
     : defaultExportSettings.resolution;
-  const aspectRatio = isExportAspectRatio(saved.aspectRatio)
-    ? saved.aspectRatio
+  const storedAspectRatio = saved.aspectRatio as string | undefined;
+  const aspectRatio = storedAspectRatio === '9:16'
+    ? 'custom'
+    : isExportAspectRatio(storedAspectRatio)
+    ? storedAspectRatio
     : defaultExportSettings.aspectRatio;
   const watermarkBackground = isWatermarkBackground(saved.watermarkBackground)
     ? saved.watermarkBackground
     : defaultExportSettings.watermarkBackground;
+  const watermarkPlacement = isWatermarkPlacement(saved.watermarkPlacement)
+    ? saved.watermarkPlacement
+    : defaultExportSettings.watermarkPlacement;
   const numberInRange = (
     value: unknown,
     fallback: number,
@@ -161,6 +172,7 @@ function normalizedExportSettings(saved: Partial<ExportSettings>): ExportSetting
     resolution,
     aspectRatio,
     watermarkBackground,
+    watermarkPlacement,
     width: Math.round(numberInRange(saved.width, defaultExportSettings.width, 320, 4096)),
     height: Math.round(numberInRange(saved.height, defaultExportSettings.height, 320, 4096)),
     distortionPreset: Math.round(

@@ -48,6 +48,7 @@
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "react-progressive-blur": "^1.0.6",
+    "sonner": "^2.0.8",
     "vaul": "^1.1.2"
   }
 }

@@ -506,10 +506,10 @@
     return '…';
   }
 
-  function drawWatermarkBackground(context, photo, width, height, stripHeight, style) {
+  function drawWatermarkBackground(context, photo, width, height, stripHeight, watermarkTop, style) {
     if (style === 'BLACK' || style === 'WHITE') {
       context.fillStyle = style === 'BLACK' ? '#000000' : '#ffffff';
-      context.fillRect(0, height, width, stripHeight);
+      context.fillRect(0, watermarkTop, width, stripHeight);
       return;
     }
     const sourceHeight = Math.min(height, Math.max(1, stripHeight * 2));
@@ -519,7 +519,7 @@
     sample.height = Math.max(1, Math.round(stripHeight / sampleScale));
     const sampleContext = sample.getContext('2d');
     if (!sampleContext) {
-      context.drawImage(photo, 0, height - sourceHeight, width, sourceHeight, 0, height, width, stripHeight);
+      context.drawImage(photo, 0, height - sourceHeight, width, sourceHeight, 0, watermarkTop, width, stripHeight);
       return;
     }
     sampleContext.imageSmoothingEnabled = true;
@@ -545,7 +545,7 @@
       sample.width,
       sample.height,
       0,
-      height,
+      watermarkTop,
       width,
       stripHeight,
     );
@@ -553,7 +553,7 @@
     context.fillStyle = style === 'BLUR_WHITE'
       ? 'rgba(255, 255, 255, 0.55)'
       : 'rgba(0, 0, 0, 0.55)';
-    context.fillRect(0, height, width, stripHeight);
+    context.fillRect(0, watermarkTop, width, stripHeight);
   }
 
   function drawCircularArtwork(context, artwork, fallback, x, y, size) {
@@ -583,13 +583,13 @@
     context.restore();
   }
 
-  function drawWatermarkContent(context, photo, options, width, height, stripHeight, style) {
+  function drawWatermarkContent(context, photo, options, width, height, stripHeight, watermarkTop, style) {
     const lightBackground = style === 'WHITE' || style === 'BLUR_WHITE';
     const foreground = lightBackground ? '#111111' : '#ffffff';
     const secondary = lightBackground ? 'rgba(17, 17, 17, 0.58)' : 'rgba(255, 255, 255, 0.62)';
     const dividerColor = lightBackground ? 'rgba(17, 17, 17, 0.16)' : 'rgba(255, 255, 255, 0.22)';
     const columnWidth = width / 3;
-    const centerY = height + stripHeight / 2;
+    const centerY = watermarkTop + stripHeight / 2;
     const logoHeight = stripHeight * 0.31;
     const logoWidth = logoHeight * 64 / 19;
     const previewRenderScale = Math.min(1, 720 / Math.max(width, height));
@@ -676,10 +676,16 @@
   function exportImage(options) {
     const width = Math.max(64, Math.min(4096, Math.round(Number(options.width) || 1920)));
     const height = Math.max(64, Math.min(4096, Math.round(Number(options.height) || 1080)));
+    const watermarkPlacement = options.watermarkPlacement === 'OVERLAY' ? 'OVERLAY' : 'BELOW';
     const stripHeight = options.watermark ? watermarkHeight(width, height) : 0;
-    const outputHeight = height + stripHeight;
-    if (width * outputHeight > 12_000_000) {
-      throw new Error('导出图片不能超过 1200 万像素');
+    const watermarkTop = watermarkPlacement === 'OVERLAY'
+      ? height - stripHeight
+      : height;
+    const outputHeight = watermarkPlacement === 'BELOW'
+      ? height + stripHeight
+      : height;
+    if (width * outputHeight > 20_000_000) {
+      throw new Error('导出图片不能超过 2000 万像素');
     }
     const portrait = height >= width;
     const blurMultiplier = Math.max(0, Math.min(2, Number(options.blurMultiplier) || 0));
@@ -724,8 +730,8 @@
       const style = ['BLACK', 'WHITE', 'BLUR_WHITE', 'BLUR_BLACK'].includes(options.watermarkBackground)
         ? options.watermarkBackground
         : 'WHITE';
-      drawWatermarkBackground(context, photo, width, height, stripHeight, style);
-      drawWatermarkContent(context, photo, options, width, height, stripHeight, style);
+      drawWatermarkBackground(context, photo, width, height, stripHeight, watermarkTop, style);
+      drawWatermarkContent(context, photo, options, width, height, stripHeight, watermarkTop, style);
     }
     return output.toDataURL('image/png');
   }
