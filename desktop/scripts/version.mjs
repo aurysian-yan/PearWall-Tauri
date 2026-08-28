@@ -14,7 +14,7 @@ const paths = {
   installerLock: resolve(desktopRoot, "installer/src-tauri/Cargo.lock"),
   saverInfo: resolve(desktopRoot, "macos-saver/Info.plist"),
   installerUi: resolve(desktopRoot, "ui/src/InstallerApp.tsx"),
-  settingsUi: resolve(desktopRoot, "ui/src/SettingsApp.tsx"),
+  settingsUi: resolve(desktopRoot, "ui/src/settings-app/HomeSettingsPage.tsx"),
   macosRunner: resolve(desktopRoot, "scripts/run-macos-dev-app.sh"),
   coreCargo: resolve(projectRoot, "native/pearwall-core/Cargo.toml"),
   coreLock: resolve(projectRoot, "native/pearwall-core/Cargo.lock"),

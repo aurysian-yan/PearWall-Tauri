@@ -360,7 +360,7 @@ export function HomeSettingsPage({
               <SettingRow
                 avatar={tintLogo}
                 title="Pear Wall"
-                description="版本 1.0.0"
+                description="版本 1.0.1"
               />
               <Separator className="ml-12 mr-2 w-[calc(100%-3.5rem)] bg-white/15" />
               <ExternalSettingRow

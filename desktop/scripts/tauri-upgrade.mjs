@@ -15,7 +15,7 @@ const versionFiles = [
   "desktop/installer/src-tauri/Cargo.lock",
   "desktop/macos-saver/Info.plist",
   "desktop/ui/src/InstallerApp.tsx",
-  "desktop/ui/src/SettingsApp.tsx",
+  "desktop/ui/src/settings-app/HomeSettingsPage.tsx",
   "desktop/scripts/run-macos-dev-app.sh",
   "native/pearwall-core/Cargo.toml",
   "native/pearwall-core/Cargo.lock",
@@ -29,17 +29,28 @@ function run(command, args, options = {}) {
   });
 }
 
-function parseVersion(args) {
+function parseArguments(args) {
   const values = args.filter((value) => value !== "--");
-  if (values.length !== 1) {
-    throw new Error("用法：pnpm tauri:upgrade -- 1.2.3");
+  const noCommit = values.includes("--no-commit");
+  const unknownOptions = values.filter(
+    (value) => value.startsWith("--") && value !== "--no-commit",
+  );
+  if (unknownOptions.length > 0) {
+    throw new Error(`未知参数：${unknownOptions.join("、")}`);
   }
 
-  const version = values[0].replace(/^--/, "");
+  const versions = values.filter((value) => !value.startsWith("--"));
+  if (versions.length !== 1) {
+    throw new Error(
+      "用法：pnpm tauri:upgrade -- 1.2.3 [--no-commit]",
+    );
+  }
+
+  const version = versions[0];
   if (!versionPattern.test(version)) {
     throw new Error(`无效版本号：${version}`);
   }
-  return version;
+  return { version, noCommit };
 }
 
 function changedFiles(cached = false) {
@@ -77,7 +88,7 @@ function assertCleanWorktree() {
 }
 
 function main() {
-  const version = parseVersion(process.argv.slice(2));
+  const { version, noCommit } = parseArguments(process.argv.slice(2));
   assertCleanWorktree();
 
   const currentVersion = run(process.execPath, [versionScript, "--check"]).trim();
@@ -91,6 +102,7 @@ function main() {
   run("git", ["add", "--", ...versionFiles], { stdio: "inherit" });
   assertFilesEqual(changedFiles(true), versionFiles, "暂存文件变更");
   run("git", ["diff", "--cached", "--check"], { stdio: "inherit" });
+  if (noCommit) return;
   run(
     "git",
     ["commit", "-m", `upgrade: 更新应用版本号至 ${version}`],
