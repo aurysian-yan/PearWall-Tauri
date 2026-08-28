@@ -163,7 +163,9 @@ type ExportImageOptions = {
   songArtwork?: string;
 };
 type PearWallPreviewWindow = Window & {
-  PearWallExportImage?: (options: ExportImageOptions) => string;
+  PearWallExportImage?: (
+    options: ExportImageOptions,
+  ) => string | Promise<string>;
 };
 type UpdateSetting = <Key extends keyof Settings>(
   key: Key,
@@ -1191,7 +1193,7 @@ function ExportImagePage({
   isTauriRuntime,
   onBack,
 }: {
-  onPreview: (options: ExportImageOptions) => string;
+  onPreview: (options: ExportImageOptions) => string | Promise<string>;
   onExport: (
     options: ExportImageOptions,
     destination: Pick<ExportSettings, "askForLocation" | "defaultDirectory">,
@@ -1270,29 +1272,32 @@ function ExportImagePage({
     let disposed = false;
     setPreviewPending(true);
     const timer = window.setTimeout(() => {
-      try {
-        const scale = Math.min(1, 720 / Math.max(width, height));
-        const nextPreviewUrl = onPreview({
-          width: Math.max(64, Math.round(width * scale)),
-          height: Math.max(64, Math.round(height * scale)),
-          distortionPreset: selectedPreset,
-          distortionStrength,
-          distortionProgress,
-          blurMultiplier,
-          scrimAlpha,
-          watermark,
-          watermarkBackground,
-          watermarkPlacement,
-        });
-        if (disposed) return;
-        setPreviewUrl(nextPreviewUrl);
-        setPreviewFailed(false);
-      } catch {
-        if (disposed) return;
-        setPreviewFailed(true);
-      } finally {
-        if (!disposed) setPreviewPending(false);
-      }
+      const renderPreview = async () => {
+        try {
+          const scale = Math.min(1, 720 / Math.max(width, height));
+          const nextPreviewUrl = await onPreview({
+            width: Math.max(64, Math.round(width * scale)),
+            height: Math.max(64, Math.round(height * scale)),
+            distortionPreset: selectedPreset,
+            distortionStrength,
+            distortionProgress,
+            blurMultiplier,
+            scrimAlpha,
+            watermark,
+            watermarkBackground,
+            watermarkPlacement,
+          });
+          if (disposed) return;
+          setPreviewUrl(nextPreviewUrl);
+          setPreviewFailed(false);
+        } catch {
+          if (disposed) return;
+          setPreviewFailed(true);
+        } finally {
+          if (!disposed) setPreviewPending(false);
+        }
+      };
+      void renderPreview();
     }, 120);
     return () => {
       disposed = true;
@@ -2451,7 +2456,8 @@ export function SettingsApp() {
             current?.key === nextArtwork.key &&
             current.title === nextArtwork.title &&
             current.artist === nextArtwork.artist &&
-            current.album === nextArtwork.album
+            current.album === nextArtwork.album &&
+            current.data_url === nextArtwork.data_url
           )
             return current;
           return nextArtwork;
@@ -2582,7 +2588,7 @@ export function SettingsApp() {
   };
 
   const renderCurrentImage = useCallback(
-    (options: ExportImageOptions) => {
+    async (options: ExportImageOptions) => {
       const previewWindow = previewRef.current
         ?.contentWindow as PearWallPreviewWindow | null;
       const exportImage = previewWindow?.PearWallExportImage;
@@ -2592,7 +2598,7 @@ export function SettingsApp() {
       const logoPath = document
         .querySelector<SVGPathElement>('svg[aria-label="Pear Wall"] path')
         ?.getAttribute("d");
-      const dataUrl = exportImage({
+      const dataUrl = await exportImage({
         ...options,
         watermarkLogoPath: logoPath ?? undefined,
         songTitle: mediaArtwork?.title,
@@ -2612,7 +2618,7 @@ export function SettingsApp() {
     options: ExportImageOptions,
     destination: Pick<ExportSettings, "askForLocation" | "defaultDirectory">,
   ) => {
-    const dataUrl = renderCurrentImage(options);
+    const dataUrl = await renderCurrentImage(options);
     if (isTauriRuntime) {
       const fileName = destination.askForLocation
         ? `Pear-Wall-${options.width}x${options.height}.png`
@@ -2655,7 +2661,7 @@ export function SettingsApp() {
   };
 
   const copyCurrentImage = async (options: ExportImageOptions) => {
-    const dataUrl = renderCurrentImage(options);
+    const dataUrl = await renderCurrentImage(options);
     if (!navigator.clipboard || typeof ClipboardItem === "undefined") {
       throw new Error("当前环境不支持复制图片");
     }

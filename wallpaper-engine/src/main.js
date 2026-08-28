@@ -48,6 +48,8 @@
   let nativeArtworkKey = '';
   let watermarkArtworkSource = '';
   let watermarkArtworkImage = null;
+  let watermarkArtworkLoadPromise = Promise.resolve(null);
+  let resolveWatermarkArtworkLoad = null;
   let mediaArtworkAvailable = false;
   let mediaArtworkSource = '';
   let mediaArtworkMissing = false;
@@ -282,15 +284,29 @@
   }
 
   function cacheWatermarkArtwork(source) {
-    if (!source || source === watermarkArtworkSource) return;
+    if (!source) return Promise.resolve(null);
+    if (source === watermarkArtworkSource) return watermarkArtworkLoadPromise;
+    if (resolveWatermarkArtworkLoad) resolveWatermarkArtworkLoad(null);
     watermarkArtworkSource = source;
     watermarkArtworkImage = null;
+    watermarkArtworkLoadPromise = new Promise((resolve) => {
+      resolveWatermarkArtworkLoad = resolve;
+    });
     const image = new Image();
     if (/^https?:/i.test(source)) image.crossOrigin = 'anonymous';
     image.onload = () => {
-      if (watermarkArtworkSource === source) watermarkArtworkImage = image;
+      if (watermarkArtworkSource !== source) return;
+      watermarkArtworkImage = image;
+      resolveWatermarkArtworkLoad?.(image);
+      resolveWatermarkArtworkLoad = null;
+    };
+    image.onerror = () => {
+      if (watermarkArtworkSource !== source) return;
+      resolveWatermarkArtworkLoad?.(null);
+      resolveWatermarkArtworkLoad = null;
     };
     image.src = source;
+    return watermarkArtworkLoadPromise;
   }
 
   function useMediaArtwork(dataUrl) {
@@ -673,7 +689,10 @@
     context.restore();
   }
 
-  function exportImage(options) {
+  async function exportImage(options) {
+    const songArtwork = String(options.songArtwork || '');
+    if (songArtwork) await cacheWatermarkArtwork(songArtwork);
+    await renderer.waitForArtwork();
     const width = Math.max(64, Math.min(4096, Math.round(Number(options.width) || 1920)));
     const height = Math.max(64, Math.min(4096, Math.round(Number(options.height) || 1080)));
     const watermarkPlacement = options.watermarkPlacement === 'OVERLAY' ? 'OVERLAY' : 'BELOW';

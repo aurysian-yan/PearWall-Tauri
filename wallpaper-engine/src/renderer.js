@@ -212,6 +212,8 @@
       this.artworkTransitionStart = -Infinity;
       this.pendingArtwork = null;
       this.requestedArtworkSource = '';
+      this.artworkLoadPromise = Promise.resolve();
+      this.resolveArtworkLoad = null;
       this.moruTextures = {
         NARROW: [createTexture(this.gl, [128, 255, 128, 255]), createTexture(this.gl, [0, 0, 255, 255])],
         WIDE: [createTexture(this.gl, [128, 255, 128, 255]), createTexture(this.gl, [0, 0, 255, 255])],
@@ -240,8 +242,13 @@
     }
 
     setArtworkSource(source) {
-      if (!source || source === this.requestedArtworkSource) return;
+      if (!source) return Promise.resolve(false);
+      if (source === this.requestedArtworkSource) return this.artworkLoadPromise;
+      if (this.resolveArtworkLoad) this.resolveArtworkLoad(false);
       this.requestedArtworkSource = source;
+      this.artworkLoadPromise = new Promise((resolve) => {
+        this.resolveArtworkLoad = resolve;
+      });
       const image = new Image();
       if (/^https?:/i.test(source)) image.crossOrigin = 'anonymous';
       image.onload = () => {
@@ -252,11 +259,21 @@
         } else {
           this.startArtworkTransition(image, performance.now() / 1000);
         }
+        this.resolveArtworkLoad?.(true);
+        this.resolveArtworkLoad = null;
       };
       image.onerror = () => {
-        if (this.requestedArtworkSource === source) this.requestedArtworkSource = '';
+        if (this.requestedArtworkSource !== source) return;
+        this.requestedArtworkSource = '';
+        this.resolveArtworkLoad?.(false);
+        this.resolveArtworkLoad = null;
       };
       image.src = source;
+      return this.artworkLoadPromise;
+    }
+
+    waitForArtwork() {
+      return this.artworkLoadPromise;
     }
 
     loadMoruTextures() {
