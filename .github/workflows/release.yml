@@ -233,6 +233,10 @@ jobs:
             [[ -z "$hash" ]] && continue
 
             case "$subject" in
+              upgrade*|actions*) continue ;;
+            esac
+
+            case "$subject" in
               feat:*|feat\(*\):*|feature:*|新增*) section="新增" ;;
               fix:*|fix\(*\):*|bugfix:*|修复*) section="修复" ;;
               perf:*|perf\(*\):*|优化*) section="优化" ;;
