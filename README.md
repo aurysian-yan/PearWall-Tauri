@@ -140,8 +140,10 @@ pnpm --dir desktop run build:windows-installer
 
 ```bash
 pnpm --dir desktop version:check
-pnpm --dir desktop version:set -- 0.1.3
+pnpm --dir desktop tauri:upgrade -- 0.1.3
 ```
+
+升级命令会同步所有应用版本来源、检查工作区并自动创建版本提交。
 
 提交到 `main` 后，GitHub Actions 会比较 `desktop/package.json` 的版本号。版本发生变化时，工作流会在 macOS ARM64 runner 上统一构建 Windows 安装程序、Windows 屏保、macOS App、macOS 屏保和 DMG，并创建对应的 GitHub Release。
 

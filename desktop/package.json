@@ -21,6 +21,7 @@
     "build:screen-savers": "node scripts/build-screen-savers.mjs",
     "version:check": "node scripts/version.mjs --check",
     "version:set": "node scripts/version.mjs --set",
+    "tauri:upgrade": "node scripts/tauri-upgrade.mjs",
     "dev": "pnpm tauri dev",
     "build": "pnpm tauri build"
   },
