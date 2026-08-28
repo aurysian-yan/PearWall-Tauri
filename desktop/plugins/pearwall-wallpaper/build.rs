@@ -14,6 +14,7 @@ fn main() {
         "Metal",
         "MetalKit",
         "QuartzCore",
+        "WebKit",
     ] {
         println!("cargo:rustc-link-lib=framework={framework}");
     }

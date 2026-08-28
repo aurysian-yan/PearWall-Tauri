@@ -6,6 +6,7 @@ extern "C" {
     fn pearwall_wallpaper_reconcile() -> i32;
     fn pearwall_wallpaper_is_running() -> i32;
     fn pearwall_wallpaper_display_count() -> i32;
+    fn pearwall_show_settings_window();
 }
 
 pub fn start() -> Result<(), String> {
@@ -38,4 +39,8 @@ pub fn status() -> WallpaperStatus {
         running,
         display_count,
     }
+}
+
+pub fn show_settings_window() {
+    unsafe { pearwall_show_settings_window() }
 }

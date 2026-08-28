@@ -43,3 +43,10 @@ public func pearWallWallpaperDisplayCount() -> Int32 {
         Int32(PearWallWallpaperController.shared.displayCount)
     }
 }
+
+@_cdecl("pearwall_show_settings_window")
+public func pearwallShowSettingsWindow() {
+    pearWallOnMain {
+        PearWallSettingsWindowController.shared.show()
+    }
+}

@@ -85,6 +85,11 @@ pub fn reconcile_wallpaper<R: Runtime>(app: &AppHandle<R>) -> Result<WallpaperSt
     Err("当前平台暂不支持动态壁纸".to_string())
 }
 
+#[cfg(target_os = "macos")]
+pub fn show_settings_window() {
+    macos::show_settings_window();
+}
+
 #[tauri::command]
 async fn start<R: Runtime>(app: AppHandle<R>) -> Result<WallpaperStatus, String> {
     start_wallpaper(&app)

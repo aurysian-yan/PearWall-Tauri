@@ -6,7 +6,9 @@ DESKTOP_ROOT="${SCRIPT_DIR:h}"
 OUTPUT_ROOT="${OUTPUT_ROOT:-${DESKTOP_ROOT}/build/release/macos}"
 TARGET="${PEARWALL_MACOS_TARGET:-aarch64-apple-darwin}"
 APP_NAME="${APP_NAME:-Pear Wall}"
-SOURCE_APP="${SOURCE_APP_BUNDLE:-${DESKTOP_ROOT}/src-tauri/target/${TARGET}/release/bundle/macos/${APP_NAME}.app}"
+XCODE_PROJECT="${DESKTOP_ROOT}/macos-native/PearWall.xcodeproj"
+XCODE_DERIVED_ROOT="${DESKTOP_ROOT}/build/xcode/${TARGET}"
+SOURCE_APP="${SOURCE_APP_BUNDLE:-${XCODE_DERIVED_ROOT}/Build/Products/Release/${APP_NAME}.app}"
 OUTPUT_APP="${OUTPUT_ROOT}/${APP_NAME}.app"
 CODESIGN_IDENTITY="${PEARWALL_CODESIGN_IDENTITY:--}"
 
@@ -17,10 +19,18 @@ fi
 zsh "${SCRIPT_DIR}/build-macos-mediaremote.sh" >/dev/null
 
 if [[ "${PEARWALL_SKIP_APP_BUILD:-0}" != "1" ]]; then
-  pnpm --dir "${DESKTOP_ROOT}" tauri build \
-    --bundles app \
-    --target "${TARGET}" \
-    --config '{"build":{"beforeBuildCommand":""}}'
+  if [[ "${TARGET}" != "aarch64-apple-darwin" ]]; then
+    echo "Xcode macOS 工程当前仅支持 aarch64-apple-darwin：${TARGET}" >&2
+    exit 1
+  fi
+  xcodebuild \
+    -project "${XCODE_PROJECT}" \
+    -scheme PearWall \
+    -configuration Release \
+    -sdk macosx \
+    -derivedDataPath "${XCODE_DERIVED_ROOT}" \
+    -quiet \
+    build
 fi
 
 if [[ ! -d "${SOURCE_APP}" ]]; then

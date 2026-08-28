@@ -1,6 +1,8 @@
 #import <AppKit/AppKit.h>
 #import <stdint.h>
 
+extern void pearwall_show_settings_window(void);
+
 @interface PearWallStatusController : NSObject
 @property(nonatomic, strong) NSStatusItem *statusItem;
 @end
@@ -43,12 +45,7 @@
 
 - (void)openPearWall:(id)sender {
     (void)sender;
-    [NSApplication.sharedApplication activateIgnoringOtherApps:YES];
-    for (NSWindow *window in NSApplication.sharedApplication.windows) {
-        if (window.canBecomeKeyWindow) {
-            [window makeKeyAndOrderFront:nil];
-        }
-    }
+    pearwall_show_settings_window();
 }
 
 - (void)quitPearWall:(id)sender {

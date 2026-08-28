@@ -739,6 +739,10 @@ pub fn run() {
             if webview.label() != "main" {
                 return;
             }
+            #[cfg(target_os = "macos")]
+            if matches!(mode, LaunchMode::App | LaunchMode::Configure) {
+                return;
+            }
             if page_matches_launch_mode(mode, payload.url().path())
                 && page_load_visibility.load(Ordering::Acquire)
             {
@@ -804,6 +808,9 @@ pub fn run() {
                         .set_activation_policy(tauri::ActivationPolicy::Accessory)
                         .map_err(|error| error.to_string())?;
                     start_macos_background_runtime(audio_analyzer.clone(), macos_started_at)?;
+                    if _setup_visibility.load(Ordering::Acquire) {
+                        pearwall_wallpaper::show_settings_window();
+                    }
                 }
             }
 
@@ -867,10 +874,7 @@ pub fn run() {
         if matches!(mode, LaunchMode::App | LaunchMode::Configure)
             && matches!(_event, tauri::RunEvent::Reopen { .. })
         {
-            if let Some(window) = _app_handle.get_webview_window("main") {
-                let _ = window.show();
-                let _ = window.set_focus();
-            }
+            pearwall_wallpaper::show_settings_window();
         }
     });
 }

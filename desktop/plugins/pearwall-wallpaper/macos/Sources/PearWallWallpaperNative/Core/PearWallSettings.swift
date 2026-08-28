@@ -24,8 +24,9 @@ enum PearWallArtworkFallback: String {
 }
 
 struct PearWallSettings {
+    var dynamicWallpaperEnabled = false
     var dynamicWallpaperDisplayIds: [String]?
-    var audioVisualization = true
+    var audioVisualization = false
     var audioIntensity = 1.0
     var pauseFlow = true
     var hideCursor = true
@@ -43,6 +44,7 @@ struct PearWallSettings {
     var randomPreset = false
     var artworkFallback = PearWallArtworkFallback.defaultArtwork
     var customArtwork = ""
+    var customArtworkName = ""
 
     var flowSpeedMultiplier: Double {
         switch flowSpeed.uppercased() {
@@ -96,6 +98,12 @@ struct PearWallSettings {
         landscapePreset = Self.integer(object, key: "landscapePreset", fallback: landscapePreset)
         randomPreset = Self.boolean(object, key: "randomPreset", fallback: randomPreset)
         customArtwork = Self.string(object, key: "customArtwork", fallback: customArtwork)
+        customArtworkName = Self.string(object, key: "customArtworkName", fallback: customArtworkName)
+        dynamicWallpaperEnabled = Self.boolean(
+            object,
+            key: "dynamicWallpaperEnabled",
+            fallback: dynamicWallpaperEnabled
+        )
         if let values = object["dynamicWallpaperDisplayIds"] as? [String] {
             dynamicWallpaperDisplayIds = values
         }
@@ -171,6 +179,30 @@ enum PearWallSettingsStore {
         return (json, fileSignature(for: url))
     }
 
+    static func writeShared(_ settings: PearWallSettings) -> Result<Void, Error> {
+        guard let url = sharedURL,
+              let data = try? JSONSerialization.data(
+                  withJSONObject: settings.jsonObject,
+                  options: [.sortedKeys]
+              ) else {
+            return .failure(PearWallSettingsError.invalidJSON)
+        }
+        do {
+            try FileManager.default.createDirectory(
+                at: url.deletingLastPathComponent(),
+                withIntermediateDirectories: true
+            )
+            try data.write(to: url, options: [.atomic])
+            try FileManager.default.setAttributes(
+                [.posixPermissions: 0o600],
+                ofItemAtPath: url.path
+            )
+            return .success(())
+        } catch {
+            return .failure(error)
+        }
+    }
+
     static func fileSignature(for url: URL) -> PearWallFileSignature? {
         let attributes = try? FileManager.default.attributesOfItem(atPath: url.path)
         guard let modificationDate = attributes?[.modificationDate] as? Date else {
@@ -189,5 +221,37 @@ enum PearWallSettingsStore {
             return false
         }
         return object is [String: Any]
+    }
+}
+
+enum PearWallSettingsError: Error {
+    case invalidJSON
+}
+
+extension PearWallSettings {
+    var jsonObject: [String: Any] {
+        [
+            "dynamicWallpaperEnabled": dynamicWallpaperEnabled,
+            "dynamicWallpaperDisplayIds": dynamicWallpaperDisplayIds ?? NSNull(),
+            "audioVisualization": audioVisualization,
+            "audioIntensity": audioIntensity,
+            "pauseFlow": pauseFlow,
+            "hideCursor": hideCursor,
+            "screenSaverDisplay": screenSaverDisplay.rawValue,
+            "screenSaverDisplayIds": screenSaverDisplayIds ?? NSNull(),
+            "showConfigurationDetails": showConfigurationDetails,
+            "renderScale": renderScale,
+            "blurEnabled": blurEnabled,
+            "blurMultiplier": blurMultiplier,
+            "scrimAlpha": scrimAlpha,
+            "flowSpeed": flowSpeed,
+            "moruStyle": moruStyle,
+            "portraitPreset": portraitPreset,
+            "landscapePreset": landscapePreset,
+            "randomPreset": randomPreset,
+            "artworkFallback": artworkFallback.rawValue,
+            "customArtwork": customArtwork,
+            "customArtworkName": customArtworkName,
+        ]
     }
 }

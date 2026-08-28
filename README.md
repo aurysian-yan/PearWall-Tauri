@@ -6,10 +6,12 @@ Pear Wall 是一个跨平台动态壁纸项目。本仓库维护桌面端、Wall
 
 ```text
 .
-├── desktop/                # Tauri 桌面端及屏保打包脚本
+├── desktop/                # macOS 原生 App、Windows 桌面端及屏保打包脚本
+│   ├── macos-native/       # macOS Xcode 工程与 Rust 原生宿主
 │   ├── installer/          # Tauri Windows 自定义安装器
+│   ├── plugins/            # macOS SwiftUI/AppKit 原生界面与壁纸渲染
 │   ├── scripts/            # 前端、macOS 屏保和 Windows 屏保构建脚本
-│   └── src-tauri/          # Tauri Rust 宿主
+│   └── src-tauri/          # Windows Tauri Rust 宿主及共享 macOS 桥接代码
 ├── wallpaper-engine/       # Wallpaper Engine 项目与共享 WebGL 渲染器
 ├── native/pearwall-core/   # 跨平台 Rust 音频分析核心
 └── LICENSE                 # GPL-3.0 许可证
@@ -18,12 +20,13 @@ Pear Wall 是一个跨平台动态壁纸项目。本仓库维护桌面端、Wall
 ## 模块关系
 
 - `desktop/` 构建前会把 `wallpaper-engine/` 的页面和资源复制到 `desktop/dist/`。
-- `desktop/src-tauri/` 使用 `native/pearwall-core/` 提供音频分析能力。
+- `desktop/macos-native/` 直接以 Rust C ABI 对接 SwiftUI/AppKit，并使用 `native/pearwall-core/` 提供音频分析能力。
+- Windows 桌面端继续使用 `desktop/src-tauri/`；macOS 生产 App 不经过 Tauri，设置窗口、状态栏和生命周期由 SwiftUI/AppKit 管理。
 - `desktop/dist/`、各模块的 `build/`、Rust `target/` 和 Node.js `node_modules/` 均为生成或依赖目录，不纳入版本控制。
 
 ## 桌面端开发
 
-环境要求：Node.js、pnpm、Rust 和 Cargo。桌面端使用 Tauri 2。
+环境要求：Node.js、pnpm、Rust、Cargo 和 macOS 的 Xcode Command Line Tools。Windows 桌面端使用 Tauri 2；macOS 生产 App 使用 SwiftUI/AppKit 与 Rust 原生宿主。
 
 安装桌面端依赖：
 
@@ -37,11 +40,19 @@ pnpm --dir desktop install
 pnpm --dir wallpaper-engine run check
 ```
 
-启动 Tauri 开发环境：
+启动跨平台 Tauri 开发环境：
 
 ```bash
 pnpm --dir desktop run dev
 ```
+
+打开 macOS 原生 Xcode 工程：
+
+```bash
+open desktop/macos-native/PearWall.xcodeproj
+```
+
+Xcode 工程会在 Build Phase 中自动编译 Rust staticlib，并准备前端、媒体和壁纸资源；最低部署版本为 macOS 15.0。`build:macos-app` 默认使用该工程的 Release Scheme。
 
 构建桌面应用：
 

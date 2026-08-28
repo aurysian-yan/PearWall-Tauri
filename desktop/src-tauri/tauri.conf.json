@@ -40,7 +40,8 @@
     "resources": {
       "../../wallpaper-engine/assets/default_artwork.svg": "assets/default_artwork.svg",
       "../../wallpaper-engine/assets/moru": "assets/moru",
-      "../../wallpaper-engine/src/presets.js": "assets/presets.json"
+      "../../wallpaper-engine/src/presets.js": "assets/presets.json",
+      "../dist": "frontend"
     },
     "macOS": {
       "minimumSystemVersion": "15.0",

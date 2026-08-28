@@ -1,0 +1,487 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		4322695DC10BBF0E95B73833 /* PearWallArtwork.swift in Sources */ = {isa = PBXBuildFile; fileRef = E9DEB92D70259DECBDDD3936 /* PearWallArtwork.swift */; };
+		503BF31AE70C707E08E227F3 /* PearWallNativeApplication.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3F98B7017BC42615D9759C5F /* PearWallNativeApplication.swift */; };
+		6171E6AE2E47BA295993AE38 /* PearWallSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = EDCADB71A700FB12E2347AE0 /* PearWallSettings.swift */; };
+		644A33EBA60ECCD00B2B0CD8 /* PearWallWallpaperController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 54ECDE8F657381B59415C775 /* PearWallWallpaperController.swift */; };
+		67ADF7BEB11ED0EE05A2FA68 /* PearWallMacOSApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0207F3B27BD17859E9F6020 /* PearWallMacOSApp.swift */; };
+		695B116E6953FAA5AEB33261 /* PearWallWallpaperBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = F78DB1C1375E31660081DBE4 /* PearWallWallpaperBridge.swift */; };
+		7E414B4D19EC820B794CC991 /* PearWallRenderSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11AEEE81B3FB465F02655E00 /* PearWallRenderSession.swift */; };
+		AB554210DC3624DF54466374 /* PearWallMetalRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2CB0A721D2B99FCC42E07BD3 /* PearWallMetalRenderer.swift */; };
+		ACB7FA187765CDC8B9637844 /* PearWallSettingsWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = E8518380FA5AF60FF3D2AAA5 /* PearWallSettingsWindow.swift */; };
+		AEC957CF0364831E217C1A31 /* PearWallMesh.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD286109638C696B9A14DBD0 /* PearWallMesh.swift */; };
+		E13FB23D216971C68B5C15CB /* PearWallRuntimeState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 62E087FEF53F9F3C924F2FF4 /* PearWallRuntimeState.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		11AEEE81B3FB465F02655E00 /* PearWallRenderSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PearWallRenderSession.swift; sourceTree = "<group>"; };
+		2CB0A721D2B99FCC42E07BD3 /* PearWallMetalRenderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PearWallMetalRenderer.swift; sourceTree = "<group>"; };
+		3F98B7017BC42615D9759C5F /* PearWallNativeApplication.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PearWallNativeApplication.swift; sourceTree = "<group>"; };
+		54ECDE8F657381B59415C775 /* PearWallWallpaperController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PearWallWallpaperController.swift; sourceTree = "<group>"; };
+		62E087FEF53F9F3C924F2FF4 /* PearWallRuntimeState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PearWallRuntimeState.swift; sourceTree = "<group>"; };
+		E8518380FA5AF60FF3D2AAA5 /* PearWallSettingsWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PearWallSettingsWindow.swift; sourceTree = "<group>"; };
+		E9DEB92D70259DECBDDD3936 /* PearWallArtwork.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PearWallArtwork.swift; sourceTree = "<group>"; };
+		EDCADB71A700FB12E2347AE0 /* PearWallSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PearWallSettings.swift; sourceTree = "<group>"; };
+		F0207F3B27BD17859E9F6020 /* PearWallMacOSApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PearWallMacOSApp.swift; sourceTree = "<group>"; };
+		F78DB1C1375E31660081DBE4 /* PearWallWallpaperBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PearWallWallpaperBridge.swift; sourceTree = "<group>"; };
+		FD286109638C696B9A14DBD0 /* PearWallMesh.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PearWallMesh.swift; sourceTree = "<group>"; };
+		FE94BD8A3DAD1605E58A05E5 /* PearWall.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = PearWall.app; sourceTree = BUILT_PRODUCTS_DIR; };
+/* End PBXFileReference section */
+
+/* Begin PBXGroup section */
+		2C69DC395D03A48CC47DD203 /* macos */ = {
+			isa = PBXGroup;
+			children = (
+				55A8818A4630AFEDF5276E8B /* Sources */,
+			);
+			path = macos;
+			sourceTree = "<group>";
+		};
+		364FE64827853BA4A4D6AB18 /* pearwall-wallpaper */ = {
+			isa = PBXGroup;
+			children = (
+				2C69DC395D03A48CC47DD203 /* macos */,
+			);
+			path = "pearwall-wallpaper";
+			sourceTree = "<group>";
+		};
+		4F3A81B8E8F63D2BB9B12ACF /* Sources */ = {
+			isa = PBXGroup;
+			children = (
+				F0207F3B27BD17859E9F6020 /* PearWallMacOSApp.swift */,
+			);
+			path = Sources;
+			sourceTree = "<group>";
+		};
+		55A8818A4630AFEDF5276E8B /* Sources */ = {
+			isa = PBXGroup;
+			children = (
+				81A5F1E927813A3DA52DE9B8 /* PearWallWallpaperNative */,
+			);
+			path = Sources;
+			sourceTree = "<group>";
+		};
+		56EE5B8E1104863624CB252C /* plugins */ = {
+			isa = PBXGroup;
+			children = (
+				364FE64827853BA4A4D6AB18 /* pearwall-wallpaper */,
+			);
+			path = plugins;
+			sourceTree = "<group>";
+		};
+		5F1DB5AE70DF25BF1E0E02AB /* Core */ = {
+			isa = PBXGroup;
+			children = (
+				E9DEB92D70259DECBDDD3936 /* PearWallArtwork.swift */,
+				FD286109638C696B9A14DBD0 /* PearWallMesh.swift */,
+				2CB0A721D2B99FCC42E07BD3 /* PearWallMetalRenderer.swift */,
+				11AEEE81B3FB465F02655E00 /* PearWallRenderSession.swift */,
+				62E087FEF53F9F3C924F2FF4 /* PearWallRuntimeState.swift */,
+				EDCADB71A700FB12E2347AE0 /* PearWallSettings.swift */,
+			);
+			path = Core;
+			sourceTree = "<group>";
+		};
+		81A5F1E927813A3DA52DE9B8 /* PearWallWallpaperNative */ = {
+			isa = PBXGroup;
+			children = (
+				3F98B7017BC42615D9759C5F /* PearWallNativeApplication.swift */,
+				E8518380FA5AF60FF3D2AAA5 /* PearWallSettingsWindow.swift */,
+				F78DB1C1375E31660081DBE4 /* PearWallWallpaperBridge.swift */,
+				54ECDE8F657381B59415C775 /* PearWallWallpaperController.swift */,
+				5F1DB5AE70DF25BF1E0E02AB /* Core */,
+			);
+			path = PearWallWallpaperNative;
+			sourceTree = "<group>";
+		};
+		C803BBA48F86398799635F50 /* desktop */ = {
+			isa = PBXGroup;
+			children = (
+				56EE5B8E1104863624CB252C /* plugins */,
+			);
+			name = desktop;
+			path = ..;
+			sourceTree = "<group>";
+		};
+		D0B999EA680509BEE1C8E589 = {
+			isa = PBXGroup;
+			children = (
+				C803BBA48F86398799635F50 /* desktop */,
+				4F3A81B8E8F63D2BB9B12ACF /* Sources */,
+				DC985E5BC931ECA9AE34752D /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		DC985E5BC931ECA9AE34752D /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				FE94BD8A3DAD1605E58A05E5 /* PearWall.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		DA90787BF0E571EE54CCB2F2 /* PearWall */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 9AE94D12879A411AF2680306 /* Build configuration list for PBXNativeTarget "PearWall" */;
+			buildPhases = (
+				8233F9FD9CF994409F7E2960 /* Build Rust native core */,
+				3859FBA6FFB604245A565C82 /* Prepare Pear Wall resources */,
+				8D7B86C2946EB402328AE54C /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = PearWall;
+			packageProductDependencies = (
+			);
+			productName = PearWall;
+			productReference = FE94BD8A3DAD1605E58A05E5 /* PearWall.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		0F92A56EFADF13CB52C72170 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1430;
+				TargetAttributes = {
+					DA90787BF0E571EE54CCB2F2 = {
+						ProvisioningStyle = Manual;
+					};
+				};
+			};
+			buildConfigurationList = 03C573E7818271A3688E61F7 /* Build configuration list for PBXProject "PearWall" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = D0B999EA680509BEE1C8E589;
+			minimizedProjectReferenceProxies = 1;
+			preferredProjectObjectVersion = 77;
+			productRefGroup = DC985E5BC931ECA9AE34752D /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				DA90787BF0E571EE54CCB2F2 /* PearWall */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		3859FBA6FFB604245A565C82 /* Prepare Pear Wall resources */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Prepare Pear Wall resources";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/zsh;
+			shellScript = "set -euo pipefail\ndesktop_root=\"${SRCROOT}/..\"\nproject_root=\"${desktop_root}/..\"\ndist_root=\"${desktop_root}/dist\"\nresource_root=\"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}\"\n\nif [[ ! -f \"${dist_root}/index.html\" ]]; then\n  pnpm --dir \"${desktop_root}\" run build:frontend\nfi\nzsh \"${desktop_root}/scripts/build-macos-mediaremote.sh\" >/dev/null\n\nrm -rf \"${resource_root}/frontend\" \"${resource_root}/assets\" \"${resource_root}/mediaremote\"\nmkdir -p \\\n  \"${resource_root}/frontend\" \\\n  \"${resource_root}/assets/moru\" \\\n  \"${resource_root}/mediaremote\"\ncp -R \"${dist_root}/.\" \"${resource_root}/frontend/\"\ncp \"${dist_root}/assets/default_artwork.svg\" \\\n  \"${resource_root}/assets/default_artwork.svg\"\ncp -R \"${dist_root}/assets/moru/.\" \"${resource_root}/assets/moru/\"\nsed \\\n  -e 's/^window.PearWallPresets = //' \\\n  -e 's/;$//' \\\n  \"${project_root}/wallpaper-engine/src/presets.js\" \\\n  > \"${resource_root}/assets/presets.json\"\ncp \"${desktop_root}/src-tauri/icons/icon.icns\" \"${resource_root}/icon.icns\"\ncp \"${desktop_root}/src-tauri/resources/mediaremote/PearWallMediaRemote.dylib\" \\\n  \"${resource_root}/mediaremote/PearWallMediaRemote.dylib\"\n";
+		};
+		8233F9FD9CF994409F7E2960 /* Build Rust native core */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Build Rust native core";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/zsh;
+			shellScript = "set -euo pipefail\nprofile_args=()\nif [[ \"${CONFIGURATION}\" == \"Release\" ]]; then\n  profile_args+=(--release)\nfi\nPEARWALL_XCODE_BUILD=1 cargo build \\\n  --manifest-path \"${SRCROOT}/Cargo.toml\" \\\n  --lib \\\n  --target \"${RUST_TARGET}\" \\\n  \"${profile_args[@]}\"\n";
+		};
+/* End PBXShellScriptBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		8D7B86C2946EB402328AE54C /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				4322695DC10BBF0E95B73833 /* PearWallArtwork.swift in Sources */,
+				67ADF7BEB11ED0EE05A2FA68 /* PearWallMacOSApp.swift in Sources */,
+				AEC957CF0364831E217C1A31 /* PearWallMesh.swift in Sources */,
+				AB554210DC3624DF54466374 /* PearWallMetalRenderer.swift in Sources */,
+				503BF31AE70C707E08E227F3 /* PearWallNativeApplication.swift in Sources */,
+				7E414B4D19EC820B794CC991 /* PearWallRenderSession.swift in Sources */,
+				E13FB23D216971C68B5C15CB /* PearWallRuntimeState.swift in Sources */,
+				6171E6AE2E47BA295993AE38 /* PearWallSettings.swift in Sources */,
+				ACB7FA187765CDC8B9637844 /* PearWallSettingsWindow.swift in Sources */,
+				695B116E6953FAA5AEB33261 /* PearWallWallpaperBridge.swift in Sources */,
+				644A33EBA60ECCD00B2B0CD8 /* PearWallWallpaperController.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		0A3F9A2FF9BA75C7DEF5CD8B /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ARCHS = arm64;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGNING_REQUIRED = YES;
+				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_STYLE = Manual;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 15.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+				VALID_ARCHS = arm64;
+			};
+			name = Debug;
+		};
+		3EFD171E292318D100C63878 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				COMBINE_HIDPI_IMAGES = YES;
+				EXECUTABLE_NAME = PearWall;
+				INFOPLIST_FILE = Info.plist;
+				INFOPLIST_KEY_CFBundleIconFile = icon.icns;
+				LD_RUNPATH_SEARCH_PATHS = (
+					/usr/lib/swift,
+				);
+				LIBRARY_SEARCH_PATHS = (
+					"$(SRCROOT)/target/$(RUST_TARGET)/release",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 15.0;
+				OTHER_LDFLAGS = (
+					"-lpearwall_macos_native",
+					"-framework",
+					AppKit,
+					"-framework",
+					CoreAudio,
+					"-framework",
+					CoreGraphics,
+					"-framework",
+					Foundation,
+					"-framework",
+					Metal,
+					"-framework",
+					MetalKit,
+					"-framework",
+					QuartzCore,
+					"-framework",
+					SwiftUI,
+					"-framework",
+					WebKit,
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.nevoit.pearwall.desktop;
+				PRODUCT_NAME = "Pear Wall";
+				RUST_TARGET = "aarch64-apple-darwin";
+				SDKROOT = macosx;
+			};
+			name = Release;
+		};
+		AB6E0EC1C9F0ECDF537DCC8B /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				COMBINE_HIDPI_IMAGES = YES;
+				EXECUTABLE_NAME = PearWall;
+				INFOPLIST_FILE = Info.plist;
+				INFOPLIST_KEY_CFBundleIconFile = icon.icns;
+				LD_RUNPATH_SEARCH_PATHS = (
+					/usr/lib/swift,
+				);
+				LIBRARY_SEARCH_PATHS = (
+					"$(SRCROOT)/target/$(RUST_TARGET)/debug",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 15.0;
+				OTHER_LDFLAGS = (
+					"-lpearwall_macos_native",
+					"-framework",
+					AppKit,
+					"-framework",
+					CoreAudio,
+					"-framework",
+					CoreGraphics,
+					"-framework",
+					Foundation,
+					"-framework",
+					Metal,
+					"-framework",
+					MetalKit,
+					"-framework",
+					QuartzCore,
+					"-framework",
+					SwiftUI,
+					"-framework",
+					WebKit,
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.nevoit.pearwall.desktop;
+				PRODUCT_NAME = "Pear Wall";
+				RUST_TARGET = "aarch64-apple-darwin";
+				SDKROOT = macosx;
+			};
+			name = Debug;
+		};
+		E9DC52573156033FAA4E348F /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ARCHS = arm64;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGNING_REQUIRED = YES;
+				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_STYLE = Manual;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 15.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.0;
+				VALID_ARCHS = arm64;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		03C573E7818271A3688E61F7 /* Build configuration list for PBXProject "PearWall" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				0A3F9A2FF9BA75C7DEF5CD8B /* Debug */,
+				E9DC52573156033FAA4E348F /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		9AE94D12879A411AF2680306 /* Build configuration list for PBXNativeTarget "PearWall" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				AB6E0EC1C9F0ECDF537DCC8B /* Debug */,
+				3EFD171E292318D100C63878 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 0F92A56EFADF13CB52C72170 /* Project object */;
+}

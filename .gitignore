@@ -52,5 +52,6 @@ desktop/src-tauri/icons/ios/
 *.apk
 *.aab
 /nul
+**/xcuserdata/
 
 .tmp

@@ -1,0 +1,22 @@
+[package]
+name = "pearwall-macos-native"
+version = "0.1.2"
+description = "Pear Wall macOS native runtime"
+edition = "2021"
+
+[lib]
+name = "pearwall_macos_native"
+crate-type = ["staticlib", "rlib"]
+
+[build-dependencies]
+cc = "1"
+swift-rs = { version = "1.0.8", features = ["build"] }
+
+[dependencies]
+pearwall-core = { package = "pearwall-core", path = "../../native/pearwall-core" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+memmap2 = "0.9"
+
+[profile.release]
+strip = false

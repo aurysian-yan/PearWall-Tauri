@@ -1,0 +1,126 @@
+name: PearWall
+
+options:
+  deploymentTarget:
+    macOS: "15.0"
+  createIntermediateGroups: true
+
+schemes:
+  PearWall:
+    build:
+      targets:
+        PearWall: all
+    run:
+      config: Debug
+    profile:
+      config: Release
+    analyze:
+      config: Debug
+    archive:
+      config: Release
+
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    MACOSX_DEPLOYMENT_TARGET: "15.0"
+    ARCHS: arm64
+    VALID_ARCHS: arm64
+    CODE_SIGN_STYLE: Manual
+    CODE_SIGN_IDENTITY: "-"
+    CODE_SIGNING_REQUIRED: YES
+    CLANG_ENABLE_MODULES: YES
+
+targets:
+  PearWall:
+    type: application
+    platform: macOS
+    sources:
+      - path: Sources
+      - path: ../plugins/pearwall-wallpaper/macos/Sources/PearWallWallpaperNative
+    settings:
+      base:
+        PRODUCT_NAME: Pear Wall
+        EXECUTABLE_NAME: PearWall
+        PRODUCT_BUNDLE_IDENTIFIER: com.nevoit.pearwall.desktop
+        INFOPLIST_FILE: Info.plist
+        INFOPLIST_KEY_CFBundleIconFile: icon.icns
+        MACOSX_DEPLOYMENT_TARGET: "15.0"
+        RUST_TARGET: aarch64-apple-darwin
+        LIBRARY_SEARCH_PATHS:
+          - "$(SRCROOT)/target/$(RUST_TARGET)/debug"
+        LD_RUNPATH_SEARCH_PATHS:
+          - /usr/lib/swift
+        OTHER_LDFLAGS:
+          - "-lpearwall_macos_native"
+          - "-framework"
+          - AppKit
+          - "-framework"
+          - CoreAudio
+          - "-framework"
+          - CoreGraphics
+          - "-framework"
+          - Foundation
+          - "-framework"
+          - Metal
+          - "-framework"
+          - MetalKit
+          - "-framework"
+          - QuartzCore
+          - "-framework"
+          - SwiftUI
+          - "-framework"
+          - WebKit
+      configs:
+        Debug:
+          LIBRARY_SEARCH_PATHS:
+            - "$(SRCROOT)/target/$(RUST_TARGET)/debug"
+        Release:
+          LIBRARY_SEARCH_PATHS:
+            - "$(SRCROOT)/target/$(RUST_TARGET)/release"
+    preBuildScripts:
+      - name: Build Rust native core
+        shell: /bin/zsh
+        basedOnDependencyAnalysis: false
+        script: |
+          set -euo pipefail
+          profile_args=()
+          if [[ "${CONFIGURATION}" == "Release" ]]; then
+            profile_args+=(--release)
+          fi
+          PEARWALL_XCODE_BUILD=1 cargo build \
+            --manifest-path "${SRCROOT}/Cargo.toml" \
+            --lib \
+            --target "${RUST_TARGET}" \
+            "${profile_args[@]}"
+      - name: Prepare Pear Wall resources
+        shell: /bin/zsh
+        basedOnDependencyAnalysis: false
+        script: |
+          set -euo pipefail
+          desktop_root="${SRCROOT}/.."
+          project_root="${desktop_root}/.."
+          dist_root="${desktop_root}/dist"
+          resource_root="${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}"
+
+          if [[ ! -f "${dist_root}/index.html" ]]; then
+            pnpm --dir "${desktop_root}" run build:frontend
+          fi
+          zsh "${desktop_root}/scripts/build-macos-mediaremote.sh" >/dev/null
+
+          rm -rf "${resource_root}/frontend" "${resource_root}/assets" "${resource_root}/mediaremote"
+          mkdir -p \
+            "${resource_root}/frontend" \
+            "${resource_root}/assets/moru" \
+            "${resource_root}/mediaremote"
+          cp -R "${dist_root}/." "${resource_root}/frontend/"
+          cp "${dist_root}/assets/default_artwork.svg" \
+            "${resource_root}/assets/default_artwork.svg"
+          cp -R "${dist_root}/assets/moru/." "${resource_root}/assets/moru/"
+          sed \
+            -e 's/^window.PearWallPresets = //' \
+            -e 's/;$//' \
+            "${project_root}/wallpaper-engine/src/presets.js" \
+            > "${resource_root}/assets/presets.json"
+          cp "${desktop_root}/src-tauri/icons/icon.icns" "${resource_root}/icon.icns"
+          cp "${desktop_root}/src-tauri/resources/mediaremote/PearWallMediaRemote.dylib" \
+            "${resource_root}/mediaremote/PearWallMediaRemote.dylib"
