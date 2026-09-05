@@ -414,6 +414,20 @@ export function HomeSettingsPage({
                 description="特别感谢"
               />
               <Separator className="ml-12 mr-2 w-[calc(100%-3.5rem)] bg-white/15" />
+              <ExternalSettingRow
+                href="https://github.com/youshen2/MeloX/"
+                icon={PawPrintIcon}
+                title="MeloX"
+                description="歌词动效设计参考"
+              />
+              <Separator className="ml-12 mr-2 w-[calc(100%-3.5rem)] bg-white/15" />
+              <ExternalSettingRow
+                href="https://github.com/jayfunc/BetterLyrics"
+                icon={PawPrintIcon}
+                title="BetterLyrics"
+                description="歌词获取与展示参考"
+              />
+              <Separator className="ml-12 mr-2 w-[calc(100%-3.5rem)] bg-white/15" />
               <button
                 type="button"
                 className="block w-full text-left"
