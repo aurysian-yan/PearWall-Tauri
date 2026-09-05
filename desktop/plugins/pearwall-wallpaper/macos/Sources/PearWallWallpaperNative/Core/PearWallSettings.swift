@@ -150,6 +150,10 @@ struct PearWallLyricsPresentationProfile {
     var fontWeight = PearWallLyricsFontWeight.bold
     var alignment = PearWallLyricsTextAlignment.meloX
     var progressiveBlur = true
+    var minimumBlurRadius = 3.0
+    var maximumBlurRadius = 4.0
+    var topInset = 44.0
+    var bottomInset = 48.0
     var trackInfo = PearWallTrackInfoSettings()
 
     init() {}
@@ -174,6 +178,22 @@ struct PearWallLyricsPresentationProfile {
             key: "progressiveBlur",
             fallback: progressiveBlur
         )
+        let configuredMinimumBlurRadius = Self.number(
+            object,
+            key: "minimumBlurRadius",
+            fallback: minimumBlurRadius,
+            range: 0...12
+        )
+        let configuredMaximumBlurRadius = Self.number(
+            object,
+            key: "maximumBlurRadius",
+            fallback: maximumBlurRadius,
+            range: 0...12
+        )
+        minimumBlurRadius = min(configuredMinimumBlurRadius, configuredMaximumBlurRadius)
+        maximumBlurRadius = max(configuredMinimumBlurRadius, configuredMaximumBlurRadius)
+        topInset = Self.number(object, key: "topInset", fallback: topInset, range: 0...240)
+        bottomInset = Self.number(object, key: "bottomInset", fallback: bottomInset, range: 0...240)
         trackInfo = PearWallTrackInfoSettings(
             object: object["trackInfo"] as? [String: Any],
             fallback: trackInfo

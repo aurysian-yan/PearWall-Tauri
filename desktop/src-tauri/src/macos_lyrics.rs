@@ -9,7 +9,8 @@ use std::fs::{self, File, OpenOptions};
 use std::io::{BufRead, BufReader, Write};
 use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
 use std::path::{Path, PathBuf};
-use std::sync::mpsc::{self, Receiver, Sender};
+use std::sync::mpsc::{self, Receiver, SendError, Sender};
+use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant, SystemTime};
 use strsim::jaro_winkler;
@@ -17,6 +18,56 @@ use strsim::jaro_winkler;
 const MATCH_THRESHOLD: f64 = 60.0;
 const AMLL_BASE_URL: &str =
     "https://raw.githubusercontent.com/amll-dev/amll-ttml-db/refs/heads/main";
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum LyricsProvider {
+    Amll,
+    LrcLib,
+    Netease,
+    Qq,
+    Kugou,
+}
+
+impl LyricsProvider {
+    const DEFAULT_ORDER: [Self; 5] = [
+        Self::Amll,
+        Self::LrcLib,
+        Self::Netease,
+        Self::Qq,
+        Self::Kugou,
+    ];
+
+    fn from_setting(value: &str) -> Option<Self> {
+        match value {
+            "AMLL" => Some(Self::Amll),
+            "LRCLIB" => Some(Self::LrcLib),
+            "NETEASE" => Some(Self::Netease),
+            "QQ" => Some(Self::Qq),
+            "KUGOU" => Some(Self::Kugou),
+            _ => None,
+        }
+    }
+
+    fn setting_value(self) -> &'static str {
+        match self {
+            Self::Amll => "AMLL",
+            Self::LrcLib => "LRCLIB",
+            Self::Netease => "NETEASE",
+            Self::Qq => "QQ",
+            Self::Kugou => "KUGOU",
+        }
+    }
+
+    fn search(self, agent: &ureq::Agent, song: &SongMetadata) -> Option<LyricsPayload> {
+        match self {
+            Self::Amll => search_amll(agent, song),
+            Self::LrcLib => search_lrclib(agent, song),
+            Self::Netease => search_netease(agent, song),
+            Self::Qq => search_qq(agent, song),
+            Self::Kugou => search_kugou(agent, song),
+        }
+    }
+}
 
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -40,7 +91,7 @@ pub struct LyricsPayload {
 impl LyricsPayload {
     fn empty(track_id: u64) -> Self {
         Self {
-            version: 1,
+            version: 2,
             track_id,
             provider: String::new(),
             format: String::new(),
@@ -86,6 +137,17 @@ impl SongMetadata {
             duration: finite_nonnegative(media.duration),
         }
     }
+
+    fn request_key(&self) -> String {
+        format!(
+            "{}\u{1f}{}\u{1f}{}\u{1f}{}\u{1f}{}",
+            self.track_id,
+            self.title,
+            self.artist,
+            self.album,
+            self.duration.round()
+        )
+    }
 }
 
 #[derive(Deserialize)]
@@ -98,21 +160,41 @@ struct LrcLibItem {
     synced_lyrics: Option<String>,
 }
 
-pub fn start() -> Sender<MediaArtwork> {
-    let (sender, receiver) = mpsc::channel();
-    let _ = thread::Builder::new()
-        .name("pearwall-lyrics".to_string())
-        .spawn(move || worker(receiver));
-    sender
+pub struct LyricsWorkerHandle {
+    sender: Sender<MediaArtwork>,
+    latest_request_key: Arc<Mutex<String>>,
 }
 
-fn worker(receiver: Receiver<MediaArtwork>) {
+impl LyricsWorkerHandle {
+    pub fn send(&self, media: MediaArtwork) -> Result<(), SendError<MediaArtwork>> {
+        let request_key = SongMetadata::from_media(&media).request_key();
+        if let Ok(mut latest) = self.latest_request_key.lock() {
+            *latest = request_key;
+        }
+        self.sender.send(media)
+    }
+}
+
+pub fn start() -> LyricsWorkerHandle {
+    let (sender, receiver) = mpsc::channel();
+    let latest_request_key = Arc::new(Mutex::new(String::new()));
+    let worker_request_key = latest_request_key.clone();
+    let _ = thread::Builder::new()
+        .name("pearwall-lyrics".to_string())
+        .spawn(move || worker(receiver, worker_request_key));
+    LyricsWorkerHandle {
+        sender,
+        latest_request_key,
+    }
+}
+
+fn worker(receiver: Receiver<MediaArtwork>, latest_request_key: Arc<Mutex<String>>) {
     let agent = ureq::AgentBuilder::new()
         .timeout_connect(Duration::from_secs(5))
         .timeout_read(Duration::from_secs(18))
         .timeout_write(Duration::from_secs(8))
         .build();
-    let mut last_track_id = u64::MAX;
+    let mut last_request_key = String::new();
     let mut last_attempt = Instant::now() - Duration::from_secs(60);
     let mut last_enabled = false;
 
@@ -122,72 +204,103 @@ fn worker(receiver: Receiver<MediaArtwork>) {
         }
         let enabled = lyrics_feature_enabled();
         let song = SongMetadata::from_media(&media);
+        let media_request_key = song.request_key();
+        let providers = lyrics_provider_order();
+        let provider_key = provider_order_key(&providers);
+        let request_key = format!("{media_request_key}\u{1f}{provider_key}");
         if !enabled || song.track_id == 0 {
-            if last_enabled || last_track_id != song.track_id {
+            if last_enabled || last_request_key != request_key {
                 let _ = publish_current(&LyricsPayload::empty(song.track_id));
             }
             last_enabled = enabled;
-            last_track_id = song.track_id;
+            last_request_key = request_key;
             continue;
         }
         if last_enabled
-            && last_track_id == song.track_id
+            && last_request_key == request_key
             && last_attempt.elapsed() < Duration::from_secs(30)
         {
             continue;
         }
         last_enabled = true;
-        last_track_id = song.track_id;
+        last_request_key = request_key;
         last_attempt = Instant::now();
 
-        if let Some(cached) = read_cache(song.track_id) {
+        if let Some(cached) = read_cache(song.track_id, &provider_key) {
             let _ = publish_current(&cached);
             continue;
         }
-        let result =
-            search_all(&agent, &song).unwrap_or_else(|| LyricsPayload::empty(song.track_id));
+        let result = search_all(&agent, &song, &providers)
+            .unwrap_or_else(|| LyricsPayload::empty(song.track_id));
+        let media_changed = latest_request_key
+            .lock()
+            .is_ok_and(|latest| *latest != media_request_key);
+        let provider_order_changed = provider_order_key(&lyrics_provider_order()) != provider_key;
+        if media_changed || provider_order_changed {
+            continue;
+        }
         if !result.raw.is_empty() {
-            let _ = write_cache(&result);
+            let _ = write_cache(&result, &provider_key);
         }
         let _ = publish_current(&result);
     }
 }
 
-fn search_all(agent: &ureq::Agent, song: &SongMetadata) -> Option<LyricsPayload> {
+fn search_all(
+    agent: &ureq::Agent,
+    song: &SongMetadata,
+    providers: &[LyricsProvider],
+) -> Option<LyricsPayload> {
     let (sender, receiver) = mpsc::channel();
     thread::scope(|scope| {
-        for provider in [
-            search_amll as fn(&ureq::Agent, &SongMetadata) -> Option<LyricsPayload>,
-            search_lrclib,
-            search_netease,
-            search_qq,
-            search_kugou,
-        ] {
+        for (priority, provider) in providers.iter().copied().enumerate() {
             let sender = sender.clone();
             let agent = agent.clone();
             scope.spawn(move || {
-                let _ = sender.send(provider(&agent, song));
+                let result = provider
+                    .search(&agent, song)
+                    .filter(|payload| reliable_match(song, payload))
+                    .map(|payload| (priority, payload));
+                let _ = sender.send(result);
             });
         }
     });
     drop(sender);
-    let results: Vec<LyricsPayload> = receiver
+    let results: Vec<(usize, LyricsPayload)> = receiver
         .into_iter()
         .flatten()
-        .filter(|result| result.match_score >= MATCH_THRESHOLD && !result.raw.trim().is_empty())
+        .filter(|(_, result)| {
+            result.match_score >= MATCH_THRESHOLD && !result.raw.trim().is_empty()
+        })
         .collect();
     choose_best(results)
 }
 
-fn choose_best(results: Vec<LyricsPayload>) -> Option<LyricsPayload> {
-    let highest_score = results
-        .iter()
-        .map(|result| result.match_score)
-        .max_by(f64::total_cmp)?;
+fn choose_best(results: Vec<(usize, LyricsPayload)>) -> Option<LyricsPayload> {
     results
         .into_iter()
-        .filter(|result| result.match_score + 3.0 >= highest_score)
-        .max_by(compare_results)
+        .min_by(|left, right| {
+            left.0
+                .cmp(&right.0)
+                .then_with(|| compare_results(&right.1, &left.1))
+        })
+        .map(|(_, payload)| payload)
+}
+
+fn reliable_match(song: &SongMetadata, result: &LyricsPayload) -> bool {
+    let title_similarity = string_similarity(&song.title, &result.title);
+    let artist_similarity = string_similarity(&song.artist, &result.artist);
+    let album_similarity = string_similarity(&song.album, &result.album);
+    let duration_matches = song.duration <= 0.0
+        || result.duration <= 0.0
+        || (song.duration - result.duration).abs() <= 10.0;
+    let artist_matches = !song.artist.trim().is_empty()
+        && !result.artist.trim().is_empty()
+        && artist_similarity >= 0.55;
+    let album_matches = !song.album.trim().is_empty()
+        && !result.album.trim().is_empty()
+        && album_similarity >= 0.75;
+    title_similarity >= 0.82 && (artist_matches || album_matches) && duration_matches
 }
 
 fn compare_results(left: &LyricsPayload, right: &LyricsPayload) -> Ordering {
@@ -755,14 +868,52 @@ fn lyrics_feature_enabled() -> bool {
         })
 }
 
-fn read_cache(track_id: u64) -> Option<LyricsPayload> {
-    let data = fs::read(cache_path(track_id)?).ok()?;
-    let value: LyricsPayload = serde_json::from_slice(&data).ok()?;
-    (value.track_id == track_id && !value.raw.is_empty()).then_some(value)
+fn lyrics_provider_order() -> Vec<LyricsProvider> {
+    let configured = macos_runtime_state::application_support_directory()
+        .ok()
+        .and_then(|directory| fs::read(directory.join("settings.json")).ok())
+        .and_then(|data| serde_json::from_slice::<Value>(&data).ok())
+        .and_then(|value| {
+            value
+                .pointer("/lyricsPresentation/sourceOrder")
+                .and_then(Value::as_array)
+                .cloned()
+        })
+        .unwrap_or_default();
+    let mut providers = configured
+        .iter()
+        .filter_map(Value::as_str)
+        .filter_map(LyricsProvider::from_setting)
+        .fold(Vec::new(), |mut order, provider| {
+            if !order.contains(&provider) {
+                order.push(provider);
+            }
+            order
+        });
+    for provider in LyricsProvider::DEFAULT_ORDER {
+        if !providers.contains(&provider) {
+            providers.push(provider);
+        }
+    }
+    providers
 }
 
-fn write_cache(payload: &LyricsPayload) -> std::io::Result<()> {
-    let Some(path) = cache_path(payload.track_id) else {
+fn provider_order_key(providers: &[LyricsProvider]) -> String {
+    providers
+        .iter()
+        .map(|provider| provider.setting_value().to_lowercase())
+        .collect::<Vec<_>>()
+        .join("-")
+}
+
+fn read_cache(track_id: u64, provider_key: &str) -> Option<LyricsPayload> {
+    let data = fs::read(cache_path(track_id, provider_key)?).ok()?;
+    let value: LyricsPayload = serde_json::from_slice(&data).ok()?;
+    (value.version == 2 && value.track_id == track_id && !value.raw.is_empty()).then_some(value)
+}
+
+fn write_cache(payload: &LyricsPayload, provider_key: &str) -> std::io::Result<()> {
+    let Some(path) = cache_path(payload.track_id, provider_key) else {
         return Ok(());
     };
     write_json_atomically(&path, payload)
@@ -777,8 +928,8 @@ fn publish_current(payload: &LyricsPayload) -> std::io::Result<()> {
     write_json_atomically(&directory.join("current-lyrics.json"), payload)
 }
 
-fn cache_path(track_id: u64) -> Option<PathBuf> {
-    let directory = lyrics_directory()?.join("cache");
+fn cache_path(track_id: u64, provider_key: &str) -> Option<PathBuf> {
+    let directory = lyrics_directory()?.join("cache-v2").join(provider_key);
     fs::create_dir_all(&directory).ok()?;
     fs::set_permissions(&directory, fs::Permissions::from_mode(0o700)).ok()?;
     Some(directory.join(format!("{track_id:016x}.json")))
@@ -853,8 +1004,40 @@ mod tests {
         ttml.raw = "<tt/>".to_string();
         ttml.match_score = 88.0;
         assert_eq!(
-            choose_best(vec![lrc, ttml]).map(|item| item.format),
+            choose_best(vec![(0, lrc), (0, ttml)]).map(|item| item.format),
             Some("TTML".to_string())
         );
+    }
+
+    #[test]
+    fn provider_priority_wins_between_reliable_results() {
+        let mut first = LyricsPayload::empty(1);
+        first.format = "LRC".to_string();
+        first.raw = "[00:01.00]测试".to_string();
+        first.match_score = 85.0;
+        let mut second = first.clone();
+        second.format = "TTML".to_string();
+        second.match_score = 95.0;
+        assert_eq!(
+            choose_best(vec![(0, first), (1, second)]).map(|item| item.format),
+            Some("LRC".to_string())
+        );
+    }
+
+    #[test]
+    fn weak_title_match_is_rejected() {
+        let song = SongMetadata {
+            track_id: 1,
+            title: "真实歌名".to_string(),
+            artist: "真实歌手".to_string(),
+            album: "真实专辑".to_string(),
+            duration: 200.0,
+        };
+        let mut result = LyricsPayload::empty(1);
+        result.title = "当前歌词".to_string();
+        result.artist = song.artist.clone();
+        result.album = song.album.clone();
+        result.duration = song.duration;
+        assert!(!reliable_match(&song, &result));
     }
 }

@@ -12,6 +12,7 @@ export type LyricsFontWeight = 'REGULAR' | 'MEDIUM' | 'SEMIBOLD' | 'BOLD' | 'HEA
 export type LyricsTextAlignment = 'MELOX' | 'LEFT' | 'CENTER' | 'RIGHT';
 export type TrackInfoAlignment = 'FOLLOW_LYRICS' | 'LEFT' | 'CENTER' | 'RIGHT';
 export type TrackInfoLayout = 'HORIZONTAL' | 'VERTICAL';
+export type LyricsProvider = 'AMLL' | 'LRCLIB' | 'NETEASE' | 'QQ' | 'KUGOU';
 
 export type TrackInfoSettings = {
   enabled: boolean;
@@ -37,6 +38,10 @@ export type LyricsPresentationProfile = {
   fontWeight: LyricsFontWeight;
   alignment: LyricsTextAlignment;
   progressiveBlur: boolean;
+  minimumBlurRadius: number;
+  maximumBlurRadius: number;
+  topInset: number;
+  bottomInset: number;
   trackInfo: TrackInfoSettings;
 };
 
@@ -49,6 +54,7 @@ export type LyricsPresentationOverride = Partial<
 export type LyricsPresentationSettings = {
   defaultProfile: LyricsPresentationProfile;
   displayOverrides: Record<string, LyricsPresentationOverride>;
+  sourceOrder: LyricsProvider[];
 };
 
 export type ExportSettings = {

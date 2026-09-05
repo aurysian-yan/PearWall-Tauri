@@ -1,6 +1,7 @@
 import type {
   ExportSettings,
   LyricsFontWeight,
+  LyricsProvider,
   LyricsPresentationProfile,
   LyricsPresentationSettings,
   Settings,
@@ -29,6 +30,10 @@ export const defaultLyricsPresentationProfile: LyricsPresentationProfile = {
   fontWeight: 'BOLD',
   alignment: 'MELOX',
   progressiveBlur: true,
+  minimumBlurRadius: 3,
+  maximumBlurRadius: 4,
+  topInset: 44,
+  bottomInset: 48,
   trackInfo: {
     enabled: true,
     showArtwork: true,
@@ -49,6 +54,7 @@ export const defaultLyricsPresentationProfile: LyricsPresentationProfile = {
 export const defaultLyricsPresentation: LyricsPresentationSettings = {
   defaultProfile: defaultLyricsPresentationProfile,
   displayOverrides: {},
+  sourceOrder: ['AMLL', 'LRCLIB', 'NETEASE', 'QQ', 'KUGOU'],
 };
 
 export const defaultSettings: Settings = {
@@ -146,6 +152,10 @@ function normalizedLyricsProfile(
       ? Math.min(maximum, Math.max(minimum, number))
       : defaultValue;
   };
+  const blurRange = [
+    numberInRange(value.minimumBlurRadius, fallback.minimumBlurRadius, 0, 12),
+    numberInRange(value.maximumBlurRadius, fallback.maximumBlurRadius, 0, 12),
+  ].sort((left, right) => left - right);
   return {
     enabled: typeof value.enabled === 'boolean' ? value.enabled : fallback.enabled,
     showLyrics: typeof value.showLyrics === 'boolean'
@@ -162,6 +172,10 @@ function normalizedLyricsProfile(
     progressiveBlur: typeof value.progressiveBlur === 'boolean'
       ? value.progressiveBlur
       : fallback.progressiveBlur,
+    minimumBlurRadius: blurRange[0],
+    maximumBlurRadius: blurRange[1],
+    topInset: numberInRange(value.topInset, fallback.topInset, 0, 240),
+    bottomInset: numberInRange(value.bottomInset, fallback.bottomInset, 0, 240),
     trackInfo: {
       enabled: typeof trackInfo.enabled === 'boolean'
         ? trackInfo.enabled
@@ -229,7 +243,21 @@ function normalizedLyricsPresentation(value: unknown): LyricsPresentationSetting
       return [[displayId, normalizedLyricsProfile(override, defaultProfile)]];
     }),
   );
-  return { defaultProfile, displayOverrides };
+  const knownProviders = new Set<LyricsProvider>(
+    defaultLyricsPresentation.sourceOrder,
+  );
+  const savedSourceOrder = Array.isArray(saved.sourceOrder)
+    ? saved.sourceOrder.filter(
+      (provider): provider is LyricsProvider => knownProviders.has(provider as LyricsProvider),
+    )
+    : [];
+  const sourceOrder = [
+    ...new Set([
+      ...savedSourceOrder,
+      ...defaultLyricsPresentation.sourceOrder,
+    ]),
+  ];
+  return { defaultProfile, displayOverrides, sourceOrder };
 }
 
 function normalizedSettings(saved: Partial<Settings>): Settings {

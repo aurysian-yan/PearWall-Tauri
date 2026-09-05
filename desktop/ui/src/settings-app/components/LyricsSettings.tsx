@@ -1,6 +1,9 @@
-import { Separator, Slider } from "@heroui/react";
+import { Button, Separator, Slider } from "@heroui/react";
 import {
   ArrowsOutIcon,
+  ArrowsVerticalIcon,
+  CaretDownIcon,
+  CaretUpIcon,
   ImageIcon,
   MonitorIcon,
   QuotesIcon,
@@ -16,6 +19,7 @@ import {
 } from "../../SettingsPrimitives";
 import type {
   LyricsFontWeight,
+  LyricsProvider,
   LyricsPresentationProfile,
   Settings,
 } from "../../types";
@@ -28,6 +32,18 @@ const fontWeights: SelectOption<LyricsFontWeight>[] = [
   { value: "SEMIBOLD", label: "半粗" },
   { value: "BOLD", label: "粗体" },
   { value: "HEAVY", label: "特粗" },
+];
+
+const lyricProviders: Array<{
+  value: LyricsProvider;
+  label: string;
+  capability: string;
+}> = [
+  { value: "AMLL", label: "AMLL TTML", capability: "逐字" },
+  { value: "LRCLIB", label: "LRCLIB", capability: "逐行" },
+  { value: "NETEASE", label: "网易云音乐", capability: "逐字 / 逐行" },
+  { value: "QQ", label: "QQ 音乐", capability: "逐行" },
+  { value: "KUGOU", label: "酷狗音乐", capability: "逐行" },
 ];
 
 export function LyricsSettings({
@@ -109,6 +125,16 @@ export function LyricsSettings({
     });
   };
 
+  const updateSourceOrder = (sourceOrder: LyricsProvider[]) => {
+    setSettings((current) => ({
+      ...current,
+      lyricsPresentation: {
+        ...current.lyricsPresentation,
+        sourceOrder,
+      },
+    }));
+  };
+
   return (
     <div className="space-y-5 px-4">
       {profileOptions.length > 1 && (
@@ -141,7 +167,15 @@ export function LyricsSettings({
       )}
 
       {(isDefault || hasOverride) && (
-        <LyricsProfileEditor profile={profile} onChange={updateProfile} />
+        <>
+          <LyricsProfileEditor profile={profile} onChange={updateProfile} />
+          {profile.enabled && (
+            <LyricsSourceOrder
+              value={settings.lyricsPresentation.sourceOrder}
+              onChange={updateSourceOrder}
+            />
+          )}
+        </>
       )}
     </div>
   );
@@ -162,6 +196,13 @@ function LyricsProfileEditor({
     key: Key,
     value: LyricsPresentationProfile["trackInfo"][Key],
   ) => update("trackInfo", { ...profile.trackInfo, [key]: value });
+  const updateBlurRange = ([minimumBlurRadius, maximumBlurRadius]: [number, number]) => {
+    onChange({
+      ...profile,
+      minimumBlurRadius,
+      maximumBlurRadius,
+    });
+  };
 
   return (
     <>
@@ -253,6 +294,40 @@ function LyricsProfileEditor({
                     onChange={(value) => update("progressiveBlur", value)}
                   />
                 </SettingRow>
+                {profile.progressiveBlur && (
+                  <>
+                    <Separator className="mx-2 w-[calc(100%-1rem)] bg-white/15" />
+                    <BlurRangeSlider
+                      values={[
+                        profile.minimumBlurRadius,
+                        profile.maximumBlurRadius,
+                      ]}
+                      onChange={updateBlurRange}
+                    />
+                  </>
+                )}
+                <Separator className="mx-2 w-[calc(100%-1rem)] bg-white/15" />
+                <NumericSlider
+                  icon={ArrowsVerticalIcon}
+                  label="顶部边距"
+                  value={profile.topInset}
+                  minimum={0}
+                  maximum={240}
+                  step={4}
+                  suffix=" pt"
+                  onChange={(value) => update("topInset", value)}
+                />
+                <Separator className="mx-2 w-[calc(100%-1rem)] bg-white/15" />
+                <NumericSlider
+                  icon={ArrowsVerticalIcon}
+                  label="底部边距"
+                  value={profile.bottomInset}
+                  minimum={0}
+                  maximum={240}
+                  step={4}
+                  suffix=" pt"
+                  onChange={(value) => update("bottomInset", value)}
+                />
               </>
             )}
           </DrawerCard>
@@ -399,6 +474,126 @@ function LyricsProfileEditor({
         </>
       )}
     </>
+  );
+}
+
+function LyricsSourceOrder({
+  value,
+  onChange,
+}: {
+  value: LyricsProvider[];
+  onChange: (value: LyricsProvider[]) => void;
+}) {
+  const move = (index: number, offset: -1 | 1) => {
+    const targetIndex = index + offset;
+    if (targetIndex < 0 || targetIndex >= value.length) return;
+    const next = [...value];
+    [next[index], next[targetIndex]] = [next[targetIndex], next[index]];
+    onChange(next);
+  };
+
+  return (
+    <DrawerCard>
+      <SettingRow
+        icon={ArrowsVerticalIcon}
+        title="歌词来源优先级"
+        description="找到可靠匹配时优先使用靠前来源"
+      />
+      {value.map((provider, index) => {
+        const item = lyricProviders.find((candidate) => candidate.value === provider);
+        if (!item) return null;
+        return (
+          <div key={provider}>
+            <Separator className="mx-2 w-[calc(100%-1rem)] bg-white/15" />
+            <SettingRow title={item.label} badge={item.capability}>
+              <div className="flex items-center gap-1">
+                <Button
+                  isIconOnly
+                  size="sm"
+                  variant="ghost"
+                  aria-label={`提高${item.label}优先级`}
+                  isDisabled={index === 0}
+                  onPress={() => move(index, -1)}
+                  className="text-white/80"
+                >
+                  <CaretUpIcon aria-hidden size={16} />
+                </Button>
+                <Button
+                  isIconOnly
+                  size="sm"
+                  variant="ghost"
+                  aria-label={`降低${item.label}优先级`}
+                  isDisabled={index === value.length - 1}
+                  onPress={() => move(index, 1)}
+                  className="text-white/80"
+                >
+                  <CaretDownIcon aria-hidden size={16} />
+                </Button>
+              </div>
+            </SettingRow>
+          </div>
+        );
+      })}
+    </DrawerCard>
+  );
+}
+
+function BlurRangeSlider({
+  values,
+  onChange,
+}: {
+  values: [number, number];
+  onChange: (values: [number, number]) => void;
+}) {
+  const formatValue = (value: number) => value
+    .toFixed(1)
+    .replace(/\.0$/, "");
+  const [minimumBlurRadius, maximumBlurRadius] = values;
+
+  return (
+    <div className="px-4 py-4">
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <ArrowsOutIcon aria-hidden size={20} className="shrink-0 text-white/90" />
+        <span className="w-full text-[14px] font-semibold text-white">
+          模糊范围
+        </span>
+        <span className="whitespace-nowrap text-sm text-white/75">
+          {formatValue(minimumBlurRadius)} / {formatValue(maximumBlurRadius)} pt
+        </span>
+      </div>
+      <Slider
+        aria-label="逐行模糊范围"
+        value={values}
+        minValue={0}
+        maxValue={12}
+        step={0.5}
+        onChange={(next) => {
+          if (!Array.isArray(next) || next.length < 2) return;
+          const ordered = next
+            .map(Number)
+            .sort((left, right) => left - right);
+          onChange([ordered[0], ordered[1]]);
+        }}
+      >
+        <Slider.Track className="bg-white/20">
+          <Slider.Fill />
+          <Slider.Thumb
+            index={0}
+            aria-label="相邻歌词模糊"
+            className="border-0 bg-white shadow-md"
+          />
+          <Slider.Thumb
+            index={1}
+            aria-label="远处歌词模糊"
+            className="border-0 bg-white shadow-md"
+          />
+        </Slider.Track>
+      </Slider>
+      <div className="mt-1 flex justify-between text-xs text-white/55">
+        <span>相邻 {formatValue(minimumBlurRadius)} pt</span>
+        <span>远处 {formatValue(maximumBlurRadius)} pt</span>
+      </div>
+    </div>
   );
 }
 
