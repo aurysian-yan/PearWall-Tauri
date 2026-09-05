@@ -7,6 +7,7 @@ export type SelectOption<T extends string | number> = {
 
 export type DrawerPage =
   | "advanced"
+  | "lyrics"
   | "dynamicWallpaperDisplays"
   | "screenSaverDisplays"
   | "licenses";
@@ -20,10 +21,14 @@ export type MediaArtwork = {
   title: string;
   artist: string;
   album: string;
+  duration: number;
+  elapsed: number;
+  playback_rate: number;
 };
 
 export type ConnectedDisplay = {
   id: string;
+  persistentId: string;
   name: string;
   width: number;
   height: number;

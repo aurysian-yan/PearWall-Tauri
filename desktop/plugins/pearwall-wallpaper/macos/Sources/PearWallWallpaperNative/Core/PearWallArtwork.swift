@@ -5,6 +5,12 @@ struct PearWallMediaArtwork {
     let key: String
     let source: String
     let playing: Bool
+    let title: String
+    let artist: String
+    let album: String
+    let duration: TimeInterval
+    let elapsed: TimeInterval
+    let playbackRate: Double
 }
 
 enum PearWallMediaArtworkCache {
@@ -30,6 +36,12 @@ enum PearWallMediaArtworkCache {
             key: key,
             source: object["data_url"] as? String ?? "",
             playing: (object["playing"] as? NSNumber)?.boolValue ?? true,
+            title: object["title"] as? String ?? "",
+            artist: object["artist"] as? String ?? "",
+            album: object["album"] as? String ?? "",
+            duration: (object["duration"] as? NSNumber)?.doubleValue ?? 0,
+            elapsed: (object["elapsed"] as? NSNumber)?.doubleValue ?? 0,
+            playbackRate: (object["playback_rate"] as? NSNumber)?.doubleValue ?? 0,
         )
     }
 }

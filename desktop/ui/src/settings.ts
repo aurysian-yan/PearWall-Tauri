@@ -1,4 +1,11 @@
-import type { ExportSettings, Settings } from './types';
+import type {
+  ExportSettings,
+  LyricsFontWeight,
+  LyricsPresentationProfile,
+  LyricsPresentationSettings,
+  Settings,
+  TrackInfoSettings,
+} from './types';
 
 type ScreenSaverSettingsWindow = Window & {
   PearWallScreenSaverSettings?: Partial<Settings>;
@@ -13,6 +20,36 @@ type ScreenSaverSettingsWindow = Window & {
 
 export const settingsStorageKey = 'pearwall.settings';
 export const exportSettingsStorageKey = 'pearwall.export-settings';
+
+export const defaultLyricsPresentationProfile: LyricsPresentationProfile = {
+  enabled: false,
+  showLyrics: true,
+  fontSizeMode: 'MELOX_AUTO',
+  fontSize: 50,
+  fontWeight: 'BOLD',
+  alignment: 'MELOX',
+  progressiveBlur: true,
+  trackInfo: {
+    enabled: true,
+    showArtwork: true,
+    showTitle: true,
+    showArtist: true,
+    showAlbum: true,
+    layout: 'HORIZONTAL',
+    alignment: 'FOLLOW_LYRICS',
+    scale: 1,
+    artworkSize: 72,
+    titleFontSize: 18,
+    titleFontWeight: 'BOLD',
+    secondaryFontSize: 14,
+    secondaryFontWeight: 'MEDIUM',
+  },
+};
+
+export const defaultLyricsPresentation: LyricsPresentationSettings = {
+  defaultProfile: defaultLyricsPresentationProfile,
+  displayOverrides: {},
+};
 
 export const defaultSettings: Settings = {
   dynamicWallpaperEnabled: false,
@@ -39,6 +76,7 @@ export const defaultSettings: Settings = {
   artworkFallback: 'DEFAULT',
   customArtwork: '',
   customArtworkName: '',
+  lyricsPresentation: defaultLyricsPresentation,
 };
 
 export const defaultExportSettings: ExportSettings = {
@@ -73,6 +111,125 @@ function isWatermarkBackground(value: unknown): value is ExportSettings['waterma
 
 function isWatermarkPlacement(value: unknown): value is ExportSettings['watermarkPlacement'] {
   return ['OVERLAY', 'BELOW'].includes(value as string);
+}
+
+function normalizedFontWeight(
+  value: unknown,
+  fallback: LyricsFontWeight,
+): LyricsFontWeight {
+  return ['REGULAR', 'MEDIUM', 'SEMIBOLD', 'BOLD', 'HEAVY'].includes(
+    value as string,
+  )
+    ? (value as LyricsFontWeight)
+    : fallback;
+}
+
+function normalizedLyricsProfile(
+  saved: unknown,
+  fallback: LyricsPresentationProfile = defaultLyricsPresentationProfile,
+): LyricsPresentationProfile {
+  const value = saved && typeof saved === 'object'
+    ? (saved as Partial<LyricsPresentationProfile>)
+    : {};
+  const trackInfo: Partial<TrackInfoSettings> =
+    value.trackInfo && typeof value.trackInfo === 'object'
+      ? value.trackInfo
+      : {};
+  const numberInRange = (
+    candidate: unknown,
+    defaultValue: number,
+    minimum: number,
+    maximum: number,
+  ) => {
+    const number = Number(candidate);
+    return Number.isFinite(number)
+      ? Math.min(maximum, Math.max(minimum, number))
+      : defaultValue;
+  };
+  return {
+    enabled: typeof value.enabled === 'boolean' ? value.enabled : fallback.enabled,
+    showLyrics: typeof value.showLyrics === 'boolean'
+      ? value.showLyrics
+      : fallback.showLyrics,
+    fontSizeMode: value.fontSizeMode === 'CUSTOM' ? 'CUSTOM' : 'MELOX_AUTO',
+    fontSize: numberInRange(value.fontSize, fallback.fontSize, 18, 120),
+    fontWeight: normalizedFontWeight(value.fontWeight, fallback.fontWeight),
+    alignment: ['MELOX', 'LEFT', 'CENTER', 'RIGHT'].includes(
+      value.alignment as string,
+    )
+      ? value.alignment!
+      : fallback.alignment,
+    progressiveBlur: typeof value.progressiveBlur === 'boolean'
+      ? value.progressiveBlur
+      : fallback.progressiveBlur,
+    trackInfo: {
+      enabled: typeof trackInfo.enabled === 'boolean'
+        ? trackInfo.enabled
+        : fallback.trackInfo.enabled,
+      showArtwork: typeof trackInfo.showArtwork === 'boolean'
+        ? trackInfo.showArtwork
+        : fallback.trackInfo.showArtwork,
+      showTitle: typeof trackInfo.showTitle === 'boolean'
+        ? trackInfo.showTitle
+        : fallback.trackInfo.showTitle,
+      showArtist: typeof trackInfo.showArtist === 'boolean'
+        ? trackInfo.showArtist
+        : fallback.trackInfo.showArtist,
+      showAlbum: typeof trackInfo.showAlbum === 'boolean'
+        ? trackInfo.showAlbum
+        : fallback.trackInfo.showAlbum,
+      layout: trackInfo.layout === 'VERTICAL' ? 'VERTICAL' : 'HORIZONTAL',
+      alignment: ['FOLLOW_LYRICS', 'LEFT', 'CENTER', 'RIGHT'].includes(
+        trackInfo.alignment as string,
+      )
+        ? trackInfo.alignment!
+        : fallback.trackInfo.alignment,
+      scale: numberInRange(trackInfo.scale, fallback.trackInfo.scale, 0.6, 1.6),
+      artworkSize: numberInRange(
+        trackInfo.artworkSize,
+        fallback.trackInfo.artworkSize,
+        40,
+        160,
+      ),
+      titleFontSize: numberInRange(
+        trackInfo.titleFontSize,
+        fallback.trackInfo.titleFontSize,
+        12,
+        48,
+      ),
+      titleFontWeight: normalizedFontWeight(
+        trackInfo.titleFontWeight,
+        fallback.trackInfo.titleFontWeight,
+      ),
+      secondaryFontSize: numberInRange(
+        trackInfo.secondaryFontSize,
+        fallback.trackInfo.secondaryFontSize,
+        10,
+        36,
+      ),
+      secondaryFontWeight: normalizedFontWeight(
+        trackInfo.secondaryFontWeight,
+        fallback.trackInfo.secondaryFontWeight,
+      ),
+    },
+  };
+}
+
+function normalizedLyricsPresentation(value: unknown): LyricsPresentationSettings {
+  const saved = value && typeof value === 'object'
+    ? (value as Partial<LyricsPresentationSettings>)
+    : {};
+  const defaultProfile = normalizedLyricsProfile(saved.defaultProfile);
+  const rawOverrides = saved.displayOverrides && typeof saved.displayOverrides === 'object'
+    ? saved.displayOverrides
+    : {};
+  const displayOverrides = Object.fromEntries(
+    Object.entries(rawOverrides).flatMap(([displayId, override]) => {
+      if (!displayId || !override || typeof override !== 'object') return [];
+      return [[displayId, normalizedLyricsProfile(override, defaultProfile)]];
+    }),
+  );
+  return { defaultProfile, displayOverrides };
 }
 
 function normalizedSettings(saved: Partial<Settings>): Settings {
@@ -136,6 +293,7 @@ function normalizedSettings(saved: Partial<Settings>): Settings {
     performanceMode,
     autoBatterySaverMax,
     autoBatteryBalancedMax,
+    lyricsPresentation: normalizedLyricsPresentation(saved.lyricsPresentation),
   } as Settings;
 }
 

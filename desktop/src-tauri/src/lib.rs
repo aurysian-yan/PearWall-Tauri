@@ -18,6 +18,8 @@ mod macos_app_service;
 #[cfg(target_os = "macos")]
 mod macos_audio;
 #[cfg(target_os = "macos")]
+mod macos_lyrics;
+#[cfg(target_os = "macos")]
 mod macos_now_playing;
 #[cfg(target_os = "macos")]
 mod macos_power;
@@ -156,12 +158,16 @@ struct MediaArtwork {
     title: String,
     artist: String,
     album: String,
+    duration: f64,
+    elapsed: f64,
+    playback_rate: f64,
 }
 
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct ConnectedDisplay {
     id: String,
+    persistent_id: String,
     name: String,
     width: u32,
     height: u32,
@@ -272,6 +278,8 @@ fn get_connected_displays(app: tauri::AppHandle) -> Result<Vec<ConnectedDisplay>
                 let size = monitor.map(|value| value.size());
                 ConnectedDisplay {
                     id: display_id.to_string(),
+                    persistent_id: macos_now_playing::display_uuid(*display_id)
+                        .unwrap_or_else(|| display_id.to_string()),
                     name: monitor
                         .and_then(|value| value.name().cloned())
                         .unwrap_or_else(|| format!("显示器 {}", index + 1)),
@@ -316,6 +324,7 @@ fn get_connected_displays(app: tauri::AppHandle) -> Result<Vec<ConnectedDisplay>
                     .unwrap_or_else(|| format!("显示器 {}", index + 1));
                 let id = monitor_identifier(monitor, index);
                 ConnectedDisplay {
+                    persistent_id: id.clone(),
                     id,
                     name,
                     width: size.width,
@@ -441,12 +450,19 @@ fn start_macos_background_runtime(
     analyzer: Arc<Mutex<SpectrumAnalyzer>>,
     started_at: Instant,
 ) -> Result<(), String> {
+    let playback = Arc::new(Mutex::new(macos_runtime_state::PlaybackClock::default()));
+    let lyrics = macos_lyrics::start();
     macos_audio::start(analyzer.clone(), started_at);
-    macos_runtime_state::start_publisher(analyzer, started_at)?;
+    macos_runtime_state::start_publisher(analyzer, playback.clone(), started_at)?;
     std::thread::Builder::new()
         .name("pearwall-media-artwork".to_string())
-        .spawn(|| loop {
-            let _ = macos_now_playing::get_media_artwork(None);
+        .spawn(move || loop {
+            if let Ok(media) = macos_now_playing::get_media_artwork(None) {
+                if let Ok(mut clock) = playback.lock() {
+                    clock.update(&media);
+                }
+                let _ = lyrics.send(media);
+            }
             std::thread::sleep(Duration::from_secs(1));
         })
         .map_err(|error| format!("无法启动媒体封面线程：{error}"))?;

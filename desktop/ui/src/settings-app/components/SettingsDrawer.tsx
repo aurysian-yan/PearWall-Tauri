@@ -8,15 +8,17 @@ import {
   GaugeIcon,
   InfoIcon,
   MonitorIcon,
+  QuotesIcon,
   ShuffleIcon,
   SlidersHorizontalIcon,
 } from "@phosphor-icons/react";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type Dispatch, type SetStateAction } from "react";
 import { DrawerCard, SettingRow, Toggle, type IconType } from "../../SettingsPrimitives";
 import type { Settings } from "../../types";
 import licenseDataJson from "../../generated/openSourceLicenses.json";
 import { BatteryRangeSetting, ChoiceTabs } from "./SettingControls";
 import { DisplaySelector } from "./DisplaySelector";
+import { LyricsSettings } from "./LyricsSettings";
 import { DrawerHeader, DrawerHero } from "./DrawerLayout";
 import { landscapePresets, portraitPresets, renderScales } from "../model";
 import type {
@@ -39,6 +41,7 @@ export function DrawerPageContent({
   displayDiscoveryFailed,
   onDynamicWallpaperDisplayChange,
   onScreenSaverDisplayChange,
+  setSettings,
 }: {
   page: DrawerPage;
   settings: Settings;
@@ -50,9 +53,11 @@ export function DrawerPageContent({
   displayDiscoveryFailed: boolean;
   onDynamicWallpaperDisplayChange: (id: string, enabled: boolean) => void;
   onScreenSaverDisplayChange: (id: string, enabled: boolean) => void;
+  setSettings: Dispatch<SetStateAction<Settings>>;
 }) {
   const titles: Record<DrawerPage, string> = {
     advanced: "高级设置",
+    lyrics: "歌词与歌曲信息",
     dynamicWallpaperDisplays: "动态壁纸显示器",
     screenSaverDisplays: "屏保显示器",
     licenses: "开源许可",
@@ -61,6 +66,7 @@ export function DrawerPageContent({
     advanced: isMacOSRuntime
       ? "调整渲染质量、屏幕方向方案和屏保配置详情。"
       : "调整渲染质量与屏幕方向方案，也可以让 Pear Wall 自动随机切换。",
+    lyrics: "设置壁纸与屏保中的 MeloX 歌词动画和歌曲信息。",
     dynamicWallpaperDisplays: "选择用于显示动态壁纸的显示器。",
     screenSaverDisplays:
       "选择用于显示动态屏保画面的显示器，未启用的显示器将保持纯黑。",
@@ -68,6 +74,7 @@ export function DrawerPageContent({
   };
   const icons: Record<DrawerPage, IconType> = {
     advanced: SlidersHorizontalIcon,
+    lyrics: QuotesIcon,
     dynamicWallpaperDisplays: DesktopIcon,
     screenSaverDisplays: MonitorIcon,
     licenses: FileTextIcon,
@@ -196,6 +203,14 @@ export function DrawerPageContent({
             </div>
           )}
 
+          {page === "lyrics" && (
+            <LyricsSettings
+              settings={settings}
+              connectedDisplays={connectedDisplays}
+              setSettings={setSettings}
+            />
+          )}
+
           {page === "dynamicWallpaperDisplays" && (
             <div className="px-4">
               <DrawerCard>
@@ -205,7 +220,7 @@ export function DrawerPageContent({
                   displays={connectedDisplays}
                   selectedIds={
                     settings.dynamicWallpaperDisplayIds ??
-                    connectedDisplays.map((display) => display.id)
+                    connectedDisplays.map((display) => display.persistentId)
                   }
                   loading={displayLoading}
                   failed={displayDiscoveryFailed}

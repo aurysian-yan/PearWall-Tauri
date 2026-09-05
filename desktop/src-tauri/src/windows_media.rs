@@ -151,6 +151,7 @@ fn read_current_media(
         title,
         artist,
         album,
+        ..MediaArtwork::default()
     })
 }
 

@@ -239,9 +239,9 @@ export function DisplayArrangement({
             viewBox={`${minX - padding} ${minY - padding} ${viewBoxWidth} ${viewBoxHeight}`}
           >
             {frames.map((display, index) => {
-              const enabled = selectedIds.includes(display.id);
+              const enabled = selectedIds.includes(display.persistentId);
               return (
-                <g key={display.id}>
+                <g key={display.persistentId}>
                   <rect
                     x={display.visualX}
                     y={display.visualY}
@@ -323,7 +323,7 @@ export function DisplaySelector({
   onChange: (id: string, enabled: boolean) => void;
 }) {
   const enabledDisplayCount = displays.filter((display) =>
-    selectedIds.includes(display.id),
+    selectedIds.includes(display.persistentId),
   ).length;
 
   return (
@@ -355,11 +355,11 @@ export function DisplaySelector({
         <div className="mt-3 divide-y divide-white/10">
           {displays.map((display, index) => (
             <Checkbox
-              key={display.id}
+              key={display.persistentId}
               aria-label={`${displayName(display, index)}${selectionLabel}`}
               className="w-full"
-              isSelected={selectedIds.includes(display.id)}
-              onChange={(enabled) => onChange(display.id, enabled)}
+              isSelected={selectedIds.includes(display.persistentId)}
+              onChange={(enabled) => onChange(display.persistentId, enabled)}
             >
               {({ isSelected }) => (
                 <Checkbox.Content className="flex min-h-16 w-full items-center gap-3 py-3 text-left">

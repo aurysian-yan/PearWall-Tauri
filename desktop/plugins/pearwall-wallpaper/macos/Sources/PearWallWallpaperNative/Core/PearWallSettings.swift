@@ -1,6 +1,7 @@
 import Darwin
 import Foundation
 import Metal
+import ApplicationServices
 
 func pearWallApplicationSupportDirectory() -> URL? {
     guard let user = getpwuid(getuid()),
@@ -13,6 +14,17 @@ func pearWallApplicationSupportDirectory() -> URL? {
         .appendingPathComponent("PearWall", isDirectory: true)
 }
 
+func pearWallDisplayIdentifier(_ displayID: CGDirectDisplayID) -> String {
+    guard let unmanagedUUID = CGDisplayCreateUUIDFromDisplayID(displayID) else {
+        return String(displayID)
+    }
+    let uuid = unmanagedUUID.takeRetainedValue()
+    guard let value = CFUUIDCreateString(nil, uuid) else {
+        return String(displayID)
+    }
+    return value as String
+}
+
 enum PearWallScreenSaverDisplay: String {
     case primary = "PRIMARY"
     case secondary = "SECONDARY"
@@ -22,6 +34,172 @@ enum PearWallArtworkFallback: String {
     case defaultArtwork = "DEFAULT"
     case custom = "CUSTOM"
     case desktop = "DESKTOP"
+}
+
+enum PearWallLyricsFontSizeMode: String {
+    case meloXAuto = "MELOX_AUTO"
+    case custom = "CUSTOM"
+}
+
+enum PearWallLyricsFontWeight: String {
+    case regular = "REGULAR"
+    case medium = "MEDIUM"
+    case semibold = "SEMIBOLD"
+    case bold = "BOLD"
+    case heavy = "HEAVY"
+}
+
+enum PearWallLyricsTextAlignment: String {
+    case meloX = "MELOX"
+    case left = "LEFT"
+    case center = "CENTER"
+    case right = "RIGHT"
+}
+
+enum PearWallTrackInfoAlignment: String {
+    case followLyrics = "FOLLOW_LYRICS"
+    case left = "LEFT"
+    case center = "CENTER"
+    case right = "RIGHT"
+}
+
+enum PearWallTrackInfoLayout: String {
+    case horizontal = "HORIZONTAL"
+    case vertical = "VERTICAL"
+}
+
+struct PearWallTrackInfoSettings {
+    var enabled = true
+    var showArtwork = true
+    var showTitle = true
+    var showArtist = true
+    var showAlbum = true
+    var layout = PearWallTrackInfoLayout.horizontal
+    var alignment = PearWallTrackInfoAlignment.followLyrics
+    var scale = 1.0
+    var artworkSize = 72.0
+    var titleFontSize = 18.0
+    var titleFontWeight = PearWallLyricsFontWeight.bold
+    var secondaryFontSize = 14.0
+    var secondaryFontWeight = PearWallLyricsFontWeight.medium
+
+    init() {}
+
+    init(object: [String: Any]?, fallback: PearWallTrackInfoSettings) {
+        self = fallback
+        guard let object else { return }
+        enabled = Self.boolean(object, key: "enabled", fallback: enabled)
+        showArtwork = Self.boolean(object, key: "showArtwork", fallback: showArtwork)
+        showTitle = Self.boolean(object, key: "showTitle", fallback: showTitle)
+        showArtist = Self.boolean(object, key: "showArtist", fallback: showArtist)
+        showAlbum = Self.boolean(object, key: "showAlbum", fallback: showAlbum)
+        layout = PearWallTrackInfoLayout(
+            rawValue: Self.string(object, key: "layout", fallback: layout.rawValue)
+        ) ?? layout
+        alignment = PearWallTrackInfoAlignment(
+            rawValue: Self.string(object, key: "alignment", fallback: alignment.rawValue)
+        ) ?? alignment
+        scale = Self.number(object, key: "scale", fallback: scale, range: 0.6...1.6)
+        artworkSize = Self.number(object, key: "artworkSize", fallback: artworkSize, range: 40...160)
+        titleFontSize = Self.number(object, key: "titleFontSize", fallback: titleFontSize, range: 12...48)
+        titleFontWeight = PearWallLyricsFontWeight(
+            rawValue: Self.string(object, key: "titleFontWeight", fallback: titleFontWeight.rawValue)
+        ) ?? titleFontWeight
+        secondaryFontSize = Self.number(
+            object,
+            key: "secondaryFontSize",
+            fallback: secondaryFontSize,
+            range: 10...36
+        )
+        secondaryFontWeight = PearWallLyricsFontWeight(
+            rawValue: Self.string(
+                object,
+                key: "secondaryFontWeight",
+                fallback: secondaryFontWeight.rawValue
+            )
+        ) ?? secondaryFontWeight
+    }
+
+    private static func boolean(_ object: [String: Any], key: String, fallback: Bool) -> Bool {
+        (object[key] as? NSNumber)?.boolValue ?? fallback
+    }
+
+    private static func string(_ object: [String: Any], key: String, fallback: String) -> String {
+        object[key] as? String ?? fallback
+    }
+
+    private static func number(
+        _ object: [String: Any],
+        key: String,
+        fallback: Double,
+        range: ClosedRange<Double>
+    ) -> Double {
+        guard let value = (object[key] as? NSNumber)?.doubleValue,
+              value.isFinite else {
+            return fallback
+        }
+        return min(range.upperBound, max(range.lowerBound, value))
+    }
+}
+
+struct PearWallLyricsPresentationProfile {
+    var enabled = false
+    var showLyrics = true
+    var fontSizeMode = PearWallLyricsFontSizeMode.meloXAuto
+    var fontSize = 50.0
+    var fontWeight = PearWallLyricsFontWeight.bold
+    var alignment = PearWallLyricsTextAlignment.meloX
+    var progressiveBlur = true
+    var trackInfo = PearWallTrackInfoSettings()
+
+    init() {}
+
+    init(object: [String: Any]?, fallback: PearWallLyricsPresentationProfile) {
+        self = fallback
+        guard let object else { return }
+        enabled = Self.boolean(object, key: "enabled", fallback: enabled)
+        showLyrics = Self.boolean(object, key: "showLyrics", fallback: showLyrics)
+        fontSizeMode = PearWallLyricsFontSizeMode(
+            rawValue: Self.string(object, key: "fontSizeMode", fallback: fontSizeMode.rawValue)
+        ) ?? fontSizeMode
+        fontSize = Self.number(object, key: "fontSize", fallback: fontSize, range: 18...120)
+        fontWeight = PearWallLyricsFontWeight(
+            rawValue: Self.string(object, key: "fontWeight", fallback: fontWeight.rawValue)
+        ) ?? fontWeight
+        alignment = PearWallLyricsTextAlignment(
+            rawValue: Self.string(object, key: "alignment", fallback: alignment.rawValue)
+        ) ?? alignment
+        progressiveBlur = Self.boolean(
+            object,
+            key: "progressiveBlur",
+            fallback: progressiveBlur
+        )
+        trackInfo = PearWallTrackInfoSettings(
+            object: object["trackInfo"] as? [String: Any],
+            fallback: trackInfo
+        )
+    }
+
+    private static func boolean(_ object: [String: Any], key: String, fallback: Bool) -> Bool {
+        (object[key] as? NSNumber)?.boolValue ?? fallback
+    }
+
+    private static func string(_ object: [String: Any], key: String, fallback: String) -> String {
+        object[key] as? String ?? fallback
+    }
+
+    private static func number(
+        _ object: [String: Any],
+        key: String,
+        fallback: Double,
+        range: ClosedRange<Double>
+    ) -> Double {
+        guard let value = (object[key] as? NSNumber)?.doubleValue,
+              value.isFinite else {
+            return fallback
+        }
+        return min(range.upperBound, max(range.lowerBound, value))
+    }
 }
 
 enum PearWallAudioVisualization {
@@ -65,6 +243,16 @@ struct PearWallSettings {
     var randomPreset = false
     var artworkFallback = PearWallArtworkFallback.defaultArtwork
     var customArtwork = ""
+    var lyricsPresentationDefault = PearWallLyricsPresentationProfile()
+    var lyricsPresentationDisplayOverrides: [String: PearWallLyricsPresentationProfile] = [:]
+
+    func lyricsPresentationProfile(displayID: String?) -> PearWallLyricsPresentationProfile {
+        guard let displayID,
+              let override = lyricsPresentationDisplayOverrides[displayID] else {
+            return lyricsPresentationDefault
+        }
+        return override
+    }
 
     var flowSpeedMultiplier: Double {
         switch flowSpeed.uppercased() {
@@ -150,6 +338,21 @@ struct PearWallSettings {
         landscapePreset = Self.integer(object, key: "landscapePreset", fallback: landscapePreset)
         randomPreset = Self.boolean(object, key: "randomPreset", fallback: randomPreset)
         customArtwork = Self.string(object, key: "customArtwork", fallback: customArtwork)
+        if let presentation = object["lyricsPresentation"] as? [String: Any] {
+            lyricsPresentationDefault = PearWallLyricsPresentationProfile(
+                object: presentation["defaultProfile"] as? [String: Any],
+                fallback: lyricsPresentationDefault
+            )
+            if let overrides = presentation["displayOverrides"] as? [String: Any] {
+                lyricsPresentationDisplayOverrides = overrides.reduce(into: [:]) { result, entry in
+                    guard let value = entry.value as? [String: Any] else { return }
+                    result[entry.key] = PearWallLyricsPresentationProfile(
+                        object: value,
+                        fallback: lyricsPresentationDefault
+                    )
+                }
+            }
+        }
         if let values = object["dynamicWallpaperDisplayIds"] as? [String] {
             dynamicWallpaperDisplayIds = values
         }

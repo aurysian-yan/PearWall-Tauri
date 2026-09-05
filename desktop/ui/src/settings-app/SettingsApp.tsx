@@ -215,6 +215,7 @@ export function SettingsApp() {
                 displayDiscoveryFailed={displayDiscoveryFailed}
                 onDynamicWallpaperDisplayChange={toggleDynamicWallpaperDisplay}
                 onScreenSaverDisplayChange={toggleScreenSaverDisplay}
+                setSettings={setSettings}
               />
             )}
           </Drawer.Content>

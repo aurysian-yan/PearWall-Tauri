@@ -7,6 +7,49 @@ export type ExportResolution = '1920x1080' | '2560x1440' | '3840x2160' | 'custom
 export type ExportAspectRatio = '16:9' | '16:10' | '4:3' | '1:1' | 'custom';
 export type WatermarkBackground = 'WHITE' | 'BLACK' | 'BLUR_WHITE' | 'BLUR_BLACK';
 export type WatermarkPlacement = 'OVERLAY' | 'BELOW';
+export type LyricsFontSizeMode = 'MELOX_AUTO' | 'CUSTOM';
+export type LyricsFontWeight = 'REGULAR' | 'MEDIUM' | 'SEMIBOLD' | 'BOLD' | 'HEAVY';
+export type LyricsTextAlignment = 'MELOX' | 'LEFT' | 'CENTER' | 'RIGHT';
+export type TrackInfoAlignment = 'FOLLOW_LYRICS' | 'LEFT' | 'CENTER' | 'RIGHT';
+export type TrackInfoLayout = 'HORIZONTAL' | 'VERTICAL';
+
+export type TrackInfoSettings = {
+  enabled: boolean;
+  showArtwork: boolean;
+  showTitle: boolean;
+  showArtist: boolean;
+  showAlbum: boolean;
+  layout: TrackInfoLayout;
+  alignment: TrackInfoAlignment;
+  scale: number;
+  artworkSize: number;
+  titleFontSize: number;
+  titleFontWeight: LyricsFontWeight;
+  secondaryFontSize: number;
+  secondaryFontWeight: LyricsFontWeight;
+};
+
+export type LyricsPresentationProfile = {
+  enabled: boolean;
+  showLyrics: boolean;
+  fontSizeMode: LyricsFontSizeMode;
+  fontSize: number;
+  fontWeight: LyricsFontWeight;
+  alignment: LyricsTextAlignment;
+  progressiveBlur: boolean;
+  trackInfo: TrackInfoSettings;
+};
+
+export type LyricsPresentationOverride = Partial<
+  Omit<LyricsPresentationProfile, 'trackInfo'>
+> & {
+  trackInfo?: Partial<TrackInfoSettings>;
+};
+
+export type LyricsPresentationSettings = {
+  defaultProfile: LyricsPresentationProfile;
+  displayOverrides: Record<string, LyricsPresentationOverride>;
+};
 
 export type ExportSettings = {
   resolution: ExportResolution;
@@ -51,4 +94,5 @@ export type Settings = {
   artworkFallback: ArtworkFallback;
   customArtwork: string;
   customArtworkName: string;
+  lyricsPresentation: LyricsPresentationSettings;
 };

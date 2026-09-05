@@ -58,7 +58,31 @@ export function useConnectedDisplays({
       return;
     }
     setSettings((current) => {
-      if (current.screenSaverDisplayIds !== null) return current;
+      const persistentId = (value: string) =>
+        connectedDisplays.find(
+          (display) => display.id === value || display.persistentId === value,
+        )?.persistentId ?? value;
+      const migratedScreenSaverIds = current.screenSaverDisplayIds?.map(
+        persistentId,
+      );
+      const migratedWallpaperIds = current.dynamicWallpaperDisplayIds?.map(
+        persistentId,
+      );
+      if (current.screenSaverDisplayIds !== null) {
+        if (
+          JSON.stringify(migratedScreenSaverIds) ===
+            JSON.stringify(current.screenSaverDisplayIds) &&
+          JSON.stringify(migratedWallpaperIds) ===
+            JSON.stringify(current.dynamicWallpaperDisplayIds)
+        ) {
+          return current;
+        }
+        return {
+          ...current,
+          screenSaverDisplayIds: migratedScreenSaverIds ?? [],
+          dynamicWallpaperDisplayIds: migratedWallpaperIds ?? null,
+        };
+      }
       const primary = connectedDisplays.find((display) => display.isPrimary);
       const legacyTarget =
         current.screenSaverDisplay === "SECONDARY"
@@ -66,7 +90,8 @@ export function useConnectedDisplays({
           : (primary ?? connectedDisplays[0]);
       return {
         ...current,
-        screenSaverDisplayIds: legacyTarget ? [legacyTarget.id] : [],
+        screenSaverDisplayIds: legacyTarget ? [legacyTarget.persistentId] : [],
+        dynamicWallpaperDisplayIds: migratedWallpaperIds ?? null,
       };
     });
   }, [connectedDisplays, enabled, setSettings, sharedSettingsReady]);
@@ -89,7 +114,7 @@ export function useConnectedDisplays({
       setSettings((current) => {
         const currentIds =
           current.dynamicWallpaperDisplayIds ??
-          connectedDisplays.map((display) => display.id);
+          connectedDisplays.map((display) => display.persistentId);
         const dynamicWallpaperDisplayIds = selected
           ? Array.from(new Set([...currentIds, id]))
           : currentIds.filter((value) => value !== id);

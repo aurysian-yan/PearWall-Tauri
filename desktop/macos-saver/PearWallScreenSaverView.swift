@@ -105,7 +105,8 @@ final class PearWallScreenSaverView: ScreenSaverView {
                   frame: bounds,
                   settings: settings,
                   state: renderState,
-                  resourceBundle: Bundle(for: PearWallScreenSaverView.self)
+                  resourceBundle: Bundle(for: PearWallScreenSaverView.self),
+                  displayID: Self.persistentDisplayID(for: window?.screen)
               ) else {
             return
         }
@@ -124,6 +125,9 @@ final class PearWallScreenSaverView: ScreenSaverView {
 
     private func reconcileRenderTarget() {
         let shouldRender = previewMode || isCurrentScreenSelected()
+        renderSession?.updateDisplayID(
+            Self.persistentDisplayID(for: window?.screen)
+        )
         configurationDetailsLabel?.isHidden = !shouldRender || !settings.showConfigurationDetails
         guard shouldRender != renderTargetActive || (shouldRender && renderSession == nil) else {
             return
@@ -143,18 +147,18 @@ final class PearWallScreenSaverView: ScreenSaverView {
             return false
         }
         guard let currentScreen = window?.screen,
-              let currentDisplayID = Self.displayID(for: currentScreen) else {
+              let currentDisplayID = Self.persistentDisplayID(for: currentScreen) else {
             return screens.count == 1
         }
         if let selectedDisplayIDs = settings.screenSaverDisplayIds {
-            return selectedDisplayIDs.contains(currentDisplayID.stringValue)
+            return selectedDisplayIDs.contains(currentDisplayID)
         }
         let primaryScreen = screens.first(where: {
             $0.frame.origin == .zero
         }) ?? screens[0]
-        let primaryDisplayID = Self.displayID(for: primaryScreen)
+        let primaryDisplayID = Self.persistentDisplayID(for: primaryScreen)
         let secondaryScreen = screens.first(where: {
-            Self.displayID(for: $0) != primaryDisplayID
+            Self.persistentDisplayID(for: $0) != primaryDisplayID
         })
         let targetScreen: NSScreen
         switch settings.screenSaverDisplay {
@@ -163,7 +167,7 @@ final class PearWallScreenSaverView: ScreenSaverView {
         case .secondary:
             targetScreen = secondaryScreen ?? primaryScreen
         }
-        guard let targetDisplayID = Self.displayID(for: targetScreen) else {
+        guard let targetDisplayID = Self.persistentDisplayID(for: targetScreen) else {
             return false
         }
         return currentDisplayID == targetDisplayID
@@ -171,6 +175,11 @@ final class PearWallScreenSaverView: ScreenSaverView {
 
     private static func displayID(for screen: NSScreen?) -> NSNumber? {
         screen?.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber
+    }
+
+    private static func persistentDisplayID(for screen: NSScreen?) -> String? {
+        guard let value = displayID(for: screen) else { return nil }
+        return pearWallDisplayIdentifier(CGDirectDisplayID(value.uint32Value))
     }
 
     private func startRefreshTimer() {

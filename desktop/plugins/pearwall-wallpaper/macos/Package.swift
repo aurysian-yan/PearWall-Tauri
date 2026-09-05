@@ -18,11 +18,13 @@ let package = Package(
             name: "PearWallWallpaperNative",
             linkerSettings: [
                 .linkedFramework("AppKit"),
+                .linkedFramework("ApplicationServices"),
                 .linkedFramework("CoreGraphics"),
                 .linkedFramework("IOKit"),
                 .linkedFramework("Metal"),
                 .linkedFramework("MetalKit"),
                 .linkedFramework("QuartzCore"),
+                .linkedFramework("SwiftUI"),
             ]
         ),
     ],

@@ -16,6 +16,7 @@ xcrun clang \
   -fobjc-arc \
   -fblocks \
   -framework Foundation \
+  -framework ColorSync \
   -Wl,-install_name,@rpath/PearWallMediaRemote.dylib \
   -o "${OUTPUT}" \
   "${SOURCE}"

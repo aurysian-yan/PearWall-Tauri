@@ -22,6 +22,19 @@ my $function = DynaLoader::dl_install_xsub("main::$symbol_name", $symbol);
 extern "C" {
     fn pearwall_copy_now_playing_json() -> *mut c_char;
     fn pearwall_free_c_string(value: *mut c_char);
+    fn pearwall_copy_display_uuid(display_id: u32) -> *mut c_char;
+}
+
+pub fn display_uuid(display_id: u32) -> Option<String> {
+    let pointer = unsafe { pearwall_copy_display_uuid(display_id) };
+    if pointer.is_null() {
+        return None;
+    }
+    let value = unsafe { CStr::from_ptr(pointer) }
+        .to_string_lossy()
+        .into_owned();
+    unsafe { pearwall_free_c_string(pointer) };
+    (!value.is_empty()).then_some(value)
 }
 
 pub fn get_media_artwork(current_key: Option<&str>) -> Result<MediaArtwork, String> {
@@ -151,6 +164,9 @@ fn write_shared_cache(media: &MediaArtwork) {
         "title": &media.title,
         "artist": &media.artist,
         "album": &media.album,
+        "duration": media.duration,
+        "elapsed": media.elapsed,
+        "playback_rate": media.playback_rate,
         "updated_at_milliseconds": SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap_or_default()

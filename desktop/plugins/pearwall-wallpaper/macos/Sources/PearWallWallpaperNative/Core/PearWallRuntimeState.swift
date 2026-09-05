@@ -4,11 +4,15 @@ import Foundation
 struct PearWallRuntimeSnapshot {
     let pulse: Float
     let playing: Bool
+    let playbackRate: Float
+    let trackID: UInt64
+    let position: Double
+    let duration: Double
     let updatedAtMilliseconds: UInt64
 }
 
 final class PearWallRuntimeStateReader {
-    private static let stateSize = 64
+    private static let stateSize = 128
     private static let maximumAgeMilliseconds: UInt64 = 1_000
     private static let magic: [UInt8] = Array("PWRSTATE".utf8)
     private var mapping: UnsafeMutableRawPointer?
@@ -34,11 +38,23 @@ final class PearWallRuntimeStateReader {
             OSMemoryBarrier()
             let pulseBits = loadUInt32(mapping, offset: 20)
             let playing = loadUInt32(mapping, offset: 24) != 0
+            let playbackRateBits = loadUInt32(mapping, offset: 28)
             let updatedAtMilliseconds = loadUInt64(mapping, offset: 32)
+            let trackID = loadUInt64(mapping, offset: 48)
+            let positionBits = loadUInt64(mapping, offset: 56)
+            let durationBits = loadUInt64(mapping, offset: 64)
             OSMemoryBarrier()
             let second = loadUInt32(mapping, offset: 16)
             let pulse = Float(bitPattern: pulseBits)
-            guard first == second, second & 1 == 0, pulse.isFinite else {
+            let playbackRate = Float(bitPattern: playbackRateBits)
+            let position = Double(bitPattern: positionBits)
+            let duration = Double(bitPattern: durationBits)
+            guard first == second,
+                  second & 1 == 0,
+                  pulse.isFinite,
+                  playbackRate.isFinite,
+                  position.isFinite,
+                  duration.isFinite else {
                 continue
             }
             let now = UInt64(max(0, Date().timeIntervalSince1970 * 1_000))
@@ -50,6 +66,10 @@ final class PearWallRuntimeStateReader {
             return PearWallRuntimeSnapshot(
                 pulse: min(1, max(0, pulse)),
                 playing: playing,
+                playbackRate: max(0, playbackRate),
+                trackID: trackID,
+                position: max(0, position),
+                duration: max(0, duration),
                 updatedAtMilliseconds: updatedAtMilliseconds,
             )
         }
@@ -60,7 +80,7 @@ final class PearWallRuntimeStateReader {
         guard mapping == nil, Date() >= nextOpenAttempt else { return }
         nextOpenAttempt = Date().addingTimeInterval(1)
         guard let url = stateURL ?? pearWallApplicationSupportDirectory()?
-            .appendingPathComponent("runtime-state-v1.bin") else {
+            .appendingPathComponent("runtime-state-v2.bin") else {
             return
         }
         let descriptor = Darwin.open(url.path, O_RDONLY | O_CLOEXEC)
@@ -95,7 +115,7 @@ final class PearWallRuntimeStateReader {
             memcmp(mapping, bytes.baseAddress, Self.magic.count) == 0
         }
         return validMagic
-            && loadUInt32(mapping, offset: 8) == 1
+            && loadUInt32(mapping, offset: 8) == 2
             && loadUInt32(mapping, offset: 12) == Self.stateSize
     }
 

@@ -1,4 +1,6 @@
 #import <Foundation/Foundation.h>
+#import <ApplicationServices/ApplicationServices.h>
+#import <ColorSync/ColorSync.h>
 #import <dispatch/dispatch.h>
 #import <dlfcn.h>
 #import <stdio.h>
@@ -20,6 +22,13 @@ static NSString *PearWallStringValue(id value) {
         return [value stringValue];
     }
     return @"";
+}
+
+static NSNumber *PearWallNumberValue(id value, double fallback) {
+    if ([value isKindOfClass:NSNumber.class]) {
+        return value;
+    }
+    return @(fallback);
 }
 
 static NSString *PearWallArtworkMIMEType(NSData *data, NSString *reported) {
@@ -78,7 +87,10 @@ static NSDictionary *PearWallMediaArtwork(NSDictionary *info) {
             @"playing": @NO,
             @"title": @"",
             @"artist": @"",
-            @"album": @""
+            @"album": @"",
+            @"duration": @0,
+            @"elapsed": @0,
+            @"playback_rate": @0
         };
     }
     NSString *title = PearWallStringValue(info[@"kMRMediaRemoteNowPlayingInfoTitle"]);
@@ -94,6 +106,20 @@ static NSDictionary *PearWallMediaArtwork(NSDictionary *info) {
         isKindOfClass:NSNumber.class]
         ? info[@"kMRMediaRemoteNowPlayingInfoPlaybackRate"]
         : nil;
+    NSNumber *duration = PearWallNumberValue(
+        info[@"kMRMediaRemoteNowPlayingInfoDuration"],
+        0
+    );
+    NSNumber *elapsedValue = PearWallNumberValue(
+        info[@"kMRMediaRemoteNowPlayingInfoElapsedTime"],
+        0
+    );
+    double elapsed = elapsedValue.doubleValue;
+    id timestamp = info[@"kMRMediaRemoteNowPlayingInfoTimestamp"];
+    if ([timestamp isKindOfClass:NSDate.class] && playbackRate.doubleValue > 0) {
+        elapsed += MAX(0, -[(NSDate *)timestamp timeIntervalSinceNow])
+            * playbackRate.doubleValue;
+    }
     NSString *key = [NSString stringWithFormat:
         @"%@|%@|%@|%@|%lu",
         identifier,
@@ -121,7 +147,10 @@ static NSDictionary *PearWallMediaArtwork(NSDictionary *info) {
         @"playing": @(playing),
         @"title": title,
         @"artist": artist,
-        @"album": album
+        @"album": album,
+        @"duration": duration,
+        @"elapsed": @(MAX(0, elapsed)),
+        @"playback_rate": playbackRate ?: @(playing ? 1 : 0)
     };
 }
 
@@ -177,4 +206,19 @@ void pearwall_print_now_playing_json(void) {
     fputc('\n', stdout);
     fflush(stdout);
     pearwall_free_c_string(json);
+}
+
+char *pearwall_copy_display_uuid(uint32_t displayID) {
+    @autoreleasepool {
+        CFUUIDRef uuid = CGDisplayCreateUUIDFromDisplayID(displayID);
+        if (uuid == NULL) {
+            return NULL;
+        }
+        NSString *value = CFBridgingRelease(CFUUIDCreateString(NULL, uuid));
+        CFRelease(uuid);
+        if (value.length == 0) {
+            return NULL;
+        }
+        return strdup(value.UTF8String);
+    }
 }

@@ -113,7 +113,8 @@ final class PearWallWallpaperController {
             frame: contentRect,
             settings: settings,
             state: renderState,
-            resourceBundle: .main
+            resourceBundle: .main,
+            displayID: displayID
         ) else {
             return nil
         }
@@ -242,6 +243,9 @@ final class PearWallWallpaperController {
 
     private static func displayID(_ screen: NSScreen) -> String? {
         let key = NSDeviceDescriptionKey("NSScreenNumber")
-        return (screen.deviceDescription[key] as? NSNumber)?.stringValue
+        guard let value = screen.deviceDescription[key] as? NSNumber else {
+            return nil
+        }
+        return pearWallDisplayIdentifier(CGDirectDisplayID(value.uint32Value))
     }
 }

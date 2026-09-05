@@ -13,8 +13,8 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use pearwall_core::{PcmAnalysisSnapshot, SpectrumAnalyzer};
 
 const RUNTIME_STATE_MAGIC: [u8; 8] = *b"PWRSTATE";
-const RUNTIME_STATE_VERSION: u32 = 1;
-const RUNTIME_STATE_FILE_NAME: &str = "runtime-state-v1.bin";
+const RUNTIME_STATE_VERSION: u32 = 2;
+const RUNTIME_STATE_FILE_NAME: &str = "runtime-state-v2.bin";
 
 #[repr(C, align(64))]
 struct SharedRuntimeState {
@@ -24,20 +24,84 @@ struct SharedRuntimeState {
     sequence: AtomicU32,
     pulse_bits: AtomicU32,
     playing: AtomicU32,
-    reserved_value: u32,
+    playback_rate_bits: AtomicU32,
     updated_at_milliseconds: AtomicU64,
     settings_revision: AtomicU64,
-    reserved: [u8; 16],
+    track_id: AtomicU64,
+    position_bits: AtomicU64,
+    duration_bits: AtomicU64,
+    reserved: [u8; 56],
 }
 
-const _: [(); 64] = [(); size_of::<SharedRuntimeState>()];
+const _: [(); 128] = [(); size_of::<SharedRuntimeState>()];
 
 #[derive(Clone, Copy, Debug, Default)]
 pub struct RuntimeSnapshot {
     pub pulse: f32,
     pub playing: bool,
+    pub playback_rate: f32,
+    pub track_id: u64,
+    pub position: f64,
+    pub duration: f64,
     pub updated_at_milliseconds: u64,
     pub settings_revision: u64,
+}
+
+pub struct PlaybackClock {
+    track_id: u64,
+    position: f64,
+    duration: f64,
+    rate: f64,
+    playing: bool,
+    sampled_at: Instant,
+}
+
+impl Default for PlaybackClock {
+    fn default() -> Self {
+        Self {
+            track_id: 0,
+            position: 0.0,
+            duration: 0.0,
+            rate: 0.0,
+            playing: false,
+            sampled_at: Instant::now(),
+        }
+    }
+}
+
+impl PlaybackClock {
+    pub fn update(&mut self, media: &crate::MediaArtwork) {
+        self.track_id = stable_track_id(media);
+        self.position = finite_nonnegative(media.elapsed);
+        self.duration = finite_nonnegative(media.duration);
+        self.rate = if media.playback_rate.is_finite() {
+            media.playback_rate.max(0.0)
+        } else {
+            0.0
+        };
+        self.playing = media.playing && self.rate > 0.0;
+        self.sampled_at = Instant::now();
+    }
+
+    fn snapshot(&self) -> (u64, f64, f64, f32, bool) {
+        let advanced = if self.playing {
+            self.sampled_at.elapsed().as_secs_f64() * self.rate
+        } else {
+            0.0
+        };
+        let position = if self.duration > 0.0 {
+            (self.position + advanced).min(self.duration)
+        } else {
+            self.position + advanced
+        };
+        (
+            self.track_id,
+            position,
+            self.duration,
+            self.rate as f32,
+            self.playing,
+        )
+    }
 }
 
 pub struct RuntimeStateWriter {
@@ -151,10 +215,13 @@ impl RuntimeStateWriter {
                     sequence: AtomicU32::new(0),
                     pulse_bits: AtomicU32::new(0),
                     playing: AtomicU32::new(0),
-                    reserved_value: 0,
+                    playback_rate_bits: AtomicU32::new(0),
                     updated_at_milliseconds: AtomicU64::new(0),
                     settings_revision: AtomicU64::new(0),
-                    reserved: [0; 16],
+                    track_id: AtomicU64::new(0),
+                    position_bits: AtomicU64::new(0),
+                    duration_bits: AtomicU64::new(0),
+                    reserved: [0; 56],
                 });
             }
             mapping.flush()?;
@@ -162,7 +229,16 @@ impl RuntimeStateWriter {
         Ok(Self { mapping })
     }
 
-    pub fn publish(&mut self, pulse: f32, playing: bool, settings_revision: u64) {
+    pub fn publish(
+        &mut self,
+        pulse: f32,
+        track_id: u64,
+        position: f64,
+        duration: f64,
+        playback_rate: f32,
+        playing: bool,
+        settings_revision: u64,
+    ) {
         let state = unsafe { &*self.mapping.as_ptr().cast::<SharedRuntimeState>() };
         state.sequence.fetch_add(1, Ordering::AcqRel);
         state
@@ -170,17 +246,28 @@ impl RuntimeStateWriter {
             .store(pulse.clamp(0.0, 1.0).to_bits(), Ordering::Relaxed);
         state.playing.store(u32::from(playing), Ordering::Relaxed);
         state
+            .playback_rate_bits
+            .store(playback_rate.to_bits(), Ordering::Relaxed);
+        state
             .updated_at_milliseconds
             .store(unix_time_milliseconds(), Ordering::Relaxed);
         state
             .settings_revision
             .store(settings_revision, Ordering::Relaxed);
+        state.track_id.store(track_id, Ordering::Relaxed);
+        state
+            .position_bits
+            .store(position.to_bits(), Ordering::Relaxed);
+        state
+            .duration_bits
+            .store(duration.to_bits(), Ordering::Relaxed);
         state.sequence.fetch_add(1, Ordering::Release);
     }
 }
 
 pub fn start_publisher(
     analyzer: Arc<Mutex<SpectrumAnalyzer>>,
+    playback: Arc<Mutex<PlaybackClock>>,
     started_at: Instant,
 ) -> Result<(), String> {
     let mut state = RuntimeStateWriter::open().map_err(|error| error.to_string())?;
@@ -207,7 +294,13 @@ pub fn start_publisher(
                     })
                     .unwrap_or((0.0, None));
                 beat_logger.update(pulse, snapshot);
-                state.publish(pulse, true, 0);
+                let playback = playback
+                    .lock()
+                    .map(|clock| clock.snapshot())
+                    .unwrap_or((0, 0.0, 0.0, 0.0, false));
+                state.publish(
+                    pulse, playback.0, playback.1, playback.2, playback.3, playback.4, 0,
+                );
             }
         })
         .map(|_| ())
@@ -242,11 +335,21 @@ impl RuntimeStateReader {
             let snapshot = RuntimeSnapshot {
                 pulse: f32::from_bits(state.pulse_bits.load(Ordering::Relaxed)),
                 playing: state.playing.load(Ordering::Relaxed) != 0,
+                playback_rate: f32::from_bits(state.playback_rate_bits.load(Ordering::Relaxed)),
+                track_id: state.track_id.load(Ordering::Relaxed),
+                position: f64::from_bits(state.position_bits.load(Ordering::Relaxed)),
+                duration: f64::from_bits(state.duration_bits.load(Ordering::Relaxed)),
                 updated_at_milliseconds: state.updated_at_milliseconds.load(Ordering::Relaxed),
                 settings_revision: state.settings_revision.load(Ordering::Relaxed),
             };
             let second = state.sequence.load(Ordering::Acquire);
-            if first == second && second & 1 == 0 && snapshot.pulse.is_finite() {
+            if first == second
+                && second & 1 == 0
+                && snapshot.pulse.is_finite()
+                && snapshot.playback_rate.is_finite()
+                && snapshot.position.is_finite()
+                && snapshot.duration.is_finite()
+            {
                 return Some(snapshot);
             }
         }
@@ -257,6 +360,33 @@ impl RuntimeStateReader {
         let snapshot = self.snapshot()?;
         let age = unix_time_milliseconds().checked_sub(snapshot.updated_at_milliseconds)?;
         (age <= maximum_age.as_millis() as u64).then_some(snapshot.pulse.clamp(0.0, 1.0))
+    }
+}
+
+pub(crate) fn stable_track_id(media: &crate::MediaArtwork) -> u64 {
+    if media.title.trim().is_empty() {
+        return 0;
+    }
+    let duration = finite_nonnegative(media.duration).round() as u64;
+    let value = format!(
+        "{}\u{1f}{}\u{1f}{}\u{1f}{duration}",
+        media.title.trim().to_lowercase(),
+        media.artist.trim().to_lowercase(),
+        media.album.trim().to_lowercase(),
+    );
+    value
+        .as_bytes()
+        .iter()
+        .fold(0xcbf29ce484222325, |hash, byte| {
+            (hash ^ u64::from(*byte)).wrapping_mul(0x100000001b3)
+        })
+}
+
+fn finite_nonnegative(value: f64) -> f64 {
+    if value.is_finite() {
+        value.max(0.0)
+    } else {
+        0.0
     }
 }
 

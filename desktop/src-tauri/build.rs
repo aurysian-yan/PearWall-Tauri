@@ -38,6 +38,8 @@ fn build_macos_native() {
         .flag("-mmacosx-version-min=15.0")
         .compile("pearwall_macos_power");
     println!("cargo:rustc-link-lib=framework=AppKit");
+    println!("cargo:rustc-link-lib=framework=ApplicationServices");
+    println!("cargo:rustc-link-lib=framework=ColorSync");
     println!("cargo:rustc-link-lib=framework=CoreAudio");
     println!("cargo:rustc-link-lib=framework=Foundation");
     println!("cargo:rustc-link-lib=framework=IOKit");

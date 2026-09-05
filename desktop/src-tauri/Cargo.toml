@@ -36,6 +36,8 @@ objc2 = "0.6"
 objc2-app-kit = { version = "0.3", default-features = false, features = ["NSScreen", "NSWindow", "NSWorkspace"] }
 objc2-core-graphics = { version = "0.3", default-features = false, features = ["CGDirectDisplay", "CGDisplayConfiguration", "CGError", "CGWindowLevel", "libc"] }
 pearwall-wallpaper = { path = "../plugins/pearwall-wallpaper", features = ["macos-native"] }
+strsim = "0.11"
+ureq = { version = "2.12", features = ["json"] }
 
 [profile.release]
 strip = false

@@ -19,6 +19,7 @@ mkdir -p \
 ARM64_BINARY="${TEMP_ROOT}/PearWallScreenSaver-arm64"
 SWIFT_SOURCES=(
   "${DESKTOP_ROOT}/plugins/pearwall-wallpaper/macos/Sources/PearWallWallpaperNative/Core/"*.swift
+  "${DESKTOP_ROOT}/plugins/pearwall-wallpaper/macos/Sources/PearWallWallpaperNative/Core/Lyrics/"*.swift
   "${DESKTOP_ROOT}/macos-saver/"*.swift
 )
 
@@ -31,10 +32,12 @@ xcrun swiftc \
   -o "${ARM64_BINARY}" \
   "${SWIFT_SOURCES[@]}" \
   -framework AppKit \
+  -framework ApplicationServices \
   -framework Metal \
   -framework MetalKit \
   -framework IOKit \
   -framework ScreenSaver \
+  -framework SwiftUI \
   -framework QuartzCore
 
 cp "${ARM64_BINARY}" "${BUNDLE_PATH}/Contents/MacOS/PearWallScreenSaver"

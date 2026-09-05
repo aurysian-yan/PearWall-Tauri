@@ -14,6 +14,7 @@ import {
   PauseIcon,
   PawPrintIcon,
   PlayIcon,
+  QuotesIcon,
   SlidersHorizontalIcon,
   SpeakerHighIcon,
   WaveformIcon,
@@ -214,6 +215,28 @@ export function HomeSettingsPage({
                       icon={MonitorIcon}
                       title="屏保显示器"
                       description="选择显示动态屏保画面的显示器"
+                    >
+                      <CaretRightIcon
+                        aria-hidden
+                        size={18}
+                        className="text-white/55"
+                      />
+                    </SettingRow>
+                  </button>
+                </>
+              )}
+              {isMacOSRuntime && (
+                <>
+                  <Separator className="mx-2 w-[calc(100%-1rem)] bg-white/15" />
+                  <button
+                    type="button"
+                    className="block w-full text-left"
+                    onClick={() => setDrawerPage("lyrics")}
+                  >
+                    <SettingRow
+                      icon={QuotesIcon}
+                      title="歌词与歌曲信息"
+                      description="为壁纸和屏保配置 MeloX 歌词动画"
                     >
                       <CaretRightIcon
                         aria-hidden
