@@ -18,6 +18,11 @@ export type MediaArtwork = {
   key: string;
   data_url: string | null;
   playing: boolean;
+  identifier: string;
+  source_bundle_id: string;
+  raw_title: string;
+  raw_artist: string;
+  track_id: number;
   title: string;
   artist: string;
   album: string;

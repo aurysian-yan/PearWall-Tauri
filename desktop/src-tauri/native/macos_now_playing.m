@@ -10,9 +10,15 @@
 
 typedef void (^PearWallNowPlayingCallback)(NSDictionary *);
 typedef void (*PearWallGetNowPlayingInfo)(dispatch_queue_t, PearWallNowPlayingCallback);
+typedef void (^PearWallNowPlayingClientCallback)(id);
+typedef void (*PearWallGetNowPlayingClient)(dispatch_queue_t, PearWallNowPlayingClientCallback);
 typedef void (*PearWallRegisterForNowPlayingNotifications)(dispatch_queue_t);
+typedef NSString *(*PearWallGetClientBundleIdentifier)(id);
 
 static PearWallGetNowPlayingInfo pearwallGetNowPlayingInfo;
+static PearWallGetNowPlayingClient pearwallGetNowPlayingClient;
+static PearWallGetClientBundleIdentifier pearwallGetClientBundleIdentifier;
+static PearWallGetClientBundleIdentifier pearwallGetParentAppBundleIdentifier;
 
 static NSString *PearWallStringValue(id value) {
     if ([value isKindOfClass:NSString.class]) {
@@ -67,6 +73,18 @@ static void PearWallLoadMediaRemote(void) {
             handle,
             "MRMediaRemoteGetNowPlayingInfo"
         );
+        pearwallGetNowPlayingClient = (PearWallGetNowPlayingClient)dlsym(
+            handle,
+            "MRMediaRemoteGetNowPlayingClient"
+        );
+        pearwallGetClientBundleIdentifier = (PearWallGetClientBundleIdentifier)dlsym(
+            handle,
+            "MRNowPlayingClientGetBundleIdentifier"
+        );
+        pearwallGetParentAppBundleIdentifier = (PearWallGetClientBundleIdentifier)dlsym(
+            handle,
+            "MRNowPlayingClientGetParentAppBundleIdentifier"
+        );
         PearWallRegisterForNowPlayingNotifications registerForNotifications =
             (PearWallRegisterForNowPlayingNotifications)dlsym(
                 handle,
@@ -79,12 +97,54 @@ static void PearWallLoadMediaRemote(void) {
     });
 }
 
-static NSDictionary *PearWallMediaArtwork(NSDictionary *info) {
+static NSString *PearWallNowPlayingSourceBundleIdentifier(void) {
+    if (pearwallGetNowPlayingClient == NULL) {
+        return @"";
+    }
+    dispatch_semaphore_t semaphore = dispatch_semaphore_create(0);
+    __block NSString *bundleIdentifier = @"";
+    pearwallGetNowPlayingClient(
+        dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0),
+        ^(id client) {
+            if (client == nil) {
+                dispatch_semaphore_signal(semaphore);
+                return;
+            }
+            NSString *parentIdentifier = pearwallGetParentAppBundleIdentifier == NULL
+                ? nil
+                : pearwallGetParentAppBundleIdentifier(client);
+            NSString *clientIdentifier = pearwallGetClientBundleIdentifier == NULL
+                ? nil
+                : pearwallGetClientBundleIdentifier(client);
+            bundleIdentifier = [PearWallStringValue(parentIdentifier.length > 0
+                ? parentIdentifier
+                : clientIdentifier) copy];
+            dispatch_semaphore_signal(semaphore);
+        }
+    );
+    if (dispatch_semaphore_wait(
+            semaphore,
+            dispatch_time(DISPATCH_TIME_NOW, NSEC_PER_SEC)
+        ) != 0) {
+        return @"";
+    }
+    return bundleIdentifier;
+}
+
+static NSDictionary *PearWallMediaArtwork(
+    NSDictionary *info,
+    NSString *sourceBundleIdentifier
+) {
     if (![info isKindOfClass:NSDictionary.class]) {
         return @{
             @"key": @"",
             @"data_url": NSNull.null,
             @"playing": @NO,
+            @"identifier": @"",
+            @"source_bundle_id": @"",
+            @"raw_title": @"",
+            @"raw_artist": @"",
+            @"track_id": @0,
             @"title": @"",
             @"artist": @"",
             @"album": @"",
@@ -120,14 +180,15 @@ static NSDictionary *PearWallMediaArtwork(NSDictionary *info) {
         elapsed += MAX(0, -[(NSDate *)timestamp timeIntervalSinceNow])
             * playbackRate.doubleValue;
     }
-    NSString *key = [NSString stringWithFormat:
-        @"%@|%@|%@|%@|%lu",
-        identifier,
-        title,
-        artist,
-        album,
-        (unsigned long)artwork.hash
-    ];
+    NSString *key = identifier.length > 0
+        ? [NSString stringWithFormat:@"%@|%lu", identifier, (unsigned long)artwork.hash]
+        : [NSString stringWithFormat:
+            @"%@|%@|%@|%lu",
+            title,
+            artist,
+            album,
+            (unsigned long)artwork.hash
+        ];
     id dataURL = NSNull.null;
     if (artwork.length > 0) {
         NSString *mimeType = PearWallArtworkMIMEType(
@@ -145,6 +206,11 @@ static NSDictionary *PearWallMediaArtwork(NSDictionary *info) {
         @"key": key,
         @"data_url": dataURL,
         @"playing": @(playing),
+        @"identifier": identifier,
+        @"source_bundle_id": sourceBundleIdentifier ?: @"",
+        @"raw_title": title,
+        @"raw_artist": artist,
+        @"track_id": @0,
         @"title": title,
         @"artist": artist,
         @"album": album,
@@ -175,7 +241,10 @@ char *pearwall_copy_now_playing_json(void) {
             ) != 0) {
             return NULL;
         }
-        NSData *json = [NSJSONSerialization dataWithJSONObject:PearWallMediaArtwork(nowPlayingInfo)
+        NSData *json = [NSJSONSerialization dataWithJSONObject:PearWallMediaArtwork(
+                                                           nowPlayingInfo,
+                                                           PearWallNowPlayingSourceBundleIdentifier()
+                                                       )
                                                        options:0
                                                          error:nil];
         if (json.length == 0) {

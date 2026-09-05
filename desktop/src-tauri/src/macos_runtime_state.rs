@@ -364,16 +364,27 @@ impl RuntimeStateReader {
 }
 
 pub(crate) fn stable_track_id(media: &crate::MediaArtwork) -> u64 {
-    if media.title.trim().is_empty() {
-        return 0;
+    if media.track_id != 0 {
+        return media.track_id;
     }
-    let duration = finite_nonnegative(media.duration).round() as u64;
-    let value = format!(
-        "{}\u{1f}{}\u{1f}{}\u{1f}{duration}",
-        media.title.trim().to_lowercase(),
-        media.artist.trim().to_lowercase(),
-        media.album.trim().to_lowercase(),
-    );
+    let identifier = media.identifier.trim();
+    let value = if !identifier.is_empty() {
+        format!("identifier\u{1f}{identifier}")
+    } else {
+        if media.title.trim().is_empty() {
+            return 0;
+        }
+        format!(
+            "{}\u{1f}{}\u{1f}{}",
+            media.title.trim().to_lowercase(),
+            media.artist.trim().to_lowercase(),
+            media.album.trim().to_lowercase(),
+        )
+    };
+    stable_hash(&value)
+}
+
+fn stable_hash(value: &str) -> u64 {
     value
         .as_bytes()
         .iter()
@@ -411,4 +422,26 @@ fn unix_time_milliseconds() -> u64 {
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default()
         .as_millis() as u64
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn unique_identifier_ignores_volatile_metadata() {
+        let mut first = crate::MediaArtwork {
+            identifier: "track-1".to_string(),
+            source_bundle_id: "com.example.player".to_string(),
+            title: "第一句歌词".to_string(),
+            duration: 200.49,
+            ..crate::MediaArtwork::default()
+        };
+        let mut second = first.clone();
+        second.title = "第二句歌词".to_string();
+        second.duration = 200.51;
+        first.track_id = 0;
+        second.track_id = 0;
+        assert_eq!(stable_track_id(&first), stable_track_id(&second));
+    }
 }

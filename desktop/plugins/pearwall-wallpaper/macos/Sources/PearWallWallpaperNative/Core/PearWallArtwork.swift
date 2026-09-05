@@ -5,6 +5,7 @@ struct PearWallMediaArtwork {
     let key: String
     let source: String
     let playing: Bool
+    let trackID: UInt64
     let title: String
     let artist: String
     let album: String
@@ -36,6 +37,7 @@ enum PearWallMediaArtworkCache {
             key: key,
             source: object["data_url"] as? String ?? "",
             playing: (object["playing"] as? NSNumber)?.boolValue ?? true,
+            trackID: (object["track_id"] as? NSNumber)?.uint64Value ?? 0,
             title: object["title"] as? String ?? "",
             artist: object["artist"] as? String ?? "",
             album: object["album"] as? String ?? "",
