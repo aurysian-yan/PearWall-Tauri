@@ -15,6 +15,7 @@ final class PearWallLyricsOverlayModel: ObservableObject {
     @Published private(set) var artwork: NSImage?
 
     private var artworkKey = ""
+    private var artworkTrackID: UInt64 = 0
     private var lyricsTrackID: UInt64 = 0
 
     func updateProfile(_ profile: PearWallLyricsPresentationProfile) {
@@ -28,15 +29,25 @@ final class PearWallLyricsOverlayModel: ObservableObject {
             album = ""
             artwork = nil
             artworkKey = ""
+            artworkTrackID = 0
             return
         }
         title = media.title
         artist = media.artist
         album = media.album
         playing = media.playing
+        if media.trackID != 0 {
+            trackID = media.trackID
+        }
         if artworkKey != media.key {
             artworkKey = media.key
-            artwork = PearWallArtworkLoader.image(from: media.source)
+            if let image = PearWallArtworkLoader.image(from: media.source) {
+                artwork = image
+                artworkTrackID = media.trackID
+            } else if media.trackID != 0, media.trackID != artworkTrackID {
+                artwork = nil
+                artworkTrackID = 0
+            }
         }
         if trackID == 0 {
             playbackTime = media.elapsed
@@ -133,13 +144,17 @@ private struct PearWallMeloXTextRenderer: TextRenderer {
     }
 
     var displayPadding: EdgeInsets {
-        EdgeInsets(top: 36, leading: 32, bottom: 32, trailing: 32)
+        EdgeInsets(top: 36, leading: 0, bottom: 32, trailing: 0)
     }
 
     func draw(layout: Text.Layout, in context: inout GraphicsContext) {
         for line in layout {
             for run in line {
                 guard let timing = run[PearWallLyricTimingAttribute.self] else {
+                    context.draw(run)
+                    continue
+                }
+                guard timingEffectsStrength > 0.001 else {
                     context.draw(run)
                     continue
                 }
@@ -187,44 +202,9 @@ private struct PearWallMeloXTextRenderer: TextRenderer {
             let durationProgress = smootherStep(
                 (duration - 0.95) / (2.8 - 0.95)
             )
-            let expansionAmount = 0.7 + (1 - 0.7) * durationProgress
-            let scale = 1
-                + 0.14 * CGFloat(envelope * expansionAmount * strength)
-            let characterCount = max(timing.characterCount, 1)
-            let resolvedIndex = run.layoutDirection == .rightToLeft
-                ? characterCount - min(max(timing.characterIndex, 0), characterCount - 1) - 1
-                : min(max(timing.characterIndex, 0), characterCount - 1)
-            let distanceFromCenter = Double(characterCount - 1) * 0.5
-                - Double(resolvedIndex)
-            let expansionIntensity = CGFloat(
-                envelope * expansionAmount * strength
-            )
-            let horizontalOffset = -expansionIntensity
-                * 0.03
-                * max(bounds.height, 1)
-                * CGFloat(distanceFromCenter)
-            let verticalOffset = -expansionIntensity
-                * 0.025
-                * max(bounds.height, 1)
             let glowAmount = 0.32
                 + (0.7 - 0.32) * durationProgress
             glowStrength = envelope * glowAmount * strength
-            if scale != 1 {
-                runContext.addFilter(
-                    .projectionTransform(
-                        ProjectionTransform(
-                            CGAffineTransform(
-                                a: scale,
-                                b: 0,
-                                c: 0,
-                                d: scale,
-                                tx: bounds.midX * (1 - scale) + horizontalOffset,
-                                ty: bounds.midY * (1 - scale) + verticalOffset
-                            )
-                        )
-                    )
-                )
-            }
         }
 
         var upcomingContext = runContext
@@ -350,6 +330,8 @@ private struct PearWallMeloXTextRenderer: TextRenderer {
 struct PearWallMeloXLyricsView: View {
     @ObservedObject var model: PearWallLyricsOverlayModel
 
+    private let horizontalEffectsInset: CGFloat = 56
+
     var body: some View {
         GeometryReader { geometry in
             if model.profile.enabled {
@@ -366,8 +348,8 @@ struct PearWallMeloXLyricsView: View {
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .padding(.top, 44)
-                .padding(.bottom, 48)
+                .padding(.top, model.profile.topInset)
+                .padding(.bottom, model.profile.bottomInset)
                 .allowsHitTesting(false)
             }
         }
@@ -375,18 +357,20 @@ struct PearWallMeloXLyricsView: View {
     }
 
     private func lyricsView(width: CGFloat) -> some View {
-        ScrollViewReader { proxy in
+        let rowWidth = max(width - horizontalEffectsInset * 2, 1)
+        return ScrollViewReader { proxy in
             ScrollView(.vertical) {
                 LazyVStack(spacing: 50) {
                     ForEach(Array(model.visibleLines.enumerated()), id: \.offset) { index, line in
                         if let interlude = model.interlude(before: line.id) {
-                            interludeView(interlude)
+                            interludeView(interlude, following: line, width: rowWidth)
                                 .id("interlude-\(interlude.id)")
                         }
-                        lyricRow(line, index: index, width: width)
+                        lyricRow(line, index: index, width: rowWidth)
                             .id("lyric-\(index)")
                     }
                 }
+                .frame(width: width)
                 .padding(.vertical, 240)
             }
             .scrollDisabled(true)
@@ -421,8 +405,13 @@ struct PearWallMeloXLyricsView: View {
         }
     }
 
-    private func interludeView(_ interlude: LyricInterlude) -> some View {
+    private func interludeView(
+        _ interlude: LyricInterlude,
+        following line: LyricLine,
+        width: CGFloat
+    ) -> some View {
         let profile = AppleMusicInstrumentalBreakMotionProfile.macOS26_6
+        let rowAlignment = alignment(for: line)
         let presentation = AppleMusicInterludeDotsPresentation.make(
             playbackTime: model.playbackTime,
             interlude: interlude,
@@ -451,7 +440,7 @@ struct PearWallMeloXLyricsView: View {
             height: CGFloat(profile.viewHeight),
             alignment: .leading
         )
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(width: width, alignment: frameAlignment(for: rowAlignment))
         .opacity(model.isInterludeVisible(interlude) ? presentation.opacity : 0)
         .accessibilityHidden(true)
     }
@@ -468,16 +457,17 @@ struct PearWallMeloXLyricsView: View {
         let blurRadius: CGFloat = if !model.profile.progressiveBlur || focused {
             0
         } else if distance <= 1 {
-            CGFloat(profile.nonFocusedBlurRadius)
+            CGFloat(model.profile.minimumBlurRadius)
         } else {
-            CGFloat(profile.maximumNonFocusedBlurRadius)
+            CGFloat(model.profile.maximumBlurRadius)
         }
         let rowAlignment = alignment(for: line)
-        let lineSpring = Animation.interpolatingSpring(
-            mass: profile.lineChangeSpring.mass,
-            stiffness: profile.lineChangeSpring.stiffness,
-            damping: profile.lineChangeSpring.damping,
-            initialVelocity: 0
+        let focusTransition = Animation.timingCurve(
+            profile.focusBlurTransitionControlPoint1X,
+            profile.focusBlurTransitionControlPoint1Y,
+            profile.focusBlurTransitionControlPoint2X,
+            profile.focusBlurTransitionControlPoint2Y,
+            duration: profile.focusBlurTransitionDuration
         )
         return VStack(alignment: horizontalAlignment(for: rowAlignment), spacing: 7) {
             primaryText(line, focused: focused)
@@ -488,6 +478,7 @@ struct PearWallMeloXLyricsView: View {
                     )
                 )
                 .multilineTextAlignment(rowAlignment)
+                .fixedSize(horizontal: false, vertical: true)
             if let romanization = line.romanization, !romanization.isEmpty {
                 Text(romanization)
                     .font(
@@ -498,6 +489,7 @@ struct PearWallMeloXLyricsView: View {
                         )
                     )
                     .multilineTextAlignment(rowAlignment)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             if let translation = line.translation, !translation.isEmpty {
                 Text(translation)
@@ -509,10 +501,11 @@ struct PearWallMeloXLyricsView: View {
                         )
                     )
                     .multilineTextAlignment(rowAlignment)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
         .foregroundStyle(.white)
-        .frame(maxWidth: .infinity, alignment: frameAlignment(for: rowAlignment))
+        .frame(width: width, alignment: frameAlignment(for: rowAlignment))
         .opacity(
             focused
                 ? profile.selectedTextOpacity
@@ -523,36 +516,26 @@ struct PearWallMeloXLyricsView: View {
             anchor: scaleAnchor(for: rowAlignment)
         )
         .blur(radius: blurRadius)
-        .animation(lineSpring.delay(cascadeDelay(index: index)), value: focusedIndex)
-        .animation(
-            .timingCurve(
-                profile.focusBlurTransitionControlPoint1X,
-                profile.focusBlurTransitionControlPoint1Y,
-                profile.focusBlurTransitionControlPoint2X,
-                profile.focusBlurTransitionControlPoint2Y,
-                duration: profile.focusBlurTransitionDuration
-            ),
-            value: focused
-        )
+        .animation(focusTransition.delay(cascadeDelay(index: index)), value: focused)
     }
 
     @ViewBuilder
     private func primaryText(_ line: LyricLine, focused: Bool) -> some View {
-        if focused, !line.syllables.isEmpty {
+        if !line.syllables.isEmpty {
             timedText(line.syllables)
                 .textRenderer(
                     PearWallMeloXTextRenderer(
                         playbackTime: model.playbackTime,
-                        timingEffectsStrength: 1
+                        timingEffectsStrength: focused ? 1 : 0
                     )
                 )
         } else {
-            Text(line.text)
+            Text(line.text.trimmingCharacters(in: .whitespacesAndNewlines))
         }
     }
 
     private func timedText(_ syllables: [LyricSyllable]) -> Text {
-        syllables.reduce(Text("")) { result, syllable in
+        displaySyllables(syllables).reduce(Text("")) { result, syllable in
             let characters = Array(syllable.text)
             let duration = max(syllable.endTime - syllable.startTime, 0)
             return characters.enumerated().reduce(result) { text, entry in
@@ -576,6 +559,40 @@ struct PearWallMeloXLyricsView: View {
                     )
                 )
             }
+        }
+    }
+
+    private func displaySyllables(_ syllables: [LyricSyllable]) -> [LyricSyllable] {
+        guard let firstIndex = syllables.firstIndex(where: { syllable in
+            syllable.text.contains(where: { !$0.isWhitespace })
+        }), let lastIndex = syllables.lastIndex(where: { syllable in
+            syllable.text.contains(where: { !$0.isWhitespace })
+        }) else {
+            return []
+        }
+
+        return syllables[firstIndex...lastIndex].enumerated().compactMap { offset, syllable in
+            let characters = Array(syllable.text)
+            let trimLeading = offset == 0
+            let trimTrailing = offset == lastIndex - firstIndex
+            let lowerBound = trimLeading
+                ? characters.firstIndex(where: { !$0.isWhitespace }) ?? characters.endIndex
+                : characters.startIndex
+            let upperBound = trimTrailing
+                ? characters.lastIndex(where: { !$0.isWhitespace }).map { $0 + 1 }
+                    ?? characters.startIndex
+                : characters.endIndex
+            guard lowerBound < upperBound else { return nil }
+
+            let duration = max(syllable.endTime - syllable.startTime, 0)
+            let characterDuration = characters.isEmpty
+                ? 0
+                : duration / Double(characters.count)
+            return LyricSyllable(
+                text: String(characters[lowerBound..<upperBound]),
+                startTime: syllable.startTime + Double(lowerBound) * characterDuration,
+                endTime: syllable.startTime + Double(upperBound) * characterDuration
+            )
         }
     }
 

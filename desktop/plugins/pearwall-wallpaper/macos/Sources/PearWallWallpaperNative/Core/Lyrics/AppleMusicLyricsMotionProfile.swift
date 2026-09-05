@@ -145,11 +145,11 @@ nonisolated struct AppleMusicLyricsMotionProfile: Equatable, Sendable {
         selectedTextOpacity: 1,
         selectedUpcomingTextOpacity: 0.5,
         deselectedTextOpacity: 0.4,
-        focusBlurTransitionDuration: 0.12,
-        focusBlurTransitionControlPoint1X: 0.33,
+        focusBlurTransitionDuration: 0.28,
+        focusBlurTransitionControlPoint1X: 0.2,
         focusBlurTransitionControlPoint1Y: 0,
-        focusBlurTransitionControlPoint2X: 0.2,
-        focusBlurTransitionControlPoint2Y: 0.1,
+        focusBlurTransitionControlPoint2X: 0,
+        focusBlurTransitionControlPoint2Y: 1,
         animationHeadstart: 0.1,
         emphasisScaleRange: 1...1.14,
         lineFinishProgressAnimationDuration: 0.25,
@@ -188,4 +188,3 @@ nonisolated struct AppleMusicLyricsMotionProfile: Equatable, Sendable {
         )
     }
 }
-
